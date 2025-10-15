@@ -187,7 +187,7 @@ export default function Layout({ children }) {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-orange-50">
       {/* Desktop Sidebar */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-80 lg:flex-col">
-        <div className="bg-white border-r border-orange-100 shadow-xl">
+        <div className="flex flex-col h-full bg-white border-r border-orange-100 shadow-xl">
           <NavContent />
         </div>
       </div>
