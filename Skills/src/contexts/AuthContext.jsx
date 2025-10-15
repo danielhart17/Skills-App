@@ -15,6 +15,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState("user"); // Default role
 
   useEffect(() => {
     // Check active sessions and sets the user
@@ -67,15 +68,26 @@ export const AuthProvider = ({ children }) => {
 
       if (error) throw error;
       setProfile(data);
+      setRole(data?.role || "user"); // Set user role
     } catch (error) {
       console.error("Error fetching profile:", error);
+      setRole("user"); // Default to user on error
     }
   };
+
+  // Helper functions to check roles
+  const isAdmin = () => role === "admin";
+  const isTrainer = () => role === "trainer" || role === "admin";
+  const isUser = () => role === "user";
 
   const value = {
     user,
     profile,
     loading,
+    role,
+    isAdmin,
+    isTrainer,
+    isUser,
     signIn,
     signUp,
     signOut,

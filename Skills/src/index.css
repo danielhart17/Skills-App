@@ -155,4 +155,18 @@ button:focus-visible {
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Custom scale pulse animation for active lesson */
+  @keyframes scale-pulse {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.02);
+    }
+  }
+  
+  .animate-scale-pulse {
+    animation: scale-pulse 10s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
 }

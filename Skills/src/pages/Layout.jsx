@@ -9,10 +9,12 @@ import {
   Users,
   User,
   Menu,
-  X,
   LogOut,
+  Shield,
+  GraduationCap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -55,10 +57,38 @@ const navigationItems = [
   },
 ];
 
-export default function Layout({ children, currentPageName }) {
+export default function Layout({ children }) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const { signOut, profile } = useAuth();
+  const { signOut, profile, role, isAdmin, isTrainer } = useAuth();
+
+  // Build navigation items based on user role
+  const getRoleSpecificNavItems = () => {
+    const items = [...navigationItems];
+
+    // Add admin dashboard for admins (at the top)
+    if (isAdmin()) {
+      items.unshift({
+        title: "Admin Dashboard",
+        url: createPageUrl("AdminDashboard"),
+        icon: Shield,
+        description: "Full Access",
+      });
+    }
+    // Add trainer dashboard ONLY for trainers (not admins, since admins have their own dashboard)
+    else if (isTrainer()) {
+      items.unshift({
+        title: "Trainer Dashboard",
+        url: createPageUrl("TrainerDashboard"),
+        icon: GraduationCap,
+        description: "Manage Content",
+      });
+    }
+
+    return items;
+  };
+
+  const currentNavItems = getRoleSpecificNavItems();
 
   const handleSignOut = async () => {
     try {
@@ -88,7 +118,7 @@ export default function Layout({ children, currentPageName }) {
 
       <nav className="flex-1 p-4">
         <div className="space-y-2">
-          {navigationItems.map((item) => (
+          {currentNavItems.map((item) => (
             <Link
               key={item.title}
               to={item.url}
@@ -104,7 +134,7 @@ export default function Layout({ children, currentPageName }) {
                   location.pathname === item.url ? "text-white" : ""
                 }`}
               />
-              <div>
+              <div className="flex-1">
                 <div className="font-semibold">{item.title}</div>
                 <div
                   className={`text-xs opacity-75 ${
@@ -124,11 +154,20 @@ export default function Layout({ children, currentPageName }) {
       <div className="p-4 border-t border-orange-100 space-y-3">
         {profile && (
           <div className="px-4 py-2">
-            <div className="text-sm font-medium text-gray-900">
-              {profile.full_name}
-            </div>
-            <div className="text-xs text-gray-500">
-              Level {profile.current_level}
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-gray-900">
+                  {profile.full_name}
+                </div>
+                <div className="text-xs text-gray-500">
+                  Level {profile.current_level}
+                </div>
+              </div>
+              {role !== "user" && (
+                <Badge variant={role === "admin" ? "default" : "secondary"}>
+                  {role}
+                </Badge>
+              )}
             </div>
           </div>
         )}

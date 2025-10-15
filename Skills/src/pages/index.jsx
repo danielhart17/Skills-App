@@ -4,6 +4,10 @@ import Home from "./Home";
 
 import IQMode from "./IQMode";
 
+import LearningPath from "./LearningPath";
+
+import LessonDetail from "./LessonDetail";
+
 import OnCourt from "./OnCourt";
 
 import Challenges from "./Challenges";
@@ -18,82 +22,53 @@ import TrainerProfile from "./TrainerProfile";
 
 import Booking from "./Booking";
 
-import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
+import AdminDashboard from "./AdminDashboard";
 
-const PAGES = {
-    
-    Home: Home,
-    
-    IQMode: IQMode,
-    
-    OnCourt: OnCourt,
-    
-    Challenges: Challenges,
-    
-    ShootingSession: ShootingSession,
-    
-    Trainers: Trainers,
-    
-    Profile: Profile,
-    
-    TrainerProfile: TrainerProfile,
-    
-    Booking: Booking,
-    
-}
+import TrainerDashboard from "./TrainerDashboard";
 
-function _getCurrentPage(url) {
-    if (url.endsWith('/')) {
-        url = url.slice(0, -1);
-    }
-    let urlLastPart = url.split('/').pop();
-    if (urlLastPart.includes('?')) {
-        urlLastPart = urlLastPart.split('?')[0];
-    }
+import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 
-    const pageName = Object.keys(PAGES).find(page => page.toLowerCase() === urlLastPart.toLowerCase());
-    return pageName || Object.keys(PAGES)[0];
-}
-
-// Create a wrapper component that uses useLocation inside the Router context
+// Create a wrapper component that renders the Layout with all routes
 function PagesContent() {
-    const location = useLocation();
-    const currentPage = _getCurrentPage(location.pathname);
-    
-    return (
-        <Layout currentPageName={currentPage}>
-            <Routes>            
-                
-                    <Route path="/" element={<Home />} />
-                
-                
-                <Route path="/Home" element={<Home />} />
-                
-                <Route path="/IQMode" element={<IQMode />} />
-                
-                <Route path="/OnCourt" element={<OnCourt />} />
-                
-                <Route path="/Challenges" element={<Challenges />} />
-                
-                <Route path="/ShootingSession" element={<ShootingSession />} />
-                
-                <Route path="/Trainers" element={<Trainers />} />
-                
-                <Route path="/Profile" element={<Profile />} />
-                
-                <Route path="/TrainerProfile" element={<TrainerProfile />} />
-                
-                <Route path="/Booking" element={<Booking />} />
-                
-            </Routes>
-        </Layout>
-    );
+  return (
+    <Layout>
+      <Routes>
+        <Route path="/" element={<Home />} />
+
+        <Route path="/Home" element={<Home />} />
+
+        <Route path="/IQMode" element={<IQMode />} />
+
+        <Route path="/LearningPath/:chapter" element={<LearningPath />} />
+
+        <Route path="/lesson/:lessonId" element={<LessonDetail />} />
+
+        <Route path="/OnCourt" element={<OnCourt />} />
+
+        <Route path="/Challenges" element={<Challenges />} />
+
+        <Route path="/ShootingSession" element={<ShootingSession />} />
+
+        <Route path="/Trainers" element={<Trainers />} />
+
+        <Route path="/Profile" element={<Profile />} />
+
+        <Route path="/TrainerProfile" element={<TrainerProfile />} />
+
+        <Route path="/Booking" element={<Booking />} />
+
+        <Route path="/AdminDashboard" element={<AdminDashboard />} />
+
+        <Route path="/TrainerDashboard" element={<TrainerDashboard />} />
+      </Routes>
+    </Layout>
+  );
 }
 
 export default function Pages() {
-    return (
-        <Router>
-            <PagesContent />
-        </Router>
-    );
+  return (
+    <Router>
+      <PagesContent />
+    </Router>
+  );
 }
