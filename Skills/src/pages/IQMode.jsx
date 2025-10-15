@@ -76,11 +76,11 @@ export default function IQMode() {
             <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
               <Brain className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-3xl lg:text-4xl font-bold text-gray-900">
+            <h1 className="text-3xl lg:text-4xl font-bold text-white">
               Basketball IQ Mode
             </h1>
           </div>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-xl text-brand-lightGray max-w-2xl mx-auto">
             Master the mental game with strategic knowledge, rules, and
             basketball theory
           </p>
@@ -97,7 +97,7 @@ export default function IQMode() {
               return (
                 <Card
                   key={chapter}
-                  className="group hover:shadow-2xl transition-all duration-300 border-0 shadow-lg bg-gradient-to-br from-white to-blue-50 overflow-hidden cursor-pointer"
+                  className="group hover:shadow-2xl transition-all duration-300 border-0 shadow-lg bg-card overflow-hidden cursor-pointer"
                   onClick={() =>
                     navigate(`/LearningPath/${encodeURIComponent(chapter)}`)
                   }
@@ -109,16 +109,16 @@ export default function IQMode() {
                           <Book className="w-6 h-6 text-white" />
                         </div>
                         <div className="flex-1">
-                          <CardTitle className="text-lg font-bold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">
+                          <CardTitle className="text-lg font-bold text-white mb-1 group-hover:text-blue-400 transition-colors">
                             {chapter}
                           </CardTitle>
-                          <p className="text-sm text-gray-600">
+                          <p className="text-sm text-gray-400">
                             {stats.total}{" "}
                             {stats.total === 1 ? "lesson" : "lessons"}
                           </p>
                         </div>
                       </div>
-                      <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+                      <ChevronRight className="w-6 h-6 text-gray-600 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
                     </div>
                   </CardHeader>
 
@@ -126,7 +126,7 @@ export default function IQMode() {
                     {/* Progress */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600 font-medium">
+                        <span className="text-gray-400 font-medium">
                           {stats.completed}/{stats.total} completed
                         </span>
                         {progress === 100 && (
@@ -140,10 +140,10 @@ export default function IQMode() {
                     </div>
 
                     {/* Stats */}
-                    <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-800">
                       <div className="flex items-center gap-2">
                         <Star className="w-5 h-5 text-yellow-500" />
-                        <span className="text-sm font-semibold text-gray-700">
+                        <span className="text-sm font-semibold text-white">
                           {stats.totalXP} XP
                         </span>
                       </div>

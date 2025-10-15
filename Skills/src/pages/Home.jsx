@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { User } from "@/api/entities";
 import { Lesson } from "@/api/entities";
@@ -8,16 +7,16 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { 
-  Brain, 
-  Dumbbell, 
-  Trophy, 
-  Target, 
-  Flame, 
+import {
+  Brain,
+  Dumbbell,
+  Trophy,
+  Target,
+  Flame,
   Star,
   TrendingUp,
   Clock,
-  Play
+  Play,
 } from "lucide-react";
 
 export default function Home() {
@@ -33,7 +32,7 @@ export default function Home() {
     try {
       const currentUser = await User.me();
       setUser(currentUser);
-      
+
       const lessons = await Lesson.list();
       setRecentLessons(lessons.slice(0, 3));
     } catch (error) {
@@ -45,7 +44,8 @@ export default function Home() {
   const getLevelProgress = () => {
     if (!user) return 0;
     // Calculate XP needed for the current level
-    const xpForPreviousLevels = ((user.current_level - 1) * (user.current_level)) / 2 * 100;
+    const xpForPreviousLevels =
+      (((user.current_level - 1) * user.current_level) / 2) * 100;
     const xpForNextLevel = user.current_level * 100; // XP needed to complete current level
     const currentLevelTotalXp = user.total_xp - xpForPreviousLevels; // XP earned within the current level
     const progress = (currentLevelTotalXp / xpForNextLevel) * 100;
@@ -66,8 +66,11 @@ export default function Home() {
         <div className="max-w-7xl mx-auto space-y-6">
           <div className="h-8 bg-gray-200 rounded animate-pulse"></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="h-32 bg-gray-200 rounded-xl animate-pulse"></div>
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-32 bg-gray-200 rounded-xl animate-pulse"
+              ></div>
             ))}
           </div>
         </div>
@@ -81,10 +84,12 @@ export default function Home() {
         {/* Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
           <div>
-            <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
-              Welcome back, {user?.full_name?.split(' ')[0] || 'Player'}! 🏀
+            <h1 className="text-3xl lg:text-4xl font-bold text-white mb-2">
+              Welcome back, {user?.full_name?.split(" ")[0] || "Player"}! 🏀
             </h1>
-            <p className="text-gray-600 text-lg">Ready to improve your game today?</p>
+            <p className="text-brand-lightGray text-lg">
+              Ready to improve your game today?
+            </p>
           </div>
           <div className="flex gap-3">
             <Link to={createPageUrl("IQMode")}>
@@ -108,13 +113,20 @@ export default function Home() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-blue-100 text-sm font-medium">Current Level</p>
-                  <p className="text-3xl font-bold">{user?.current_level || 1}</p>
+                  <p className="text-blue-100 text-sm font-medium">
+                    Current Level
+                  </p>
+                  <p className="text-3xl font-bold">
+                    {user?.current_level || 1}
+                  </p>
                 </div>
                 <Star className="w-8 h-8 text-blue-200" />
               </div>
               <div className="mt-4">
-                <Progress value={getLevelProgress()} className="h-2 bg-blue-400" />
+                <Progress
+                  value={getLevelProgress()}
+                  className="h-2 bg-blue-400"
+                />
                 <p className="text-blue-100 text-xs mt-1">
                   {Math.round(getLevelProgress())}% to next level
                 </p>
@@ -126,8 +138,12 @@ export default function Home() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-yellow-100 text-sm font-medium">Current Streak</p>
-                  <p className="text-3xl font-bold">{user?.current_streak || 0}</p>
+                  <p className="text-yellow-100 text-sm font-medium">
+                    Current Streak
+                  </p>
+                  <p className="text-3xl font-bold">
+                    {user?.current_streak || 0}
+                  </p>
                 </div>
                 <Flame className={`w-8 h-8 ${getStreakColor()}`} />
               </div>
@@ -140,48 +156,67 @@ export default function Home() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <Card className="border-0 shadow-xl bg-white">
+          <Card className="border-0 shadow-xl bg-card">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <Play className="w-6 h-6 text-orange-500" />
+              <CardTitle className="flex items-center gap-2 text-xl text-white">
+                <Play className="w-6 h-6 text-brand-orange" />
                 Continue Learning
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {recentLessons.length > 0 ? (
                 recentLessons.map((lesson) => (
-                  <div key={lesson.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                  <div
+                    key={lesson.id}
+                    className="flex items-center justify-between p-4 bg-gray-800 rounded-xl hover:bg-gray-700 transition-colors"
+                  >
                     <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        lesson.mode === 'iq' ? 'bg-blue-100' : 'bg-orange-100'
-                      }`}>
-                        {lesson.mode === 'iq' ? (
-                          <Brain className="w-5 h-5 text-blue-600" />
+                      <div
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                          lesson.mode === "iq"
+                            ? "bg-blue-500/20"
+                            : "bg-orange-500/20"
+                        }`}
+                      >
+                        {lesson.mode === "iq" ? (
+                          <Brain className="w-5 h-5 text-blue-400" />
                         ) : (
-                          <Dumbbell className="w-5 h-5 text-orange-600" />
+                          <Dumbbell className="w-5 h-5 text-orange-400" />
                         )}
                       </div>
                       <div>
-                        <h3 className="font-semibold text-gray-900">{lesson.title}</h3>
+                        <h3 className="font-semibold text-white">
+                          {lesson.title}
+                        </h3>
                         <div className="flex items-center gap-2 mt-1">
-                          <Badge variant={lesson.mode === 'iq' ? 'default' : 'secondary'} className="text-xs">
-                            {lesson.mode === 'iq' ? 'IQ Mode' : 'On Court'}
+                          <Badge
+                            variant={
+                              lesson.mode === "iq" ? "default" : "secondary"
+                            }
+                            className="text-xs"
+                          >
+                            {lesson.mode === "iq" ? "IQ Mode" : "On Court"}
                           </Badge>
-                          <span className="text-xs text-gray-500 flex items-center gap-1">
+                          <span className="text-xs text-gray-400 flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {lesson.estimated_time || 5}min
                           </span>
                         </div>
                       </div>
                     </div>
-                    <Button size="sm" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600">
+                    <Button
+                      size="sm"
+                      className="bg-brand-orange hover:opacity-90"
+                    >
                       Start
                     </Button>
                   </div>
                 ))
               ) : (
                 <div className="text-center py-8">
-                  <p className="text-gray-500 mb-4">No lessons available yet.</p>
+                  <p className="text-gray-400 mb-4">
+                    No lessons available yet.
+                  </p>
                   <Link to={createPageUrl("IQMode")}>
                     <Button className="bg-gradient-to-r from-blue-500 to-indigo-500">
                       Explore Lessons
@@ -192,28 +227,34 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-xl bg-white">
+          <Card className="border-0 shadow-xl bg-card">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
+              <CardTitle className="flex items-center gap-2 text-xl text-white">
                 <Trophy className="w-6 h-6 text-yellow-500" />
                 Today's Challenge
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-6 border border-yellow-200">
-                <h3 className="font-bold text-lg text-gray-900 mb-2">
+              <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-xl p-6 border border-yellow-500/30">
+                <h3 className="font-bold text-lg text-white mb-2">
                   Perfect Your Free Throws
                 </h3>
-                <p className="text-gray-600 mb-4">
-                  Make 20 consecutive free throws to earn the "Clutch Shooter" badge
+                <p className="text-gray-300 mb-4">
+                  Make 20 consecutive free throws to earn the "Clutch Shooter"
+                  badge
                 </p>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Badge className="bg-yellow-500 text-white">+50 XP</Badge>
-                    <Badge variant="outline">🏆 Badge</Badge>
+                    <Badge
+                      variant="outline"
+                      className="border-gray-600 text-gray-300"
+                    >
+                      🏆 Badge
+                    </Badge>
                   </div>
                   <Link to={createPageUrl("Challenges")}>
-                    <Button className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white">
+                    <Button className="bg-brand-orange hover:opacity-90 text-white">
                       Accept Challenge
                     </Button>
                   </Link>

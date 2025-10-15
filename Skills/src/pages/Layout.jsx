@@ -100,7 +100,7 @@ export default function Layout({ children }) {
 
   const NavContent = () => (
     <div className="flex flex-col h-full">
-      <div className="p-6 border-b border-orange-100">
+      <div className="p-6 border-b border-brand-gray/30">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 flex items-center justify-center">
             <img
@@ -110,8 +110,8 @@ export default function Layout({ children }) {
             />
           </div>
           <div>
-            <h2 className="font-bold text-xl text-gray-900">Skills</h2>
-            <p className="text-sm text-gray-500">Basketball Mastery</p>
+            <h2 className="font-bold text-xl text-brand-white">Skills</h2>
+            <p className="text-sm text-brand-lightGray">Basketball Mastery</p>
           </div>
         </div>
       </div>
@@ -125,8 +125,8 @@ export default function Layout({ children }) {
               onClick={() => setMobileMenuOpen(false)}
               className={`group flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 ${
                 location.pathname === item.url
-                  ? "bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg"
-                  : "text-gray-600 hover:bg-orange-50 hover:text-orange-600"
+                  ? "bg-gradient-orange-blue text-white shadow-lg shadow-brand-orange/20"
+                  : "text-brand-lightGray hover:bg-brand-charcoal hover:text-brand-orange"
               }`}
             >
               <item.icon
@@ -139,8 +139,8 @@ export default function Layout({ children }) {
                 <div
                   className={`text-xs opacity-75 ${
                     location.pathname === item.url
-                      ? "text-orange-100"
-                      : "text-gray-500"
+                      ? "text-white/80"
+                      : "text-brand-gray"
                   }`}
                 >
                   {item.description}
@@ -151,20 +151,23 @@ export default function Layout({ children }) {
         </div>
       </nav>
 
-      <div className="p-4 border-t border-orange-100 space-y-3">
+      <div className="p-4 border-t border-brand-gray/30 space-y-3">
         {profile && (
           <div className="px-4 py-2">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium text-gray-900">
+                <div className="text-sm font-medium text-brand-white">
                   {profile.full_name}
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-brand-lightGray">
                   Level {profile.current_level}
                 </div>
               </div>
               {role !== "user" && (
-                <Badge variant={role === "admin" ? "default" : "secondary"}>
+                <Badge
+                  variant={role === "admin" ? "default" : "secondary"}
+                  className="bg-brand-orange text-white border-0"
+                >
                   {role}
                 </Badge>
               )}
@@ -174,7 +177,7 @@ export default function Layout({ children }) {
         <Button
           onClick={handleSignOut}
           variant="outline"
-          className="w-full justify-start text-gray-600 hover:text-red-600 hover:bg-red-50"
+          className="w-full justify-start text-brand-lightGray border-brand-gray/30 hover:text-red-500 hover:bg-brand-charcoal hover:border-red-500/50"
         >
           <LogOut className="w-4 h-4 mr-2" />
           Sign Out
@@ -184,16 +187,16 @@ export default function Layout({ children }) {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-orange-50">
+    <div className="min-h-screen bg-brand-charcoal">
       {/* Desktop Sidebar */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-80 lg:flex-col">
-        <div className="flex flex-col h-full bg-white border-r border-orange-100 shadow-xl">
+        <div className="flex flex-col h-full bg-brand-black border-r border-brand-gray/30 shadow-2xl">
           <NavContent />
         </div>
       </div>
 
       {/* Mobile Header */}
-      <div className="lg:hidden bg-white border-b border-orange-100 shadow-sm">
+      <div className="lg:hidden bg-brand-black border-b border-brand-gray/30 shadow-lg">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 flex items-center justify-center">
@@ -203,16 +206,23 @@ export default function Layout({ children }) {
                 className="w-8 h-8 object-contain"
               />
             </div>
-            <h1 className="font-bold text-xl text-gray-900">Skills</h1>
+            <h1 className="font-bold text-xl text-brand-white">Skills</h1>
           </div>
 
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-brand-white hover:bg-brand-charcoal"
+              >
                 <Menu className="w-6 h-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-80 p-0">
+            <SheetContent
+              side="left"
+              className="w-80 p-0 bg-brand-black border-brand-gray/30"
+            >
               <NavContent />
             </SheetContent>
           </Sheet>
@@ -221,7 +231,7 @@ export default function Layout({ children }) {
 
       {/* Main Content */}
       <main className="lg:pl-80">
-        <div className="min-h-screen">{children}</div>
+        <div className="min-h-screen bg-brand-charcoal">{children}</div>
       </main>
     </div>
   );

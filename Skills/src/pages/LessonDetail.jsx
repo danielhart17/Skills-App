@@ -77,17 +77,17 @@ export default function LessonDetail() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
-        <div className="text-2xl text-gray-600">Loading lesson...</div>
+      <div className="min-h-screen flex items-center justify-center bg-brand-charcoal">
+        <div className="text-2xl text-white">Loading lesson...</div>
       </div>
     );
   }
 
   if (!lesson) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
+      <div className="min-h-screen flex items-center justify-center bg-brand-charcoal">
         <div className="text-center">
-          <p className="text-xl text-gray-600 mb-4">Lesson not found</p>
+          <p className="text-xl text-white mb-4">Lesson not found</p>
           <Button onClick={() => navigate(-1)}>Go Back</Button>
         </div>
       </div>
@@ -95,18 +95,22 @@ export default function LessonDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-8 px-4">
+    <div className="min-h-screen bg-brand-charcoal py-8 px-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4">
+          <Button
+            variant="ghost"
+            onClick={() => navigate(-1)}
+            className="mb-4 text-white hover:bg-brand-gray"
+          >
             <ArrowLeft className="w-5 h-5 mr-2" />
             Back to Learning Path
           </Button>
         </div>
 
         {/* Main Content Card */}
-        <Card className="shadow-2xl border-0 overflow-hidden">
+        <Card className="shadow-2xl border-0 overflow-hidden bg-card">
           {/* Header Section */}
           <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-8 text-white">
             <div className="flex items-start justify-between mb-4">
@@ -156,11 +160,9 @@ export default function LessonDetail() {
           <CardContent className="p-8">
             {/* Description */}
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                Overview
-              </h2>
+              <h2 className="text-2xl font-bold text-white mb-4">Overview</h2>
               <div className="prose prose-lg max-w-none">
-                <p className="text-gray-700 whitespace-pre-line leading-relaxed">
+                <p className="text-gray-300 whitespace-pre-line leading-relaxed">
                   {lesson.description}
                 </p>
               </div>
@@ -193,49 +195,53 @@ export default function LessonDetail() {
 
         {/* Additional Info */}
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
+          <Card className="bg-card">
             <CardHeader>
-              <CardTitle className="text-lg">What You'll Learn</CardTitle>
+              <CardTitle className="text-lg text-white">
+                What You'll Learn
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2 text-sm text-gray-600">
+              <ul className="space-y-2 text-sm text-gray-300">
                 <li className="flex items-start gap-2">
-                  <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                   <span>Key concepts and strategies</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                   <span>Practical applications</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                   <span>Real game situations</span>
                 </li>
               </ul>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-card">
             <CardHeader>
-              <CardTitle className="text-lg">Lesson Details</CardTitle>
+              <CardTitle className="text-lg text-white">
+                Lesson Details
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Mode:</span>
-                  <span className="font-semibold text-gray-900">
+                  <span className="text-gray-400">Mode:</span>
+                  <span className="font-semibold text-white">
                     {lesson.mode === "iq" ? "Basketball IQ" : "On-Court"}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Level:</span>
-                  <span className="font-semibold text-gray-900">
+                  <span className="text-gray-400">Level:</span>
+                  <span className="font-semibold text-white">
                     {lesson.level}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Chapter:</span>
-                  <span className="font-semibold text-gray-900">
+                  <span className="text-gray-400">Chapter:</span>
+                  <span className="font-semibold text-white">
                     {lesson.chapter}
                   </span>
                 </div>
