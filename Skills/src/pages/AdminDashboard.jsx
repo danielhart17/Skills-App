@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -41,6 +41,8 @@ import {
   Shield,
   CalendarCheck,
   Search,
+  HelpCircle,
+  Target,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -54,6 +56,10 @@ export default function AdminDashboard() {
   const [bookings, setBookings] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [userSearch, setUserSearch] = useState("");
+  const [questions, setQuestions] = useState([]);
+  const [selectedLesson, setSelectedLesson] = useState(null);
+  const [showQuestionsDialog, setShowQuestionsDialog] = useState(false);
+  const [drills, setDrills] = useState([]);
 
   // Redirect if not admin
   useEffect(() => {
@@ -105,6 +111,13 @@ export default function AdminDashboard() {
           .order("created_at", { ascending: false });
         if (error) throw error;
         setProfiles(data || []);
+      } else if (activeTab === "drills") {
+        const { data, error } = await supabase
+          .from("drills")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        setDrills(data || []);
       }
     } catch (error) {
       console.error("Error loading data:", error);
@@ -170,6 +183,69 @@ export default function AdminDashboard() {
     }
   };
 
+  const loadQuestionsForLesson = async (lessonId) => {
+    try {
+      const { data, error } = await supabase
+        .from("questions")
+        .select("*")
+        .eq("lesson_id", lessonId)
+        .order("order_index", { ascending: true });
+
+      if (error) throw error;
+      setQuestions(data || []);
+    } catch (error) {
+      console.error("Error loading questions:", error);
+      toast.error("Failed to load questions");
+    }
+  };
+
+  const handleManageQuestions = async (lesson) => {
+    setSelectedLesson(lesson);
+    await loadQuestionsForLesson(lesson.id);
+    setShowQuestionsDialog(true);
+  };
+
+  const handleSaveQuestion = async (questionData, isEdit = false) => {
+    try {
+      if (isEdit) {
+        const { error } = await supabase
+          .from("questions")
+          .update(questionData)
+          .eq("id", questionData.id);
+        if (error) throw error;
+        toast.success("Question updated");
+      } else {
+        const { error } = await supabase
+          .from("questions")
+          .insert({ ...questionData, lesson_id: selectedLesson.id });
+        if (error) throw error;
+        toast.success("Question created");
+      }
+      await loadQuestionsForLesson(selectedLesson.id);
+    } catch (error) {
+      console.error("Error saving question:", error);
+      toast.error("Failed to save question");
+    }
+  };
+
+  const handleDeleteQuestion = async (questionId) => {
+    if (!confirm("Are you sure you want to delete this question?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("questions")
+        .delete()
+        .eq("id", questionId);
+
+      if (error) throw error;
+      toast.success("Question deleted");
+      await loadQuestionsForLesson(selectedLesson.id);
+    } catch (error) {
+      console.error("Error deleting question:", error);
+      toast.error("Failed to delete question");
+    }
+  };
+
   if (!isAdmin()) return null;
 
   return (
@@ -187,10 +263,14 @@ export default function AdminDashboard() {
         onValueChange={setActiveTab}
         className="space-y-6"
       >
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="lessons">
             <BookOpen className="w-4 h-4 mr-2" />
             Lessons
+          </TabsTrigger>
+          <TabsTrigger value="drills">
+            <Target className="w-4 h-4 mr-2" />
+            Drills
           </TabsTrigger>
           <TabsTrigger value="challenges">
             <Trophy className="w-4 h-4 mr-2" />
@@ -237,6 +317,14 @@ export default function AdminDashboard() {
                       <CardDescription>{lesson.description}</CardDescription>
                     </div>
                     <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleManageQuestions(lesson)}
+                      >
+                        <HelpCircle className="w-4 h-4 mr-1" />
+                        Questions
+                      </Button>
                       <LessonDialog
                         lesson={lesson}
                         onSave={(data) => handleSave("lessons", data, true)}
@@ -265,6 +353,82 @@ export default function AdminDashboard() {
                       {lesson.estimated_time} min
                     </Badge>
                     <Badge variant="secondary">{lesson.xp_reward} XP</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        {/* Drills Tab */}
+        <TabsContent value="drills" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-semibold">Drills ({drills.length})</h2>
+            <DrillDialog
+              onSave={(data) => handleSave("drills", data)}
+              trigger={
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Drill
+                </Button>
+              }
+            />
+          </div>
+
+          <div className="grid gap-4">
+            {drills.map((drill) => (
+              <Card key={drill.id}>
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle>{drill.title}</CardTitle>
+                      <CardDescription>{drill.description}</CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      <DrillDialog
+                        drill={drill}
+                        onSave={(data) => handleSave("drills", data, true)}
+                        trigger={
+                          <Button variant="outline" size="sm">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        }
+                      />
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDelete("drills", drill.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex gap-2 flex-wrap">
+                      <Badge>{drill.category}</Badge>
+                      <Badge variant="outline">{drill.difficulty}</Badge>
+                      <Badge variant="secondary">
+                        {drill.duration_minutes} min
+                      </Badge>
+                      <Badge variant="secondary">
+                        {drill.players_needed} player
+                        {drill.players_needed > 1 ? "s" : ""}
+                      </Badge>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      <p>
+                        <strong>Purpose:</strong> {drill.purpose}
+                      </p>
+                      <p>
+                        <strong>Focus:</strong> {drill.focus}
+                      </p>
+                      <p>
+                        <strong>Equipment:</strong>{" "}
+                        {drill.equipment_needed?.join(", ") || "None"}
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -520,7 +684,315 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Questions Management Dialog */}
+      {showQuestionsDialog && selectedLesson && (
+        <Dialog
+          open={showQuestionsDialog}
+          onOpenChange={setShowQuestionsDialog}
+        >
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Manage Questions: {selectedLesson.title}
+              </DialogTitle>
+              <DialogDescription>
+                Add and manage multiple-choice questions for this lesson.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <p className="text-sm text-muted-foreground">
+                  {questions.length} question(s)
+                </p>
+                <QuestionDialog
+                  lessonId={selectedLesson.id}
+                  onSave={(data) => handleSaveQuestion(data)}
+                  trigger={
+                    <Button size="sm">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Question
+                    </Button>
+                  }
+                />
+              </div>
+
+              <div className="space-y-3">
+                {questions.map((question, index) => (
+                  <Card key={question.id}>
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge>Q{index + 1}</Badge>
+                            <span className="text-sm font-medium">
+                              {question.question_text}
+                            </span>
+                          </div>
+                          {question.media_type !== "none" && (
+                            <Badge variant="outline" className="text-xs">
+                              {question.media_type}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <QuestionDialog
+                            question={question}
+                            lessonId={selectedLesson.id}
+                            onSave={(data) => handleSaveQuestion(data, true)}
+                            trigger={
+                              <Button variant="outline" size="sm">
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            }
+                          />
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteQuestion(question.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>A: {question.option_a}</div>
+                        <div>B: {question.option_b}</div>
+                        <div>C: {question.option_c}</div>
+                        <div>D: {question.option_d}</div>
+                      </div>
+                      <div className="mt-2">
+                        <Badge className="bg-green-100 text-green-800">
+                          Correct: {question.correct_answer}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
+  );
+}
+
+// Question Dialog Component
+function QuestionDialog({ question, lessonId, onSave, trigger }) {
+  const [open, setOpen] = useState(false);
+  const [formData, setFormData] = useState(
+    question || {
+      question_text: "",
+      media_type: "none",
+      media_url: "",
+      option_a: "",
+      option_b: "",
+      option_c: "",
+      option_d: "",
+      correct_answer: "A",
+      explanation: "",
+      order_index: 0,
+    }
+  );
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave(question ? { ...formData, id: question.id } : formData);
+    setOpen(false);
+    if (!question) {
+      setFormData({
+        question_text: "",
+        media_type: "none",
+        media_url: "",
+        option_a: "",
+        option_b: "",
+        option_c: "",
+        option_d: "",
+        correct_answer: "A",
+        explanation: "",
+        order_index: 0,
+      });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{question ? "Edit" : "Add"} Question</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="question_text">Question Text *</Label>
+            <Textarea
+              id="question_text"
+              value={formData.question_text}
+              onChange={(e) =>
+                setFormData({ ...formData, question_text: e.target.value })
+              }
+              required
+              rows={3}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="media_type">Media Type</Label>
+              <Select
+                value={formData.media_type}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, media_type: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="image">Image</SelectItem>
+                  <SelectItem value="video">Video</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.media_type !== "none" && (
+              <div>
+                <Label htmlFor="media_url">Media URL</Label>
+                <Input
+                  id="media_url"
+                  type="url"
+                  value={formData.media_url}
+                  onChange={(e) =>
+                    setFormData({ ...formData, media_url: e.target.value })
+                  }
+                  placeholder="https://..."
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <Label>Answer Options *</Label>
+            <div>
+              <Label htmlFor="option_a" className="text-sm">
+                Option A
+              </Label>
+              <Input
+                id="option_a"
+                value={formData.option_a}
+                onChange={(e) =>
+                  setFormData({ ...formData, option_a: e.target.value })
+                }
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="option_b" className="text-sm">
+                Option B
+              </Label>
+              <Input
+                id="option_b"
+                value={formData.option_b}
+                onChange={(e) =>
+                  setFormData({ ...formData, option_b: e.target.value })
+                }
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="option_c" className="text-sm">
+                Option C
+              </Label>
+              <Input
+                id="option_c"
+                value={formData.option_c}
+                onChange={(e) =>
+                  setFormData({ ...formData, option_c: e.target.value })
+                }
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="option_d" className="text-sm">
+                Option D
+              </Label>
+              <Input
+                id="option_d"
+                value={formData.option_d}
+                onChange={(e) =>
+                  setFormData({ ...formData, option_d: e.target.value })
+                }
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="correct_answer">Correct Answer *</Label>
+            <Select
+              value={formData.correct_answer}
+              onValueChange={(value) =>
+                setFormData({ ...formData, correct_answer: value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="A">A</SelectItem>
+                <SelectItem value="B">B</SelectItem>
+                <SelectItem value="C">C</SelectItem>
+                <SelectItem value="D">D</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="explanation">Explanation (Optional)</Label>
+            <Textarea
+              id="explanation"
+              value={formData.explanation}
+              onChange={(e) =>
+                setFormData({ ...formData, explanation: e.target.value })
+              }
+              rows={2}
+              placeholder="Explain why this answer is correct..."
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="order_index">Order Index</Label>
+            <Input
+              id="order_index"
+              type="number"
+              value={formData.order_index}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  order_index: parseInt(e.target.value) || 0,
+                })
+              }
+            />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit">Save Question</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -962,6 +1434,284 @@ function EventDialog({ event, onSave, trigger }) {
               Cancel
             </Button>
             <Button type="submit">{event ? "Update" : "Create"} Event</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Drill Dialog Component
+function DrillDialog({ drill, onSave, trigger }) {
+  const [open, setOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    purpose: "",
+    setup: "",
+    instructions: "",
+    focus: "",
+    category: "shooting",
+    difficulty: "beginner",
+    duration_minutes: 15,
+    equipment_needed: [],
+    players_needed: 1,
+    space_required: "Half court",
+    is_active: true,
+  });
+
+  useEffect(() => {
+    if (drill) {
+      setFormData({
+        title: drill.title || "",
+        description: drill.description || "",
+        purpose: drill.purpose || "",
+        setup: drill.setup || "",
+        instructions: drill.instructions || "",
+        focus: drill.focus || "",
+        category: drill.category || "shooting",
+        difficulty: drill.difficulty || "beginner",
+        duration_minutes: drill.duration_minutes || 15,
+        equipment_needed: drill.equipment_needed || [],
+        players_needed: drill.players_needed || 1,
+        space_required: drill.space_required || "Half court",
+        is_active: drill.is_active !== false,
+      });
+    } else {
+      setFormData({
+        title: "",
+        description: "",
+        purpose: "",
+        setup: "",
+        instructions: "",
+        focus: "",
+        category: "shooting",
+        difficulty: "beginner",
+        duration_minutes: 15,
+        equipment_needed: [],
+        players_needed: 1,
+        space_required: "Half court",
+        is_active: true,
+      });
+    }
+  }, [drill, open]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave({ ...formData, id: drill?.id });
+    setOpen(false);
+  };
+
+  const handleEquipmentChange = (e) => {
+    const value = e.target.value;
+    const equipment = value
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item);
+    setFormData({ ...formData, equipment_needed: equipment });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{drill ? "Edit Drill" : "Create New Drill"}</DialogTitle>
+          <DialogDescription>
+            {drill ? "Update the drill details" : "Add a new basketball drill"}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="drill-title">Title</Label>
+            <Input
+              id="drill-title"
+              value={formData.title}
+              onChange={(e) =>
+                setFormData({ ...formData, title: e.target.value })
+              }
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="drill-description">Description</Label>
+            <Textarea
+              id="drill-description"
+              value={formData.description}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
+              rows={2}
+            />
+          </div>
+          <div>
+            <Label htmlFor="drill-purpose">Purpose</Label>
+            <Textarea
+              id="drill-purpose"
+              value={formData.purpose}
+              onChange={(e) =>
+                setFormData({ ...formData, purpose: e.target.value })
+              }
+              rows={2}
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="drill-setup">Setup</Label>
+            <Textarea
+              id="drill-setup"
+              value={formData.setup}
+              onChange={(e) =>
+                setFormData({ ...formData, setup: e.target.value })
+              }
+              rows={2}
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="drill-instructions">Instructions</Label>
+            <Textarea
+              id="drill-instructions"
+              value={formData.instructions}
+              onChange={(e) =>
+                setFormData({ ...formData, instructions: e.target.value })
+              }
+              rows={4}
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="drill-focus">Focus</Label>
+            <Textarea
+              id="drill-focus"
+              value={formData.focus}
+              onChange={(e) =>
+                setFormData({ ...formData, focus: e.target.value })
+              }
+              rows={2}
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="drill-category">Category</Label>
+              <Select
+                value={formData.category}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, category: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="shooting">Shooting</SelectItem>
+                  <SelectItem value="dribbling">Dribbling</SelectItem>
+                  <SelectItem value="defense">Defense</SelectItem>
+                  <SelectItem value="passing">Passing</SelectItem>
+                  <SelectItem value="conditioning">Conditioning</SelectItem>
+                  <SelectItem value="footwork">Footwork</SelectItem>
+                  <SelectItem value="rebounding">Rebounding</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="drill-difficulty">Difficulty</Label>
+              <Select
+                value={formData.difficulty}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, difficulty: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="beginner">Beginner</SelectItem>
+                  <SelectItem value="intermediate">Intermediate</SelectItem>
+                  <SelectItem value="advanced">Advanced</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="drill-duration">Duration (min)</Label>
+              <Input
+                id="drill-duration"
+                type="number"
+                value={formData.duration_minutes}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    duration_minutes: parseInt(e.target.value),
+                  })
+                }
+                min="1"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="drill-players">Players Needed</Label>
+              <Input
+                id="drill-players"
+                type="number"
+                value={formData.players_needed}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    players_needed: parseInt(e.target.value),
+                  })
+                }
+                min="1"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="drill-space">Space Required</Label>
+              <Input
+                id="drill-space"
+                value={formData.space_required}
+                onChange={(e) =>
+                  setFormData({ ...formData, space_required: e.target.value })
+                }
+                required
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="drill-equipment">
+              Equipment Needed (comma-separated)
+            </Label>
+            <Input
+              id="drill-equipment"
+              value={formData.equipment_needed.join(", ")}
+              onChange={handleEquipmentChange}
+              placeholder="Basketball, Cones, etc."
+            />
+          </div>
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="drill-active"
+              checked={formData.is_active}
+              onChange={(e) =>
+                setFormData({ ...formData, is_active: e.target.checked })
+              }
+              className="rounded"
+            />
+            <Label htmlFor="drill-active">Active Drill</Label>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit">{drill ? "Update" : "Create"} Drill</Button>
           </div>
         </form>
       </DialogContent>

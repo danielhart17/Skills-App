@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Lesson } from "@/api/entities";
+import { Lesson, UserProgress } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,13 +23,22 @@ export default function LessonDetail() {
       setLesson(lessonData);
 
       // Check if lesson is already completed
-      const stored = localStorage.getItem(
-        `completed_lessons_${lessonData.chapter}`
-      );
-      if (stored) {
-        const completedLessons = JSON.parse(stored);
-        if (completedLessons.includes(lessonId)) {
+      try {
+        const completedLessonIds = await UserProgress.getCompletedLessons();
+        if (completedLessonIds.includes(lessonId)) {
           setIsCompleted(true);
+        }
+      } catch (error) {
+        console.error("Error checking lesson completion:", error);
+        // Fallback to localStorage
+        const stored = localStorage.getItem(
+          `completed_lessons_${lessonData.chapter}`
+        );
+        if (stored) {
+          const completedLessons = JSON.parse(stored);
+          if (completedLessons.includes(lessonId)) {
+            setIsCompleted(true);
+          }
         }
       }
     } catch (error) {
@@ -39,27 +48,8 @@ export default function LessonDetail() {
   };
 
   const handleStartLesson = () => {
-    // TODO: Navigate to actual lesson content/quiz
-    console.log("Starting lesson:", lessonId);
-
-    // Mark as completed and save to localStorage
-    if (lesson && !isCompleted) {
-      const storageKey = `completed_lessons_${lesson.chapter}`;
-      const stored = localStorage.getItem(storageKey);
-      const completedLessons = stored ? JSON.parse(stored) : [];
-
-      if (!completedLessons.includes(lessonId)) {
-        completedLessons.push(lessonId);
-        localStorage.setItem(storageKey, JSON.stringify(completedLessons));
-      }
-
-      setIsCompleted(true);
-
-      // Go back after a short delay
-      setTimeout(() => {
-        navigate(-1);
-      }, 1500);
-    }
+    // Navigate to the questions page for this lesson
+    navigate(`/lesson/${lessonId}/questions`);
   };
 
   const getDifficultyColor = (difficulty) => {

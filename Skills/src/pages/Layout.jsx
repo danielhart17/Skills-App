@@ -12,6 +12,7 @@ import {
   LogOut,
   Shield,
   GraduationCap,
+  Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,12 @@ const navigationItems = [
     url: createPageUrl("OnCourt"),
     icon: Dumbbell,
     description: "Skills & Drills",
+  },
+  {
+    title: "Drills",
+    url: "/drills",
+    icon: Target,
+    description: "Practice Drills",
   },
   {
     title: "Challenges",

@@ -8,6 +8,8 @@ import LearningPath from "./LearningPath";
 
 import LessonDetail from "./LessonDetail";
 
+import QuestionPage from "./QuestionPage";
+
 import OnCourt from "./OnCourt";
 
 import Challenges from "./Challenges";
@@ -26,6 +28,10 @@ import AdminDashboard from "./AdminDashboard";
 
 import TrainerDashboard from "./TrainerDashboard";
 
+import Drills from "./Drills";
+
+import DrillDetail from "./DrillDetail";
+
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 
 // Create a wrapper component that renders the Layout with all routes
@@ -42,6 +48,8 @@ function PagesContent() {
         <Route path="/LearningPath/:chapter" element={<LearningPath />} />
 
         <Route path="/lesson/:lessonId" element={<LessonDetail />} />
+
+        <Route path="/lesson/:lessonId/questions" element={<QuestionPage />} />
 
         <Route path="/OnCourt" element={<OnCourt />} />
 
@@ -60,6 +68,10 @@ function PagesContent() {
         <Route path="/AdminDashboard" element={<AdminDashboard />} />
 
         <Route path="/TrainerDashboard" element={<TrainerDashboard />} />
+
+        <Route path="/drills" element={<Drills />} />
+
+        <Route path="/drills/:drillId" element={<DrillDetail />} />
       </Routes>
     </Layout>
   );

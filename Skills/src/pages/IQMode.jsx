@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Lesson } from "@/api/entities";
+import { Lesson, UserProgress } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -16,10 +16,15 @@ import {
 export default function IQMode() {
   const navigate = useNavigate();
   const [lessons, setLessons] = useState([]);
+  const [completedLessons, setCompletedLessons] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadLessons();
+    const loadData = async () => {
+      await loadLessons();
+      await loadCompletedLessons();
+    };
+    loadData();
   }, []);
 
   const loadLessons = async () => {
@@ -29,6 +34,20 @@ export default function IQMode() {
       setLessons(iqLessons);
     } catch (error) {
       console.error("Error loading lessons:", error);
+    }
+  };
+
+  const loadCompletedLessons = async () => {
+    try {
+      const completedLessonIds = await UserProgress.getCompletedLessons();
+      setCompletedLessons(completedLessonIds);
+    } catch (error) {
+      console.error("Error loading completed lessons:", error);
+      // Fallback to localStorage if Supabase fails
+      const stored = localStorage.getItem("completedLessons");
+      if (stored) {
+        setCompletedLessons(JSON.parse(stored));
+      }
     }
     setIsLoading(false);
   };
@@ -40,9 +59,13 @@ export default function IQMode() {
 
   const getChapterStats = (chapter) => {
     const chapterLessons = lessons.filter((l) => l.chapter === chapter);
+    const completed = chapterLessons.filter((lesson) =>
+      completedLessons.includes(lesson.id)
+    ).length;
+
     return {
       total: chapterLessons.length,
-      completed: 0, // TODO: Track from user progress
+      completed: completed,
       totalXP: chapterLessons.reduce((sum, l) => sum + (l.xp_reward || 0), 0),
     };
   };

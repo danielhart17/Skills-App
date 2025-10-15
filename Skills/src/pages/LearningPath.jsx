@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Lesson } from "@/api/entities";
+import { Lesson, UserProgress } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Lock, CheckCircle, ArrowLeft, Trophy } from "lucide-react";
 
@@ -12,8 +12,11 @@ export default function LearningPath() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadChapterLessons();
-    loadCompletedLessons();
+    const loadData = async () => {
+      await loadChapterLessons();
+      await loadCompletedLessons();
+    };
+    loadData();
   }, [chapter]);
 
   // Reload completed lessons when component becomes visible again
@@ -46,11 +49,18 @@ export default function LearningPath() {
     setIsLoading(false);
   };
 
-  const loadCompletedLessons = () => {
-    // Load from localStorage
-    const stored = localStorage.getItem(`completed_lessons_${chapter}`);
-    if (stored) {
-      setCompletedLessons(JSON.parse(stored));
+  const loadCompletedLessons = async () => {
+    try {
+      // Load from Supabase
+      const completedLessonIds = await UserProgress.getCompletedLessons();
+      setCompletedLessons(completedLessonIds);
+    } catch (error) {
+      console.error("Error loading completed lessons:", error);
+      // Fallback to localStorage if Supabase fails
+      const stored = localStorage.getItem(`completed_lessons_${chapter}`);
+      if (stored) {
+        setCompletedLessons(JSON.parse(stored));
+      }
     }
   };
 
