@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { User } from "@/api/entities";
 import { Lesson } from "@/api/entities";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -14,12 +15,12 @@ import {
   Target,
   Flame,
   Star,
-  TrendingUp,
   Clock,
   Play,
 } from "lucide-react";
 
 export default function Home() {
+  const { isTrainer } = useAuth();
   const [user, setUser] = useState(null);
   const [recentLessons, setRecentLessons] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -107,52 +108,84 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-0 shadow-xl">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-blue-100 text-sm font-medium">
-                    Current Level
-                  </p>
-                  <p className="text-3xl font-bold">
-                    {user?.current_level || 1}
+        {/* Stats Cards - Hidden for trainers */}
+        {!isTrainer() && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-0 shadow-xl">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-blue-100 text-sm font-medium">
+                      Current Level
+                    </p>
+                    <p className="text-3xl font-bold">
+                      {user?.current_level || 1}
+                    </p>
+                  </div>
+                  <Star className="w-8 h-8 text-blue-200" />
+                </div>
+                <div className="mt-4">
+                  <Progress
+                    value={getLevelProgress()}
+                    className="h-2 bg-blue-400"
+                  />
+                  <p className="text-blue-100 text-xs mt-1">
+                    {Math.round(getLevelProgress())}% to next level
                   </p>
                 </div>
-                <Star className="w-8 h-8 text-blue-200" />
-              </div>
-              <div className="mt-4">
-                <Progress
-                  value={getLevelProgress()}
-                  className="h-2 bg-blue-400"
-                />
-                <p className="text-blue-100 text-xs mt-1">
-                  {Math.round(getLevelProgress())}% to next level
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-gradient-to-br from-yellow-500 to-orange-600 text-white border-0 shadow-xl">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-yellow-100 text-sm font-medium">
-                    Current Streak
-                  </p>
-                  <p className="text-3xl font-bold">
-                    {user?.current_streak || 0}
-                  </p>
+            <Card className="bg-gradient-to-br from-yellow-500 to-orange-600 text-white border-0 shadow-xl">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-yellow-100 text-sm font-medium">
+                      Current Streak
+                    </p>
+                    <p className="text-3xl font-bold">
+                      {user?.current_streak || 0}
+                    </p>
+                  </div>
+                  <Flame className={`w-8 h-8 ${getStreakColor()}`} />
                 </div>
-                <Flame className={`w-8 h-8 ${getStreakColor()}`} />
-              </div>
-              <p className="text-yellow-100 text-xs mt-2">
-                Best: {user?.longest_streak || 0} days
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+                <p className="text-yellow-100 text-xs mt-2">
+                  Best: {user?.longest_streak || 0} days
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Test Booking Link - Remove this after testing */}
+        <Card className="border-0 shadow-xl bg-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl text-white">
+              <Target className="w-6 h-6 text-green-500" />
+              Test Booking Page
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-300 mb-4">
+              Test the booking functionality with sample data:
+            </p>
+            <div className="flex gap-3">
+              <Link to="/Booking?trainerId=10000000-0000-0000-0000-000000000001">
+                <Button className="bg-green-500 hover:bg-green-600 text-white">
+                  Test Booking (Coach Mike)
+                </Button>
+              </Link>
+              <Link to="/Booking?trainerId=10000000-0000-0000-0000-000000000001&serviceId=30000000-0000-0000-0000-000000000001">
+                <Button
+                  variant="outline"
+                  className="border-green-500 text-green-500 hover:bg-green-500 hover:text-white"
+                >
+                  Test with Service Pre-selected
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -240,8 +273,8 @@ export default function Home() {
                   Perfect Your Free Throws
                 </h3>
                 <p className="text-gray-300 mb-4">
-                  Make 20 consecutive free throws to earn the "Clutch Shooter"
-                  badge
+                  Make 20 consecutive free throws to earn the &quot;Clutch
+                  Shooter&quot; badge
                 </p>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">

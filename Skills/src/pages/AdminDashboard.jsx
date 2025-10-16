@@ -672,11 +672,18 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="flex gap-2 flex-wrap">
-                      <Badge>Level {user.current_level}</Badge>
-                      <Badge variant="secondary">{user.total_xp} XP</Badge>
-                      <Badge variant="outline">
-                        Streak: {user.current_streak}
-                      </Badge>
+                      {user.role !== "trainer" && (
+                        <>
+                          <Badge>Level {user.current_level}</Badge>
+                          <Badge variant="secondary">{user.total_xp} XP</Badge>
+                          <Badge variant="outline">
+                            Streak: {user.current_streak}
+                          </Badge>
+                        </>
+                      )}
+                      {user.role === "trainer" && (
+                        <Badge variant="outline">Trainer Account</Badge>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

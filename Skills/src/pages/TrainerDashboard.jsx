@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -50,7 +50,7 @@ export default function TrainerDashboard() {
   const [bookings, setBookings] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [trainerProfile, setTrainerProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
 
   // Redirect if not trainer or admin
   useEffect(() => {
@@ -59,11 +59,9 @@ export default function TrainerDashboard() {
     }
   }, [isTrainer, navigate]);
 
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
+  const loadData = useCallback(async () => {
+    if (!profile) return; // Safety check
 
-  const loadData = async () => {
     setLoading(true);
     try {
       if (activeTab === "challenges") {
@@ -75,30 +73,74 @@ export default function TrainerDashboard() {
         if (error) throw error;
         setChallenges(data || []);
       } else if (activeTab === "bookings") {
-        // Get trainer profile first
-        const { data: trainerData } = await supabase
+        // Get trainer profile first to get the trainer_id
+        const { data: trainerData, error: trainerError } = await supabase
           .from("trainers")
           .select("*")
           .eq("user_id", profile.id)
           .single();
 
+        if (trainerError && trainerError.code !== "PGRST116") {
+          console.error("Error fetching trainer profile:", trainerError);
+          throw trainerError;
+        }
+
         if (trainerData) {
           setTrainerProfile(trainerData);
+          console.log("Found trainer data:", trainerData);
+          console.log("Looking for bookings with trainer_id:", trainerData.id);
+
+          // First, let's check what the current user's auth context looks like
+          const {
+            data: { user: currentUser },
+          } = await supabase.auth.getUser();
+          console.log("Current authenticated user:", currentUser);
+
+          // Check the user's profile and role
+          const { data: userProfile, error: profileError } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", currentUser.id)
+            .single();
+          console.log(
+            "User profile:",
+            userProfile,
+            "Profile error:",
+            profileError
+          );
+
+          // Now fetch bookings using the trainer_id from the trainers table
           const { data, error } = await supabase
             .from("bookings")
             .select("*, profiles:user_id(full_name, email)")
             .eq("trainer_id", trainerData.id)
             .order("booking_datetime", { ascending: true });
-          if (error) throw error;
+
+          console.log("Bookings query result:", { data, error });
+
+          if (error) {
+            console.error("Error fetching bookings:", error);
+            throw error;
+          }
           setBookings(data || []);
+        } else {
+          // No trainer profile found
+          console.log("No trainer profile found for user:", profile.id);
+          setTrainerProfile(null);
+          setBookings([]);
         }
       } else if (activeTab === "reviews") {
         // Get trainer profile first
-        const { data: trainerData } = await supabase
+        const { data: trainerData, error: trainerError } = await supabase
           .from("trainers")
           .select("*")
           .eq("user_id", profile.id)
           .single();
+
+        if (trainerError && trainerError.code !== "PGRST116") {
+          console.error("Error fetching trainer profile:", trainerError);
+          throw trainerError;
+        }
 
         if (trainerData) {
           const { data, error } = await supabase
@@ -106,8 +148,14 @@ export default function TrainerDashboard() {
             .select("*, profiles:user_id(full_name, email)")
             .eq("trainer_id", trainerData.id)
             .order("created_at", { ascending: false });
-          if (error) throw error;
+          if (error) {
+            console.error("Error fetching reviews:", error);
+            throw error;
+          }
           setReviews(data || []);
+        } else {
+          // No trainer profile found
+          setReviews([]);
         }
       } else if (activeTab === "profile") {
         const { data, error } = await supabase
@@ -115,7 +163,10 @@ export default function TrainerDashboard() {
           .select("*")
           .eq("user_id", profile.id)
           .single();
-        if (error && error.code !== "PGRST116") throw error;
+        if (error && error.code !== "PGRST116") {
+          console.error("Error fetching trainer profile:", error);
+          throw error;
+        }
         setTrainerProfile(data);
       }
     } catch (error) {
@@ -124,7 +175,13 @@ export default function TrainerDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [profile, activeTab]);
+
+  useEffect(() => {
+    if (profile) {
+      loadData();
+    }
+  }, [loadData, profile]);
 
   const handleDeleteChallenge = async (id) => {
     if (!confirm("Are you sure you want to delete this challenge?")) return;
@@ -193,6 +250,19 @@ export default function TrainerDashboard() {
   };
 
   if (!isTrainer()) return null;
+
+  if (!profile) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="text-6xl mb-4">🏀</div>
+            <p className="text-gray-600">Loading trainer profile...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

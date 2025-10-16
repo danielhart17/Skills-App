@@ -168,9 +168,11 @@ export default function Layout({ children }) {
                 <div className="text-sm font-medium text-brand-white">
                   {profile.full_name}
                 </div>
-                <div className="text-xs text-brand-lightGray">
-                  Level {profile.current_level}
-                </div>
+                {!isTrainer() && (
+                  <div className="text-xs text-brand-lightGray">
+                    Level {profile.current_level}
+                  </div>
+                )}
               </div>
               {role !== "user" && (
                 <Badge

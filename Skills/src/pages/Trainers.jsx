@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { Trainer } from "@/api/entities";
 import { TrainingEvent } from "@/api/entities"; // Corrected import path for TrainingEvent
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input"; // Added Input import
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
 import {
   Users,
   MapPin,
@@ -305,7 +304,7 @@ export default function Trainers() {
 
                   <div className="flex gap-2">
                     <Link
-                      to={createPageUrl(`TrainerProfile?id=${trainer.id}`)}
+                      to={`/TrainerProfile?id=${trainer.id}`}
                       className="flex-1"
                     >
                       <Button className="w-full bg-brand-blue hover:opacity-90 text-white">

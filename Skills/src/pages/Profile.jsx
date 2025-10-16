@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { User } from "@/api/entities";
 import { ShootingSession } from "@/api/entities";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ import {
 import { format } from "date-fns";
 
 export default function Profile() {
+  const { isTrainer } = useAuth();
   const [user, setUser] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -151,155 +153,168 @@ export default function Profile() {
                 </h2>
                 <p className="text-purple-100 mb-4">{user?.email}</p>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <div className="text-2xl font-bold">
-                      {user?.current_level || 1}
+                {!isTrainer() ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <div className="text-2xl font-bold">
+                        {user?.current_level || 1}
+                      </div>
+                      <div className="text-purple-100 text-sm">Level</div>
                     </div>
-                    <div className="text-purple-100 text-sm">Level</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">
-                      {user?.total_xp || 0}
+                    <div>
+                      <div className="text-2xl font-bold">
+                        {user?.total_xp || 0}
+                      </div>
+                      <div className="text-purple-100 text-sm">Total XP</div>
                     </div>
-                    <div className="text-purple-100 text-sm">Total XP</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">
-                      {user?.current_streak || 0}
+                    <div>
+                      <div className="text-2xl font-bold">
+                        {user?.current_streak || 0}
+                      </div>
+                      <div className="text-purple-100 text-sm">Day Streak</div>
                     </div>
-                    <div className="text-purple-100 text-sm">Day Streak</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">
-                      {user?.badges?.length || 0}
+                    <div>
+                      <div className="text-2xl font-bold">
+                        {user?.badges?.length || 0}
+                      </div>
+                      <div className="text-purple-100 text-sm">Badges</div>
                     </div>
-                    <div className="text-purple-100 text-sm">Badges</div>
                   </div>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-2xl font-bold">
+                        {user?.badges?.length || 0}
+                      </div>
+                      <div className="text-purple-100 text-sm">Badges</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Progress & Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Level Progress */}
-          <Card className="border-0 shadow-xl">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Star className="w-5 h-5 text-yellow-500" />
-                Level Progress
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-lg font-semibold">
-                  Level {user?.current_level || 1}
-                </span>
-                <span className="text-sm text-gray-500">
-                  {getXPToNextLevel()} XP to next level
-                </span>
-              </div>
-              <Progress value={getLevelProgress()} className="h-3" />
-              <div className="flex justify-between text-sm text-gray-500">
-                <span>{((user?.current_level || 1) - 1) * 100} XP</span>
-                <span>{(user?.current_level || 1) * 100} XP</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Streak */}
-          <Card className="border-0 shadow-xl">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Flame className="w-5 h-5 text-orange-500" />
-                Activity Streak
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-center">
-                <div className="text-4xl font-bold text-orange-500 mb-2">
-                  {user?.current_streak || 0}
-                </div>
-                <div className="text-gray-600">Days in a row</div>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500">Best streak:</span>
-                <span className="font-semibold">
-                  {user?.longest_streak || 0} days
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Shooting Stats */}
-          <Card className="border-0 shadow-xl">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="w-5 h-5 text-red-500" />
-                Shooting Stats
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div>
-                  <div className="text-2xl font-bold text-red-500">
-                    {getAverageShootingPercentage()}%
-                  </div>
-                  <div className="text-sm text-gray-600">Avg Accuracy</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-blue-500">
-                    {getTotalShots()}
-                  </div>
-                  <div className="text-sm text-gray-600">Total Shots</div>
-                </div>
-              </div>
-              <div className="text-center text-sm text-gray-500">
-                {sessions.length} shooting sessions completed
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Performance */}
-          <Card className="border-0 shadow-xl">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-green-500" />
-                Performance
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">
-                    Lessons Completed
+        {/* Progress & Stats - Hidden for trainers */}
+        {!isTrainer() && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Level Progress */}
+            <Card className="border-0 shadow-xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Star className="w-5 h-5 text-yellow-500" />
+                  Level Progress
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-semibold">
+                    Level {user?.current_level || 1}
                   </span>
-                  <span className="font-semibold">
-                    {user?.completed_lessons?.length || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">
-                    Favorite Position
-                  </span>
-                  <Badge variant="outline">
-                    {user?.favorite_position || "Not set"}
-                  </Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Last Active</span>
                   <span className="text-sm text-gray-500">
-                    {user?.last_active_date
-                      ? format(new Date(user.last_active_date), "MMM d, yyyy")
-                      : "Today"}
+                    {getXPToNextLevel()} XP to next level
                   </span>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                <Progress value={getLevelProgress()} className="h-3" />
+                <div className="flex justify-between text-sm text-gray-500">
+                  <span>{((user?.current_level || 1) - 1) * 100} XP</span>
+                  <span>{(user?.current_level || 1) * 100} XP</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Streak */}
+            <Card className="border-0 shadow-xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Flame className="w-5 h-5 text-orange-500" />
+                  Activity Streak
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-center">
+                  <div className="text-4xl font-bold text-orange-500 mb-2">
+                    {user?.current_streak || 0}
+                  </div>
+                  <div className="text-gray-600">Days in a row</div>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Best streak:</span>
+                  <span className="font-semibold">
+                    {user?.longest_streak || 0} days
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Shooting Stats */}
+            <Card className="border-0 shadow-xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="w-5 h-5 text-red-500" />
+                  Shooting Stats
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div>
+                    <div className="text-2xl font-bold text-red-500">
+                      {getAverageShootingPercentage()}%
+                    </div>
+                    <div className="text-sm text-gray-600">Avg Accuracy</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-blue-500">
+                      {getTotalShots()}
+                    </div>
+                    <div className="text-sm text-gray-600">Total Shots</div>
+                  </div>
+                </div>
+                <div className="text-center text-sm text-gray-500">
+                  {sessions.length} shooting sessions completed
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Performance */}
+            <Card className="border-0 shadow-xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-green-500" />
+                  Performance
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">
+                      Lessons Completed
+                    </span>
+                    <span className="font-semibold">
+                      {user?.completed_lessons?.length || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">
+                      Favorite Position
+                    </span>
+                    <Badge variant="outline">
+                      {user?.favorite_position || "Not set"}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Last Active</span>
+                    <span className="text-sm text-gray-500">
+                      {user?.last_active_date
+                        ? format(new Date(user.last_active_date), "MMM d, yyyy")
+                        : "Today"}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Achievements */}
         <Card className="border-0 shadow-xl">

@@ -8,16 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { createPageUrl } from "@/utils";
 import {
-  Users,
   MapPin,
   Star,
   Calendar,
-  DollarSign,
   CheckCircle,
   Play,
-  Mail,
   Award,
   BookOpen,
   MessageSquare,
@@ -148,7 +144,7 @@ export default function TrainerProfile() {
                   {trainer.bio?.length > 150 && "..."}
                 </p>
                 <div className="mt-6 flex justify-center md:justify-start gap-3">
-                  <Link to={createPageUrl(`Booking?trainerId=${trainer.id}`)}>
+                  <Link to={`/Booking?trainerId=${trainer.id}`}>
                     <Button className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg">
                       <Calendar className="w-4 h-4 mr-2" />
                       Book a Session
@@ -235,9 +231,7 @@ export default function TrainerProfile() {
                           </p>
                         </div>
                         <Link
-                          to={createPageUrl(
-                            `Booking?trainerId=${trainer.id}&serviceId=${service.id}`
-                          )}
+                          to={`/Booking?trainerId=${trainer.id}&serviceId=${service.id}`}
                         >
                           <Button size="sm" variant="outline" className="ml-4">
                             Book

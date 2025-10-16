@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Challenge } from "@/api/entities";
 import { Trainer } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -202,7 +202,7 @@ export default function Challenges() {
                 </div>
 
                 <Link
-                  to={createPageUrl(`TrainerProfile?id=${featuredTrainer.id}`)}
+                  to={`/TrainerProfile?id=${featuredTrainer.id}`}
                   className="group bg-white/10 backdrop-blur-sm p-6 rounded-2xl flex flex-col items-center text-center hover:bg-white/20 transition-all duration-300 border border-white/20"
                 >
                   <p className="text-sm font-semibold uppercase tracking-wider text-blue-200 mb-4">
