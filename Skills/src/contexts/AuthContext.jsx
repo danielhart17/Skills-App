@@ -18,23 +18,33 @@ export const AuthProvider = ({ children }) => {
   const [role, setRole] = useState("user"); // Default role
 
   useEffect(() => {
+    let isMounted = true;
+
     // Check active sessions and sets the user
     const getSession = async () => {
       try {
         const {
           data: { session },
         } = await supabase.auth.getSession();
+
+        if (!isMounted) return; // Component unmounted
+
         setUser(session?.user ?? null);
 
         if (session?.user) {
           await fetchProfile(session.user.id);
         }
-        setLoading(false);
+
+        if (isMounted) {
+          setLoading(false);
+        }
       } catch (error) {
         console.error("Error getting session:", error);
-        setUser(null);
-        setProfile(null);
-        setLoading(false);
+        if (isMounted) {
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+        }
       }
     };
 
@@ -44,6 +54,8 @@ export const AuthProvider = ({ children }) => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!isMounted) return; // Component unmounted
+
       setUser(session?.user ?? null);
 
       if (session?.user) {
@@ -53,11 +65,16 @@ export const AuthProvider = ({ children }) => {
         setRole("user");
       }
 
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []); // Empty dependency array - only run once on mount
 
   const fetchProfile = async (userId) => {
     try {
@@ -68,11 +85,13 @@ export const AuthProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+
       setProfile(data);
       setRole(data?.role || "user"); // Set user role
       return data;
     } catch (error) {
       console.error("Error fetching profile:", error);
+      setProfile(null); // Clear profile on error
       setRole("user"); // Default to user on error
       return null;
     }
