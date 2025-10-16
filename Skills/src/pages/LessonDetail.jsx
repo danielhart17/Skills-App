@@ -218,10 +218,8 @@ export default function LessonDetail() {
             <CardContent>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Mode:</span>
-                  <span className="font-semibold text-white">
-                    {lesson.mode === "iq" ? "Basketball IQ" : "On-Court"}
-                  </span>
+                  <span className="text-gray-400">Type:</span>
+                  <span className="font-semibold text-white">Learn</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Level:</span>

@@ -39,8 +39,9 @@ export default function LearningPath() {
   const loadChapterLessons = async () => {
     try {
       const allLessons = await Lesson.list();
+      // All lessons are now for the "Learn" section
       const chapterLessons = allLessons
-        .filter((lesson) => lesson.mode === "iq" && lesson.chapter === chapter)
+        .filter((lesson) => lesson.chapter === chapter)
         .sort((a, b) => a.level - b.level);
       setLessons(chapterLessons);
     } catch (error) {

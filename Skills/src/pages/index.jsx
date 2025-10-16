@@ -10,8 +10,6 @@ import LessonDetail from "./LessonDetail";
 
 import QuestionPage from "./QuestionPage";
 
-import OnCourt from "./OnCourt";
-
 import Challenges from "./Challenges";
 
 import ShootingSession from "./ShootingSession";
@@ -42,7 +40,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 // Role-based redirect component
 function RoleBasedRedirect() {
-  const { isAdmin, isTrainer, loading, role, profile, user } = useAuth();
+  const { isAdmin, isTrainer, loading, profile, user } = useAuth();
 
   // Wait for auth to load before redirecting
   if (loading) {
@@ -84,8 +82,6 @@ function PagesContent() {
         <Route path="/lesson/:lessonId" element={<LessonDetail />} />
 
         <Route path="/lesson/:lessonId/questions" element={<QuestionPage />} />
-
-        <Route path="/OnCourt" element={<OnCourt />} />
 
         <Route path="/Challenges" element={<Challenges />} />
 

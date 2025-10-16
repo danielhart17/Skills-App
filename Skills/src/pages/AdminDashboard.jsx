@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -68,62 +68,75 @@ export default function AdminDashboard() {
     }
   }, [isAdmin, navigate]);
 
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    console.log("AdminDashboard: Loading data for tab:", activeTab);
     try {
       if (activeTab === "lessons") {
+        console.log("AdminDashboard: Fetching lessons...");
         const { data, error } = await supabase
           .from("lessons")
           .select("*")
           .order("created_at", { ascending: false });
+        console.log("AdminDashboard: Lessons result:", { data, error });
         if (error) throw error;
         setLessons(data || []);
       } else if (activeTab === "challenges") {
+        console.log("AdminDashboard: Fetching challenges...");
         const { data, error } = await supabase
           .from("challenges")
           .select("*")
           .order("created_at", { ascending: false });
+        console.log("AdminDashboard: Challenges result:", { data, error });
         if (error) throw error;
         setChallenges(data || []);
       } else if (activeTab === "events") {
+        console.log("AdminDashboard: Fetching events...");
         const { data, error } = await supabase
           .from("training_events")
           .select("*")
           .order("date", { ascending: false });
+        console.log("AdminDashboard: Events result:", { data, error });
         if (error) throw error;
         setEvents(data || []);
       } else if (activeTab === "bookings") {
+        console.log("AdminDashboard: Fetching bookings...");
         const { data, error } = await supabase
           .from("bookings")
           .select(
             "*, profiles:user_id(full_name, email), trainers:trainer_id(name)"
           )
           .order("booking_datetime", { ascending: false });
+        console.log("AdminDashboard: Bookings result:", { data, error });
         if (error) throw error;
         setBookings(data || []);
       } else if (activeTab === "users") {
+        console.log("AdminDashboard: Fetching users...");
         const { data, error } = await supabase
           .from("profiles")
           .select("*")
           .order("created_at", { ascending: false });
+        console.log("AdminDashboard: Users result:", { data, error });
         if (error) throw error;
         setProfiles(data || []);
       } else if (activeTab === "drills") {
+        console.log("AdminDashboard: Fetching drills...");
         const { data, error } = await supabase
           .from("drills")
           .select("*")
           .order("created_at", { ascending: false });
+        console.log("AdminDashboard: Drills result:", { data, error });
         if (error) throw error;
         setDrills(data || []);
       }
     } catch (error) {
-      console.error("Error loading data:", error);
+      console.error("AdminDashboard: Error loading data:", error);
       toast.error("Failed to load data");
     }
-  };
+  }, [activeTab]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleDelete = async (table, id) => {
     if (!confirm("Are you sure you want to delete this item?")) return;
@@ -346,7 +359,7 @@ export default function AdminDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex gap-2 flex-wrap">
-                    <Badge>{lesson.mode}</Badge>
+                    <Badge>Learn</Badge>
                     <Badge variant="outline">{lesson.difficulty}</Badge>
                     <Badge variant="secondary">Level {lesson.level}</Badge>
                     <Badge variant="secondary">
@@ -1010,7 +1023,6 @@ function LessonDialog({ lesson, onSave, trigger }) {
     lesson || {
       title: "",
       description: "",
-      mode: "iq",
       chapter: "",
       difficulty: "beginner",
       level: 1,
@@ -1063,23 +1075,6 @@ function LessonDialog({ lesson, onSave, trigger }) {
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="mode">Mode</Label>
-              <Select
-                value={formData.mode}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, mode: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="iq">IQ Mode</SelectItem>
-                  <SelectItem value="oncourt">On-Court</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <div>
               <Label htmlFor="difficulty">Difficulty</Label>
               <Select

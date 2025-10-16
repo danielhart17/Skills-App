@@ -4,7 +4,6 @@ import { createPageUrl } from "@/utils";
 import {
   Home,
   Brain,
-  Dumbbell,
   Trophy,
   Users,
   User,
@@ -27,16 +26,10 @@ const navigationItems = [
     description: "Dashboard & Progress",
   },
   {
-    title: "IQ Mode",
+    title: "Learn",
     url: createPageUrl("IQMode"),
     icon: Brain,
     description: "Basketball Theory",
-  },
-  {
-    title: "On Court",
-    url: createPageUrl("OnCourt"),
-    icon: Dumbbell,
-    description: "Skills & Drills",
   },
   {
     title: "Drills",

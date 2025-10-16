@@ -8,16 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import {
-  Brain,
-  Dumbbell,
-  Trophy,
-  Target,
-  Flame,
-  Star,
-  Clock,
-  Play,
-} from "lucide-react";
+import { Brain, Trophy, Target, Flame, Star, Clock, Play } from "lucide-react";
 
 export default function Home() {
   const { isTrainer } = useAuth();
@@ -96,13 +87,13 @@ export default function Home() {
             <Link to={createPageUrl("IQMode")}>
               <Button className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white px-6 py-3 rounded-xl shadow-lg transition-all">
                 <Brain className="w-5 h-5 mr-2" />
-                IQ Mode
+                Learn
               </Button>
             </Link>
-            <Link to={createPageUrl("OnCourt")}>
+            <Link to="/drills">
               <Button className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-6 py-3 rounded-xl shadow-lg transition-all">
-                <Dumbbell className="w-5 h-5 mr-2" />
-                On Court Mode
+                <Target className="w-5 h-5 mr-2" />
+                Drills
               </Button>
             </Link>
           </div>
@@ -204,31 +195,16 @@ export default function Home() {
                     className="flex items-center justify-between p-4 bg-gray-800 rounded-xl hover:bg-gray-700 transition-colors"
                   >
                     <div className="flex items-center gap-4">
-                      <div
-                        className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                          lesson.mode === "iq"
-                            ? "bg-blue-500/20"
-                            : "bg-orange-500/20"
-                        }`}
-                      >
-                        {lesson.mode === "iq" ? (
-                          <Brain className="w-5 h-5 text-blue-400" />
-                        ) : (
-                          <Dumbbell className="w-5 h-5 text-orange-400" />
-                        )}
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-500/20">
+                        <Brain className="w-5 h-5 text-blue-400" />
                       </div>
                       <div>
                         <h3 className="font-semibold text-white">
                           {lesson.title}
                         </h3>
                         <div className="flex items-center gap-2 mt-1">
-                          <Badge
-                            variant={
-                              lesson.mode === "iq" ? "default" : "secondary"
-                            }
-                            className="text-xs"
-                          >
-                            {lesson.mode === "iq" ? "IQ Mode" : "On Court"}
+                          <Badge variant="default" className="text-xs">
+                            Learn
                           </Badge>
                           <span className="text-xs text-gray-400 flex items-center gap-1">
                             <Clock className="w-3 h-3" />

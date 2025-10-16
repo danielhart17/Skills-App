@@ -30,8 +30,8 @@ export default function IQMode() {
   const loadLessons = async () => {
     try {
       const allLessons = await Lesson.list();
-      const iqLessons = allLessons.filter((lesson) => lesson.mode === "iq");
-      setLessons(iqLessons);
+      // All lessons are now for the "Learn" section
+      setLessons(allLessons);
     } catch (error) {
       console.error("Error loading lessons:", error);
     }
@@ -99,9 +99,7 @@ export default function IQMode() {
             <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
               <Brain className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-3xl lg:text-4xl font-bold text-white">
-              Basketball IQ Mode
-            </h1>
+            <h1 className="text-3xl lg:text-4xl font-bold text-white">Learn</h1>
           </div>
           <p className="text-xl text-brand-lightGray max-w-2xl mx-auto">
             Master the mental game with strategic knowledge, rules, and
