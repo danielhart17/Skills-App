@@ -71,24 +71,26 @@ export default function Layout({ children }) {
 
   // Build navigation items based on user role
   const getRoleSpecificNavItems = () => {
-    const items = [...navigationItems];
+    // For trainers, only show the Trainer Dashboard
+    if (isTrainer() && !isAdmin()) {
+      return [
+        {
+          title: "Trainer Dashboard",
+          url: createPageUrl("TrainerDashboard"),
+          icon: GraduationCap,
+          description: "Manage Content",
+        },
+      ];
+    }
 
-    // Add admin dashboard for admins (at the top)
+    // For admins, show all items plus admin dashboard
+    const items = [...navigationItems];
     if (isAdmin()) {
       items.unshift({
         title: "Admin Dashboard",
         url: createPageUrl("AdminDashboard"),
         icon: Shield,
         description: "Full Access",
-      });
-    }
-    // Add trainer dashboard ONLY for trainers (not admins, since admins have their own dashboard)
-    else if (isTrainer()) {
-      items.unshift({
-        title: "Trainer Dashboard",
-        url: createPageUrl("TrainerDashboard"),
-        icon: GraduationCap,
-        description: "Manage Content",
       });
     }
 

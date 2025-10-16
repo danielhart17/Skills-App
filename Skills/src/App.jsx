@@ -1,8 +1,8 @@
-import './App.css'
-import Pages from "@/pages/index.jsx"
-import { Toaster } from "@/components/ui/toaster"
-import { AuthProvider, useAuth } from "@/contexts/AuthContext"
-import Auth from "@/pages/Auth"
+import "./App.css";
+import Pages from "@/pages/index.jsx";
+import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import Auth from "@/pages/Auth";
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -35,7 +35,7 @@ function App() {
     <AuthProvider>
       <AppContent />
     </AuthProvider>
-  )
+  );
 }
 
-export default App 
+export default App;

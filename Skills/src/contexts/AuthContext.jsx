@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { supabase, signIn, signUp, signOut } from "@/api/supabaseClient";
+import { createContext, useContext, useEffect, useState } from "react";
+import { supabase } from "@/api/supabaseClient";
 
 const AuthContext = createContext({});
 
@@ -29,11 +29,11 @@ export const AuthProvider = ({ children }) => {
         if (session?.user) {
           await fetchProfile(session.user.id);
         }
+        setLoading(false);
       } catch (error) {
         console.error("Error getting session:", error);
         setUser(null);
         setProfile(null);
-      } finally {
         setLoading(false);
       }
     };
@@ -50,6 +50,7 @@ export const AuthProvider = ({ children }) => {
         await fetchProfile(session.user.id);
       } else {
         setProfile(null);
+        setRole("user");
       }
 
       setLoading(false);
@@ -69,9 +70,11 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error;
       setProfile(data);
       setRole(data?.role || "user"); // Set user role
+      return data;
     } catch (error) {
       console.error("Error fetching profile:", error);
       setRole("user"); // Default to user on error
+      return null;
     }
   };
 
@@ -79,6 +82,37 @@ export const AuthProvider = ({ children }) => {
   const isAdmin = () => role === "admin";
   const isTrainer = () => role === "trainer" || role === "admin";
   const isUser = () => role === "user";
+
+  // Auth functions
+  const signIn = async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) throw error;
+    return data;
+  };
+
+  const signUp = async (email, password, fullName) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+        },
+      },
+    });
+
+    if (error) throw error;
+    return data;
+  };
+
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  };
 
   const value = {
     user,

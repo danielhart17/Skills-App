@@ -32,14 +32,48 @@ import Drills from "./Drills";
 
 import DrillDetail from "./DrillDetail";
 
-import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Route,
+  Routes,
+  Navigate,
+} from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+
+// Role-based redirect component
+function RoleBasedRedirect() {
+  const { isAdmin, isTrainer, loading, role, profile, user } = useAuth();
+
+  // Wait for auth to load before redirecting
+  if (loading) {
+    return <div className="p-6 text-center">Loading...</div>;
+  }
+
+  // If user is not authenticated, redirect to home
+  if (!user) {
+    return <Navigate to="/Home" replace />;
+  }
+
+  // If profile is not loaded yet, show loading
+  if (!profile) {
+    return <div className="p-6 text-center">Loading profile...</div>;
+  }
+
+  if (isAdmin()) {
+    return <Navigate to="/AdminDashboard" replace />;
+  } else if (isTrainer()) {
+    return <Navigate to="/TrainerDashboard" replace />;
+  } else {
+    return <Navigate to="/Home" replace />;
+  }
+}
 
 // Create a wrapper component that renders the Layout with all routes
 function PagesContent() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<RoleBasedRedirect />} />
 
         <Route path="/Home" element={<Home />} />
 
