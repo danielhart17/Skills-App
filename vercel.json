@@ -1,7 +1,7 @@
 {
-  "buildCommand": "cd Skills && npm ci && npm run build",
+  "buildCommand": "cd Skills && npm run build",
   "outputDirectory": "Skills/dist",
-  "installCommand": "cd Skills && npm ci",
+  "installCommand": "cd Skills && rm -rf node_modules package-lock.json && npm install",
   "framework": null,
   "rewrites": [
     {

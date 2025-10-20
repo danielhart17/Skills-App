@@ -46,20 +46,20 @@ Added `/vercel.json` (in project root) with:
 - Sets correct output directory for the built files
 - Includes rewrite rules for React Router to work properly
 
-### 3. Added Postinstall Script
+### 3. Explicitly Added Rollup Native Binaries
 
-Updated `package.json` to include:
+Added `@rollup/rollup-linux-x64-gnu` as an explicit dev dependency in `package.json`:
 ```json
-"postinstall": "npm rebuild rollup"
+"@rollup/rollup-linux-x64-gnu": "^4.28.1"
 ```
 
-This rebuilds Rollup after installation to ensure native binaries are properly compiled for the target platform.
+This ensures the Linux native binaries are installed directly, bypassing npm's optional dependency issues.
 
 ## 📋 Files Modified
 
 1. **Created:** `/Skills/.npmrc`
 2. **Created:** `/vercel.json`
-3. **Modified:** `/Skills/package.json` (added postinstall script)
+3. **Modified:** `/Skills/package.json` (added explicit Rollup Linux binary dependency)
 
 ## 🚀 Deployment Steps
 
@@ -84,8 +84,8 @@ This rebuilds Rollup after installation to ensure native binaries are properly c
 ## 🔍 Why This Works
 
 - **`.npmrc`**: Ensures npm handles peer dependencies and hoisting correctly
-- **`npm ci`**: Provides a clean, reproducible install from package-lock.json
-- **`npm rebuild rollup`**: Recompiles native modules for the Linux build environment
+- **`npm install` with clean slate**: Removes package-lock.json and node_modules before installing, avoiding cached optional dependency issues
+- **Explicit Rollup binary**: Directly installs the Linux x64 native binary as a regular dependency, bypassing npm's optional dependency resolution
 - **Rewrites**: Ensures all routes are handled by React Router (SPA behavior)
 
 ## 🎯 Expected Result
