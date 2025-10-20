@@ -6,12 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Brain, Trophy, Target, Flame, Star, Clock, Play } from "lucide-react";
 
 export default function Home() {
   const { isTrainer } = useAuth();
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [recentLessons, setRecentLessons] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -216,6 +217,7 @@ export default function Home() {
                     <Button
                       size="sm"
                       className="bg-brand-orange hover:opacity-90"
+                      onClick={() => navigate(`/lesson/${lesson.id}`)}
                     >
                       Start
                     </Button>
