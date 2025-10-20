@@ -30,6 +30,8 @@ import Drills from "./Drills";
 
 import DrillDetail from "./DrillDetail";
 
+import Events from "./Events";
+
 import {
   BrowserRouter as Router,
   Route,
@@ -102,6 +104,8 @@ function PagesContent() {
         <Route path="/drills" element={<Drills />} />
 
         <Route path="/drills/:drillId" element={<DrillDetail />} />
+
+        <Route path="/Events" element={<Events />} />
       </Routes>
     </Layout>
   );

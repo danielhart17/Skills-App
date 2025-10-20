@@ -60,6 +60,10 @@ export default function AdminDashboard() {
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [showQuestionsDialog, setShowQuestionsDialog] = useState(false);
   const [drills, setDrills] = useState([]);
+  const [questionCounts, setQuestionCounts] = useState({});
+  const [eventRegistrations, setEventRegistrations] = useState({});
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [showRegistrationsDialog, setShowRegistrationsDialog] = useState(false);
 
   // Redirect if not admin
   useEffect(() => {
@@ -80,6 +84,23 @@ export default function AdminDashboard() {
         console.log("AdminDashboard: Lessons result:", { data, error });
         if (error) throw error;
         setLessons(data || []);
+
+        // Fetch question counts for each lesson
+        if (data && data.length > 0) {
+          const counts = {};
+          await Promise.all(
+            data.map(async (lesson) => {
+              const { count, error: countError } = await supabase
+                .from("questions")
+                .select("*", { count: "exact", head: true })
+                .eq("lesson_id", lesson.id);
+              if (!countError) {
+                counts[lesson.id] = count || 0;
+              }
+            })
+          );
+          setQuestionCounts(counts);
+        }
       } else if (activeTab === "challenges") {
         console.log("AdminDashboard: Fetching challenges...");
         const { data, error } = await supabase
@@ -98,6 +119,24 @@ export default function AdminDashboard() {
         console.log("AdminDashboard: Events result:", { data, error });
         if (error) throw error;
         setEvents(data || []);
+
+        // Fetch registration counts for each event
+        if (data && data.length > 0) {
+          const registrations = {};
+          await Promise.all(
+            data.map(async (event) => {
+              const { data: regData, error: regError } = await supabase
+                .from("event_registrations")
+                .select("*, profiles:user_id(full_name, email)")
+                .eq("event_id", event.id)
+                .order("created_at", { ascending: false });
+              if (!regError) {
+                registrations[event.id] = regData || [];
+              }
+            })
+          );
+          setEventRegistrations(registrations);
+        }
       } else if (activeTab === "bookings") {
         console.log("AdminDashboard: Fetching bookings...");
         const { data, error } = await supabase
@@ -218,6 +257,11 @@ export default function AdminDashboard() {
     setShowQuestionsDialog(true);
   };
 
+  const handleViewRegistrations = (event) => {
+    setSelectedEvent(event);
+    setShowRegistrationsDialog(true);
+  };
+
   const handleSaveQuestion = async (questionData, isEdit = false) => {
     try {
       if (isEdit) {
@@ -235,6 +279,16 @@ export default function AdminDashboard() {
         toast.success("Question created");
       }
       await loadQuestionsForLesson(selectedLesson.id);
+
+      // Update question count
+      const { count } = await supabase
+        .from("questions")
+        .select("*", { count: "exact", head: true })
+        .eq("lesson_id", selectedLesson.id);
+      setQuestionCounts((prev) => ({
+        ...prev,
+        [selectedLesson.id]: count || 0,
+      }));
     } catch (error) {
       console.error("Error saving question:", error);
       toast.error("Failed to save question");
@@ -253,6 +307,16 @@ export default function AdminDashboard() {
       if (error) throw error;
       toast.success("Question deleted");
       await loadQuestionsForLesson(selectedLesson.id);
+
+      // Update question count
+      const { count } = await supabase
+        .from("questions")
+        .select("*", { count: "exact", head: true })
+        .eq("lesson_id", selectedLesson.id);
+      setQuestionCounts((prev) => ({
+        ...prev,
+        [selectedLesson.id]: count || 0,
+      }));
     } catch (error) {
       console.error("Error deleting question:", error);
       toast.error("Failed to delete question");
@@ -336,7 +400,7 @@ export default function AdminDashboard() {
                         onClick={() => handleManageQuestions(lesson)}
                       >
                         <HelpCircle className="w-4 h-4 mr-1" />
-                        Questions
+                        Questions ({questionCounts[lesson.id] || 0})
                       </Button>
                       <LessonDialog
                         lesson={lesson}
@@ -560,12 +624,29 @@ export default function AdminDashboard() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex gap-2 flex-wrap">
-                    <Badge>{new Date(event.date).toLocaleDateString()}</Badge>
-                    <Badge variant="secondary">${event.price}</Badge>
-                    <Badge variant="outline">
-                      {event.spots_available} spots
-                    </Badge>
+                  <div className="space-y-3">
+                    <div className="flex gap-2 flex-wrap">
+                      <Badge>{new Date(event.date).toLocaleDateString()}</Badge>
+                      <Badge variant="secondary">${event.price}</Badge>
+                      <Badge variant="outline">
+                        {event.spots_available} spots
+                      </Badge>
+                      <Badge variant="default">
+                        {eventRegistrations[event.id]?.length || 0} registered
+                      </Badge>
+                    </div>
+                    {eventRegistrations[event.id]?.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewRegistrations(event)}
+                        className="w-full"
+                      >
+                        <Users className="w-4 h-4 mr-2" />
+                        View Registrations (
+                        {eventRegistrations[event.id].length})
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -797,12 +878,86 @@ export default function AdminDashboard() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Event Registrations Dialog */}
+      {showRegistrationsDialog && selectedEvent && (
+        <Dialog
+          open={showRegistrationsDialog}
+          onOpenChange={setShowRegistrationsDialog}
+        >
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Registrations for {selectedEvent.title}</DialogTitle>
+              <DialogDescription>
+                {eventRegistrations[selectedEvent.id]?.length || 0} users
+                registered
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {eventRegistrations[selectedEvent.id]?.length > 0 ? (
+                <div className="grid gap-3">
+                  {eventRegistrations[selectedEvent.id].map((registration) => (
+                    <Card key={registration.id}>
+                      <CardHeader>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <CardTitle className="text-lg">
+                              {registration.profiles?.full_name ||
+                                "Unknown User"}
+                            </CardTitle>
+                            <CardDescription>
+                              {registration.profiles?.email}
+                            </CardDescription>
+                          </div>
+                          <Badge
+                            variant={
+                              registration.status === "confirmed"
+                                ? "default"
+                                : registration.status === "cancelled"
+                                ? "destructive"
+                                : "secondary"
+                            }
+                          >
+                            {registration.status}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Calendar className="w-4 h-4" />
+                            <span>
+                              Registered:{" "}
+                              {new Date(
+                                registration.created_at
+                              ).toLocaleString()}
+                            </span>
+                          </div>
+                          {registration.notes && (
+                            <div className="mt-2 p-2 bg-muted rounded-md">
+                              <p className="text-sm">{registration.notes}</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No registrations yet
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
 
 // Question Dialog Component
-function QuestionDialog({ question, lessonId, onSave, trigger }) {
+function QuestionDialog({ question, lessonId: _lessonId, onSave, trigger }) {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState(
     question || {

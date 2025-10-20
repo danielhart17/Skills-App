@@ -8,6 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   User as UserIcon,
   Star,
   Flame,
@@ -17,6 +24,8 @@ import {
   Calendar,
   Award,
   BarChart3,
+  Clock,
+  Eye,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -25,6 +34,8 @@ export default function Profile() {
   const [user, setUser] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedSession, setSelectedSession] = useState(null);
+  const [showSessionDialog, setShowSessionDialog] = useState(false);
 
   useEffect(() => {
     loadProfileData();
@@ -98,6 +109,17 @@ export default function Profile() {
       dedicated: "Dedicated Trainer",
     };
     return badgeNames[badgeId] || "Achievement";
+  };
+
+  const handleViewSession = (session) => {
+    setSelectedSession(session);
+    setShowSessionDialog(true);
+  };
+
+  const formatDuration = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs.toString().padStart(2, "0")}`;
   };
 
   if (isLoading) {
@@ -385,7 +407,8 @@ export default function Profile() {
                 {sessions.slice(0, 5).map((session) => (
                   <div
                     key={session.id}
-                    className="flex items-center justify-between p-3 rounded-lg"
+                    onClick={() => handleViewSession(session)}
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <Calendar className="w-4 h-4 text-gray-500" />
@@ -406,6 +429,7 @@ export default function Profile() {
                       >
                         {Math.round(session.shooting_percentage)}%
                       </Badge>
+                      <Eye className="w-4 h-4 text-gray-400" />
                     </div>
                   </div>
                 ))}
@@ -414,6 +438,81 @@ export default function Profile() {
           </Card>
         )}
       </div>
+
+      {/* Session Details Dialog */}
+      <Dialog open={showSessionDialog} onOpenChange={setShowSessionDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Target className="w-6 h-6 text-orange-500" />
+              Session Details
+            </DialogTitle>
+            <DialogDescription>
+              {selectedSession &&
+                format(new Date(selectedSession.date), "MMMM d, yyyy")}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedSession && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                  <div className="text-3xl font-bold text-blue-600">
+                    {selectedSession.total_shots}
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1">Total Shots</div>
+                </div>
+
+                <div className="text-center p-4 bg-green-50 rounded-lg">
+                  <div className="text-3xl font-bold text-green-600">
+                    {selectedSession.made_shots}
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1">Made Shots</div>
+                </div>
+              </div>
+
+              <div className="text-center p-6 bg-gradient-to-r from-orange-50 to-red-50 rounded-lg">
+                <div className="text-5xl font-bold text-orange-600">
+                  {Math.round(selectedSession.shooting_percentage)}%
+                </div>
+                <div className="text-sm text-gray-600 mt-2">
+                  Shooting Percentage
+                </div>
+              </div>
+
+              {selectedSession.duration_seconds && (
+                <div className="text-center p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-center gap-2">
+                    <Clock className="w-5 h-5 text-gray-500" />
+                    <div className="text-2xl font-bold text-gray-700">
+                      {formatDuration(selectedSession.duration_seconds)}
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    Session Duration
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Missed Shots:</span>
+                  <span className="font-semibold text-red-600">
+                    {selectedSession.total_shots - selectedSession.made_shots}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <Button
+            onClick={() => setShowSessionDialog(false)}
+            className="w-full"
+          >
+            Close
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

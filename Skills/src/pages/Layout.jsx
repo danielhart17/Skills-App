@@ -12,6 +12,7 @@ import {
   Shield,
   GraduationCap,
   Target,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +49,12 @@ const navigationItems = [
     url: createPageUrl("Trainers"),
     icon: Users,
     description: "Find Coaches",
+  },
+  {
+    title: "Events",
+    url: createPageUrl("Events"),
+    icon: Calendar,
+    description: "Training Events",
   },
   {
     title: "Profile",
