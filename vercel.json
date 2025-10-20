@@ -1,0 +1,12 @@
+{
+  "buildCommand": "cd Skills && npm ci && npm run build",
+  "outputDirectory": "Skills/dist",
+  "installCommand": "cd Skills && npm ci",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
