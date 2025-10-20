@@ -24,7 +24,6 @@ export const AuthProvider = ({ children }) => {
     // Set a maximum loading time of 10 seconds
     timeoutId = setTimeout(() => {
       if (isMounted) {
-        console.warn("Auth loading timeout - forcing loading to false");
         setLoading(false);
       }
     }, 10000);
@@ -32,30 +31,22 @@ export const AuthProvider = ({ children }) => {
     // Check active sessions and sets the user
     const getSession = async () => {
       try {
-        console.log("Getting session...");
         const {
           data: { session },
         } = await supabase.auth.getSession();
 
         if (!isMounted) return; // Component unmounted
 
-        console.log(
-          "Session retrieved:",
-          session ? "User logged in" : "No session"
-        );
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          console.log("Fetching profile for user:", session.user.id);
           await fetchProfile(session.user.id);
         } else {
-          console.log("No user session, setting profile to null");
           setProfile(null);
           setRole("user");
         }
 
         if (isMounted) {
-          console.log("Setting loading to false");
           setLoading(false);
           if (timeoutId) clearTimeout(timeoutId);
         }
@@ -77,12 +68,6 @@ export const AuthProvider = ({ children }) => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return; // Component unmounted
-
-      console.log(
-        "Auth state changed:",
-        event,
-        session ? "User logged in" : "No session"
-      );
 
       setUser(session?.user ?? null);
 
@@ -108,8 +93,6 @@ export const AuthProvider = ({ children }) => {
 
   const fetchProfile = async (userId) => {
     try {
-      console.log("Fetching profile for userId:", userId);
-
       // Add a timeout to the profile fetch
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Profile fetch timeout")), 5000)
@@ -127,21 +110,14 @@ export const AuthProvider = ({ children }) => {
       ]);
 
       if (error) {
-        console.error("Profile fetch error:", error);
-        console.error("Error code:", error.code);
-        console.error("Error message:", error.message);
-        console.error("Error details:", error.details);
         throw error;
       }
 
-      console.log("Profile fetched successfully:", data);
       setProfile(data);
       setRole(data?.role || "user"); // Set user role
       return data;
     } catch (error) {
       console.error("Error fetching profile:", error);
-      console.error("Error type:", error.constructor.name);
-      console.error("Error message:", error.message);
 
       // Set a default profile to allow the app to continue
       const defaultProfile = {
@@ -155,7 +131,6 @@ export const AuthProvider = ({ children }) => {
         longest_streak: 0,
       };
 
-      console.warn("Using default profile due to fetch error:", defaultProfile);
       setProfile(defaultProfile);
       setRole("user");
       return defaultProfile;

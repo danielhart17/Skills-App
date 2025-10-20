@@ -149,36 +149,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Test Booking Link - Remove this after testing */}
-        <Card className="border-0 shadow-xl bg-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl text-white">
-              <Target className="w-6 h-6 text-green-500" />
-              Test Booking Page
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-300 mb-4">
-              Test the booking functionality with sample data:
-            </p>
-            <div className="flex gap-3">
-              <Link to="/Booking?trainerId=10000000-0000-0000-0000-000000000001">
-                <Button className="bg-green-500 hover:bg-green-600 text-white">
-                  Test Booking (Coach Mike)
-                </Button>
-              </Link>
-              <Link to="/Booking?trainerId=10000000-0000-0000-0000-000000000001&serviceId=30000000-0000-0000-0000-000000000001">
-                <Button
-                  variant="outline"
-                  className="border-green-500 text-green-500 hover:bg-green-500 hover:text-white"
-                >
-                  Test with Service Pre-selected
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Card className="border-0 shadow-xl bg-card">

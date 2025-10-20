@@ -73,15 +73,12 @@ export default function AdminDashboard() {
   }, [isAdmin, navigate]);
 
   const loadData = useCallback(async () => {
-    console.log("AdminDashboard: Loading data for tab:", activeTab);
     try {
       if (activeTab === "lessons") {
-        console.log("AdminDashboard: Fetching lessons...");
         const { data, error } = await supabase
           .from("lessons")
           .select("*")
           .order("created_at", { ascending: false });
-        console.log("AdminDashboard: Lessons result:", { data, error });
         if (error) throw error;
         setLessons(data || []);
 
@@ -102,21 +99,17 @@ export default function AdminDashboard() {
           setQuestionCounts(counts);
         }
       } else if (activeTab === "challenges") {
-        console.log("AdminDashboard: Fetching challenges...");
         const { data, error } = await supabase
           .from("challenges")
           .select("*")
           .order("created_at", { ascending: false });
-        console.log("AdminDashboard: Challenges result:", { data, error });
         if (error) throw error;
         setChallenges(data || []);
       } else if (activeTab === "events") {
-        console.log("AdminDashboard: Fetching events...");
         const { data, error } = await supabase
           .from("training_events")
           .select("*")
           .order("date", { ascending: false });
-        console.log("AdminDashboard: Events result:", { data, error });
         if (error) throw error;
         setEvents(data || []);
 
@@ -138,37 +131,31 @@ export default function AdminDashboard() {
           setEventRegistrations(registrations);
         }
       } else if (activeTab === "bookings") {
-        console.log("AdminDashboard: Fetching bookings...");
         const { data, error } = await supabase
           .from("bookings")
           .select(
             "*, profiles:user_id(full_name, email), trainers:trainer_id(name)"
           )
           .order("booking_datetime", { ascending: false });
-        console.log("AdminDashboard: Bookings result:", { data, error });
         if (error) throw error;
         setBookings(data || []);
       } else if (activeTab === "users") {
-        console.log("AdminDashboard: Fetching users...");
         const { data, error } = await supabase
           .from("profiles")
           .select("*")
           .order("created_at", { ascending: false });
-        console.log("AdminDashboard: Users result:", { data, error });
         if (error) throw error;
         setProfiles(data || []);
       } else if (activeTab === "drills") {
-        console.log("AdminDashboard: Fetching drills...");
         const { data, error } = await supabase
           .from("drills")
           .select("*")
           .order("created_at", { ascending: false });
-        console.log("AdminDashboard: Drills result:", { data, error });
         if (error) throw error;
         setDrills(data || []);
       }
     } catch (error) {
-      console.error("AdminDashboard: Error loading data:", error);
+      console.error("Error loading data:", error);
       toast.error("Failed to load data");
     }
   }, [activeTab]);

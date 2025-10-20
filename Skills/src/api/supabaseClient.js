@@ -20,8 +20,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-console.log("Supabase client initialized with URL:", supabaseUrl);
-
 // Helper function to get current user
 export const getCurrentUser = async () => {
   const {

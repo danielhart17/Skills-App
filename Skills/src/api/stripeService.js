@@ -30,8 +30,6 @@ export async function createEventCheckoutSession({
       cancelUrl: `${globalThis.location.origin}/Events?canceled=true`,
     };
 
-    console.log("Creating checkout session with:", requestBody);
-
     // Call Supabase Edge Function to create Stripe checkout session
     const { data, error } = await supabase.functions.invoke(
       "create-checkout-session",
@@ -40,12 +38,7 @@ export async function createEventCheckoutSession({
       }
     );
 
-    console.log("Edge function response:", { data, error });
-
     if (error) {
-      console.error("Edge function error:", error);
-      console.error("Error details:", JSON.stringify(error, null, 2));
-
       // Try to extract more details from the error
       const errorMessage = error.message || "Unknown error";
       const errorDetails =
@@ -57,7 +50,6 @@ export async function createEventCheckoutSession({
     }
 
     if (!data || !data.sessionId) {
-      console.error("Invalid response from Edge Function:", data);
       throw new Error("Edge Function did not return a session ID");
     }
 
