@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/api/supabaseClient";
+import { Chapter } from "@/api/entities";
 import {
   BookOpen,
   Trophy,
@@ -43,6 +44,8 @@ import {
   Search,
   HelpCircle,
   Target,
+  Brain,
+  Dumbbell,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -64,6 +67,7 @@ export default function AdminDashboard() {
   const [eventRegistrations, setEventRegistrations] = useState({});
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showRegistrationsDialog, setShowRegistrationsDialog] = useState(false);
+  const [chapters, setChapters] = useState([]);
 
   // Redirect if not admin
   useEffect(() => {
@@ -71,6 +75,19 @@ export default function AdminDashboard() {
       navigate("/home");
     }
   }, [isAdmin, navigate]);
+
+  // Load chapters on mount
+  useEffect(() => {
+    const loadChapters = async () => {
+      try {
+        const allChapters = await Chapter.list();
+        setChapters(allChapters);
+      } catch (error) {
+        console.error("Error loading chapters:", error);
+      }
+    };
+    loadChapters();
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -361,6 +378,7 @@ export default function AdminDashboard() {
               Lessons ({lessons.length})
             </h2>
             <LessonDialog
+              chapters={chapters}
               onSave={(data) => handleSave("lessons", data)}
               trigger={
                 <Button>
@@ -391,6 +409,7 @@ export default function AdminDashboard() {
                       </Button>
                       <LessonDialog
                         lesson={lesson}
+                        chapters={chapters}
                         onSave={(data) => handleSave("lessons", data, true)}
                         trigger={
                           <Button variant="outline" size="sm">
@@ -410,7 +429,20 @@ export default function AdminDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex gap-2 flex-wrap">
-                    <Badge>Learn</Badge>
+                    <Badge
+                      className={`${
+                        lesson.mode === "iq"
+                          ? "bg-blue-500 hover:bg-blue-600"
+                          : "bg-orange-500 hover:bg-orange-600"
+                      }`}
+                    >
+                      {lesson.mode === "iq" ? (
+                        <Brain className="w-3 h-3 mr-1" />
+                      ) : (
+                        <Dumbbell className="w-3 h-3 mr-1" />
+                      )}
+                      {lesson.mode === "iq" ? "IQ Mode" : "On Court"}
+                    </Badge>
                     <Badge variant="outline">{lesson.difficulty}</Badge>
                     <Badge variant="secondary">Level {lesson.level}</Badge>
                     <Badge variant="secondary">
@@ -1159,13 +1191,15 @@ function QuestionDialog({ question, lessonId: _lessonId, onSave, trigger }) {
 }
 
 // Lesson Dialog Component
-function LessonDialog({ lesson, onSave, trigger }) {
+function LessonDialog({ lesson, onSave, trigger, chapters }) {
   const [open, setOpen] = useState(false);
+  const [isCreatingNewChapter, setIsCreatingNewChapter] = useState(false);
   const [formData, setFormData] = useState(
     lesson || {
       title: "",
       description: "",
       chapter: "",
+      mode: "iq",
       difficulty: "beginner",
       level: 1,
       estimated_time: 10,
@@ -1195,6 +1229,33 @@ function LessonDialog({ lesson, onSave, trigger }) {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
+            <Label htmlFor="mode">Mode</Label>
+            <Select
+              value={formData.mode}
+              onValueChange={(value) =>
+                setFormData({ ...formData, mode: value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="iq">
+                  <div className="flex items-center gap-2">
+                    <Brain className="w-4 h-4" />
+                    IQ Mode
+                  </div>
+                </SelectItem>
+                <SelectItem value="oncourt">
+                  <div className="flex items-center gap-2">
+                    <Dumbbell className="w-4 h-4" />
+                    On Court
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
             <Label htmlFor="title">Title</Label>
             <Input
               id="title"
@@ -1215,6 +1276,51 @@ function LessonDialog({ lesson, onSave, trigger }) {
               }
               rows={3}
             />
+          </div>
+          <div>
+            <Label htmlFor="chapter">Chapter</Label>
+            <Select
+              value={isCreatingNewChapter ? "_create_new_" : formData.chapter}
+              onValueChange={(value) => {
+                if (value === "_create_new_") {
+                  setIsCreatingNewChapter(true);
+                  setFormData({ ...formData, chapter: "" });
+                } else {
+                  setIsCreatingNewChapter(false);
+                  setFormData({ ...formData, chapter: value });
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a chapter" />
+              </SelectTrigger>
+              <SelectContent>
+                {chapters
+                  .filter((ch) => ch.mode === formData.mode)
+                  .map((ch) => (
+                    <SelectItem key={ch.id} value={ch.title}>
+                      {ch.title}
+                    </SelectItem>
+                  ))}
+                <SelectItem value="_create_new_">
+                  <div className="flex items-center gap-2 font-semibold text-blue-600">
+                    <Plus className="w-4 h-4" />
+                    Create New Chapter
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {isCreatingNewChapter && (
+              <Input
+                className="mt-2"
+                placeholder="Enter new chapter name"
+                value={formData.chapter}
+                onChange={(e) =>
+                  setFormData({ ...formData, chapter: e.target.value })
+                }
+                required
+              />
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -1279,16 +1385,6 @@ function LessonDialog({ lesson, onSave, trigger }) {
                 min="0"
               />
             </div>
-          </div>
-          <div>
-            <Label htmlFor="chapter">Chapter</Label>
-            <Input
-              id="chapter"
-              value={formData.chapter}
-              onChange={(e) =>
-                setFormData({ ...formData, chapter: e.target.value })
-              }
-            />
           </div>
           <div className="flex justify-end gap-2 pt-4">
             <Button

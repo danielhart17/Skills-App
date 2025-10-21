@@ -2,7 +2,7 @@ import Layout from "./Layout.jsx";
 
 import Home from "./Home";
 
-import IQMode from "./IQMode";
+import Learn from "./Learn";
 
 import LearningPath from "./LearningPath";
 
@@ -11,6 +11,8 @@ import LessonDetail from "./LessonDetail";
 import QuestionPage from "./QuestionPage";
 
 import Challenges from "./Challenges";
+
+import ChallengeDetail from "./ChallengeDetail";
 
 import ShootingSession from "./ShootingSession";
 
@@ -25,10 +27,6 @@ import Booking from "./Booking";
 import AdminDashboard from "./AdminDashboard";
 
 import TrainerDashboard from "./TrainerDashboard";
-
-import Drills from "./Drills";
-
-import DrillDetail from "./DrillDetail";
 
 import Events from "./Events";
 
@@ -77,7 +75,7 @@ function PagesContent() {
 
         <Route path="/Home" element={<Home />} />
 
-        <Route path="/IQMode" element={<IQMode />} />
+        <Route path="/Learn" element={<Learn />} />
 
         <Route path="/LearningPath/:chapter" element={<LearningPath />} />
 
@@ -86,6 +84,8 @@ function PagesContent() {
         <Route path="/lesson/:lessonId/questions" element={<QuestionPage />} />
 
         <Route path="/Challenges" element={<Challenges />} />
+
+        <Route path="/challenges/:challengeId" element={<ChallengeDetail />} />
 
         <Route path="/ShootingSession" element={<ShootingSession />} />
 
@@ -100,10 +100,6 @@ function PagesContent() {
         <Route path="/AdminDashboard" element={<AdminDashboard />} />
 
         <Route path="/TrainerDashboard" element={<TrainerDashboard />} />
-
-        <Route path="/drills" element={<Drills />} />
-
-        <Route path="/drills/:drillId" element={<DrillDetail />} />
 
         <Route path="/Events" element={<Events />} />
       </Routes>

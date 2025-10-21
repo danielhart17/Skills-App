@@ -184,7 +184,7 @@ export default function QuestionPage() {
     if (lesson?.chapter) {
       navigate(`/LearningPath/${encodeURIComponent(lesson.chapter)}`);
     } else {
-      navigate("/IQMode");
+      navigate("/Learn");
     }
   };
 

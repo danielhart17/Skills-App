@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Drill, DrillRating, DrillProgress } from "@/api/entities";
+import { Challenge, ChallengeRating, ChallengeProgress } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,13 +17,14 @@ import {
   Play,
   MapPin,
   Wrench,
+  Trophy,
 } from "lucide-react";
 import { toast } from "sonner";
 
-export default function DrillDetail() {
-  const { drillId } = useParams();
+export default function ChallengeDetail() {
+  const { challengeId } = useParams();
   const navigate = useNavigate();
-  const [drill, setDrill] = useState(null);
+  const [challenge, setChallenge] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCompleted, setIsCompleted] = useState(false);
   const [userRating, setUserRating] = useState(null);
@@ -40,25 +41,29 @@ export default function DrillDetail() {
   });
 
   useEffect(() => {
-    loadDrill();
-  }, [drillId]);
+    loadChallenge();
+  }, [challengeId]);
 
-  const loadDrill = async () => {
+  const loadChallenge = async () => {
     try {
-      const [drillData, progressData, ratingData, avgRating, ratingCountData] =
-        await Promise.all([
-          Drill.get(drillId),
-          DrillProgress.getUserProgress(drillId),
-          DrillRating.getUserRating(drillId),
-          Drill.getAverageRating(drillId),
-          Drill.getRatingCount(drillId),
-        ]);
+      const [challengeData, progressData, ratingData] = await Promise.all([
+        Challenge.get(challengeId),
+        ChallengeProgress.getUserProgress(challengeId),
+        ChallengeRating.getUserRating(challengeId),
+      ]);
 
-      setDrill(drillData);
+      setChallenge(challengeData);
       setIsCompleted(progressData?.is_completed || false);
       setUserRating(ratingData);
-      setAverageRating(avgRating);
-      setRatingCount(ratingCountData);
+
+      // Get all ratings to calculate average
+      const allRatings = await ChallengeRating.getByChallenge(challengeId);
+      if (allRatings && allRatings.length > 0) {
+        const avg =
+          allRatings.reduce((sum, r) => sum + r.rating, 0) / allRatings.length;
+        setAverageRating(avg);
+        setRatingCount(allRatings.length);
+      }
 
       if (ratingData) {
         setRatingForm({
@@ -69,53 +74,54 @@ export default function DrillDetail() {
 
       if (progressData) {
         setCompletionForm({
-          timeSpent: progressData.time_spent_minutes || 0,
+          timeSpent: Math.floor(progressData.time_spent_seconds / 60) || 0,
           notes: progressData.notes || "",
         });
       }
     } catch (error) {
-      console.error("Error loading drill:", error);
-      toast.error("Failed to load drill");
+      console.error("Error loading challenge:", error);
+      toast.error("Failed to load challenge");
     }
     setIsLoading(false);
   };
 
-  const handleStartDrill = () => {
+  const handleStartChallenge = () => {
     // For now, just mark as started - could add more complex tracking later
-    toast.success("Drill started! Good luck!");
+    toast.success("Challenge started! Good luck!");
   };
 
   const handleMarkComplete = async () => {
     try {
-      await DrillProgress.markComplete(
-        drillId,
-        completionForm.timeSpent,
+      await ChallengeProgress.markComplete(
+        challengeId,
+        completionForm.timeSpent * 60, // Convert minutes to seconds
         completionForm.notes
       );
       setIsCompleted(true);
-      toast.success("Drill marked as complete! Great job!");
+      toast.success("Challenge marked as complete! Great job!");
     } catch (error) {
-      console.error("Error marking drill complete:", error);
-      toast.error("Failed to mark drill as complete");
+      console.error("Error marking challenge complete:", error);
+      toast.error("Failed to mark challenge as complete");
     }
   };
 
   const handleSubmitRating = async () => {
     try {
-      await DrillRating.create({
-        drill_id: drillId,
+      await ChallengeRating.create({
+        challenge_id: challengeId,
         rating: ratingForm.rating,
         review: ratingForm.review,
       });
 
       // Reload ratings
-      const [avgRating, ratingCountData] = await Promise.all([
-        Drill.getAverageRating(drillId),
-        Drill.getRatingCount(drillId),
-      ]);
+      const allRatings = await ChallengeRating.getByChallenge(challengeId);
+      if (allRatings && allRatings.length > 0) {
+        const avg =
+          allRatings.reduce((sum, r) => sum + r.rating, 0) / allRatings.length;
+        setAverageRating(avg);
+        setRatingCount(allRatings.length);
+      }
 
-      setAverageRating(avgRating);
-      setRatingCount(ratingCountData);
       setUserRating({ rating: ratingForm.rating, review: ratingForm.review });
       setShowRatingForm(false);
       toast.success("Rating submitted successfully!");
@@ -171,14 +177,14 @@ export default function DrillDetail() {
     );
   }
 
-  if (!drill) {
+  if (!challenge) {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Drill not found</h1>
-          <Button onClick={() => navigate("/drills")}>
+          <h1 className="text-2xl font-bold mb-4">Challenge not found</h1>
+          <Button onClick={() => navigate("/challenges")}>
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Drills
+            Back to Challenges
           </Button>
         </div>
       </div>
@@ -191,17 +197,19 @@ export default function DrillDetail() {
       <div className="mb-6">
         <Button
           variant="ghost"
-          onClick={() => navigate("/drills")}
+          onClick={() => navigate("/challenges")}
           className="mb-4"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Drills
+          Back to Challenges
         </Button>
 
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2">{drill.title}</h1>
-            <p className="text-muted-foreground text-lg">{drill.description}</p>
+            <h1 className="text-3xl font-bold mb-2">{challenge.title}</h1>
+            <p className="text-muted-foreground text-lg">
+              {challenge.description}
+            </p>
           </div>
           {isCompleted && (
             <Badge className="bg-green-100 text-green-800">
@@ -211,26 +219,40 @@ export default function DrillDetail() {
           )}
         </div>
 
-        {/* Drill Meta */}
+        {/* Challenge Meta */}
         <div className="flex gap-2 flex-wrap mt-4">
-          <Badge className={getDifficultyColor(drill.difficulty)}>
-            {drill.difficulty}
+          <Badge className={getDifficultyColor(challenge.difficulty)}>
+            {challenge.difficulty}
           </Badge>
           <Badge variant="outline">
-            {getCategoryIcon(drill.category)} {drill.category}
+            {getCategoryIcon(challenge.category)} {challenge.category}
           </Badge>
           <Badge variant="secondary">
             <Clock className="w-3 h-3 mr-1" />
-            {drill.duration_minutes} min
+            {challenge.duration_minutes} min
           </Badge>
-          <Badge variant="secondary">
-            <Users className="w-3 h-3 mr-1" />
-            {drill.players_needed} player{drill.players_needed > 1 ? "s" : ""}
-          </Badge>
-          <Badge variant="secondary">
-            <MapPin className="w-3 h-3 mr-1" />
-            {drill.space_required}
-          </Badge>
+          {challenge.xp_reward && (
+            <Badge
+              variant="secondary"
+              className="bg-yellow-100 text-yellow-800"
+            >
+              <Trophy className="w-3 h-3 mr-1" />
+              {challenge.xp_reward} XP
+            </Badge>
+          )}
+          {challenge.players_needed && (
+            <Badge variant="secondary">
+              <Users className="w-3 h-3 mr-1" />
+              {challenge.players_needed} player
+              {challenge.players_needed > 1 ? "s" : ""}
+            </Badge>
+          )}
+          {challenge.space_required && (
+            <Badge variant="secondary">
+              <MapPin className="w-3 h-3 mr-1" />
+              {challenge.space_required}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -238,72 +260,68 @@ export default function DrillDetail() {
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Purpose */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="w-5 h-5" />
-                Purpose
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">{drill.purpose}</p>
-            </CardContent>
-          </Card>
+          {challenge.purpose && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="w-5 h-5" />
+                  Purpose
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">{challenge.purpose}</p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Setup */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Wrench className="w-5 h-5" />
-                Setup
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground whitespace-pre-line">
-                {drill.setup}
-              </p>
-              {drill.equipment_needed && drill.equipment_needed.length > 0 && (
-                <div className="mt-4">
-                  <h4 className="font-semibold mb-2">Equipment Needed:</h4>
-                  <div className="flex gap-2 flex-wrap">
-                    {drill.equipment_needed.map((equipment, index) => (
-                      <Badge key={index} variant="outline">
-                        {equipment}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {challenge.setup && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wrench className="w-5 h-5" />
+                  Setup
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground whitespace-pre-line">
+                  {challenge.setup}
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Instructions */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Play className="w-5 h-5" />
-                Instructions
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-muted-foreground whitespace-pre-line">
-                {drill.instructions}
-              </div>
-            </CardContent>
-          </Card>
+          {challenge.instructions && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Play className="w-5 h-5" />
+                  Instructions
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-muted-foreground whitespace-pre-line">
+                  {challenge.instructions}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Focus */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="w-5 h-5" />
-                Focus Points
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">{drill.focus}</p>
-            </CardContent>
-          </Card>
+          {challenge.focus && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="w-5 h-5" />
+                  Focus Points
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">{challenge.focus}</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -316,9 +334,9 @@ export default function DrillDetail() {
             <CardContent className="space-y-4">
               {!isCompleted ? (
                 <>
-                  <Button onClick={handleStartDrill} className="w-full">
+                  <Button onClick={handleStartChallenge} className="w-full">
                     <Play className="w-4 h-4 mr-2" />
-                    Start Drill
+                    Start Challenge
                   </Button>
 
                   <div className="space-y-3">
@@ -366,11 +384,11 @@ export default function DrillDetail() {
                 <div className="text-center">
                   <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-2" />
                   <p className="text-green-600 font-semibold">
-                    Drill Completed!
+                    Challenge Completed!
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
                     Great job! You spent {completionForm.timeSpent} minutes on
-                    this drill.
+                    this challenge.
                   </p>
                 </div>
               )}
@@ -442,7 +460,7 @@ export default function DrillDetail() {
                   onClick={() => setShowRatingForm(true)}
                   className="w-full"
                 >
-                  Rate This Drill
+                  Rate This Challenge
                 </Button>
               )}
 
@@ -480,7 +498,7 @@ export default function DrillDetail() {
                         setRatingForm({ ...ratingForm, review: e.target.value })
                       }
                       rows={3}
-                      placeholder="Share your experience with this drill..."
+                      placeholder="Share your experience with this challenge..."
                     />
                   </div>
                   <div className="flex gap-2">
