@@ -8,6 +8,46 @@ import {
 } from "./supabaseClient";
 
 // =============================================
+// CHAPTER ENTITY
+// =============================================
+export const Chapter = {
+  async list() {
+    const { data, error } = await supabase
+      .from("chapters")
+      .select("*")
+      .eq("is_active", true)
+      .order("order_index");
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  async get(id) {
+    const { data, error } = await supabase
+      .from("chapters")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async filter(query) {
+    let queryBuilder = supabase.from("chapters").select("*");
+
+    Object.entries(query).forEach(([key, value]) => {
+      queryBuilder = queryBuilder.eq(key, value);
+    });
+
+    const { data, error } = await queryBuilder.order("order_index");
+
+    if (error) throw error;
+    return data || [];
+  },
+};
+
+// =============================================
 // USER ENTITY
 // =============================================
 export const User = {
@@ -626,6 +666,185 @@ export const UserQuestionProgress = {
       if (key !== "user_id") {
         queryBuilder = queryBuilder.eq(key, value);
       }
+    });
+
+    const { data, error } = await queryBuilder;
+    if (error) throw error;
+    return data || [];
+  },
+};
+
+// =============================================
+// CHALLENGE RATING ENTITY
+// =============================================
+export const ChallengeRating = {
+  async create(ratingData) {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("challenge_ratings")
+      .insert({
+        ...ratingData,
+        user_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      // If rating already exists, update it instead
+      if (error.code === "23505") {
+        return await this.update(ratingData.challenge_id, ratingData);
+      }
+      throw error;
+    }
+    return data;
+  },
+
+  async update(challengeId, ratingData) {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("challenge_ratings")
+      .update(ratingData)
+      .eq("challenge_id", challengeId)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async getByChallenge(challengeId) {
+    const { data, error } = await supabase
+      .from("challenge_ratings")
+      .select("*")
+      .eq("challenge_id", challengeId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  async getUserRating(challengeId) {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("challenge_ratings")
+      .select("*")
+      .eq("challenge_id", challengeId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async delete(ratingId) {
+    const { error } = await supabase
+      .from("challenge_ratings")
+      .delete()
+      .eq("id", ratingId);
+
+    if (error) throw error;
+    return true;
+  },
+};
+
+// =============================================
+// CHALLENGE PROGRESS ENTITY
+// =============================================
+export const ChallengeProgress = {
+  async create(progressData) {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("challenge_progress")
+      .insert({
+        ...progressData,
+        user_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      // If progress already exists, update it instead
+      if (error.code === "23505") {
+        return await this.update(progressData.challenge_id, progressData);
+      }
+      throw error;
+    }
+    return data;
+  },
+
+  async update(challengeId, progressData) {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("challenge_progress")
+      .update(progressData)
+      .eq("challenge_id", challengeId)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async markComplete(challengeId, timeSpent = 0, notes = "") {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("challenge_progress")
+      .upsert(
+        {
+          user_id: user.id,
+          challenge_id: challengeId,
+          is_completed: true,
+          completed_at: new Date().toISOString(),
+          time_spent_seconds: timeSpent,
+          notes: notes,
+        },
+        {
+          onConflict: "user_id,challenge_id",
+        }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async getUserProgress(challengeId) {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("challenge_progress")
+      .select("*")
+      .eq("challenge_id", challengeId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async getCompletedChallenges() {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("challenge_progress")
+      .select("challenge_id")
+      .eq("user_id", user.id)
+      .eq("is_completed", true);
+
+    if (error) throw error;
+    return data?.map((p) => p.challenge_id) || [];
+  },
+
+  async filter(query) {
+    const user = await getCurrentUser();
+    let queryBuilder = supabase
+      .from("challenge_progress")
+      .select("*")
+      .eq("user_id", user.id);
+
+    Object.entries(query).forEach(([key, value]) => {
+      queryBuilder = queryBuilder.eq(key, value);
     });
 
     const { data, error } = await queryBuilder;

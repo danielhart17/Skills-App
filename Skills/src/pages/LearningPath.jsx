@@ -10,6 +10,7 @@ export default function LearningPath() {
   const [lessons, setLessons] = useState([]);
   const [completedLessons, setCompletedLessons] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [mode, setMode] = useState("iq"); // Will be set from lesson data
 
   useEffect(() => {
     const loadData = async () => {
@@ -44,6 +45,11 @@ export default function LearningPath() {
         .filter((lesson) => lesson.chapter === chapter)
         .sort((a, b) => a.level - b.level);
       setLessons(chapterLessons);
+
+      // Detect mode from first lesson
+      if (chapterLessons.length > 0 && chapterLessons[0].mode) {
+        setMode(chapterLessons[0].mode);
+      }
     } catch (error) {
       console.error("Error loading lessons:", error);
     }
@@ -105,7 +111,13 @@ export default function LearningPath() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-400 to-orange-600">
+      <div
+        className={`min-h-screen flex items-center justify-center ${
+          mode === "iq"
+            ? "bg-gradient-to-br from-blue-400 to-indigo-600"
+            : "bg-gradient-to-br from-orange-400 to-orange-600"
+        }`}
+      >
         <div className="text-white text-2xl">Loading...</div>
       </div>
     );
@@ -125,7 +137,7 @@ export default function LearningPath() {
         <div className="flex items-center gap-4 mb-8">
           <Button
             variant="ghost"
-            onClick={() => navigate("/IQMode")}
+            onClick={() => navigate("/Learn")}
             className="text-white hover:bg-white/20"
           >
             <ArrowLeft className="w-5 h-5 mr-2" />
@@ -207,7 +219,13 @@ export default function LearningPath() {
                               ${controlPoint2X} ${controlPoint2Y}, 
                               ${endX} ${endY}`}
                           fill="none"
-                          stroke={hasProgressLine ? "#3b82f6" : "#d1d5db"}
+                          stroke={
+                            hasProgressLine
+                              ? mode === "iq"
+                                ? "#3b82f6"
+                                : "#f97316"
+                              : "#d1d5db"
+                          }
                           strokeWidth="15"
                           strokeLinecap="round"
                         />
@@ -219,7 +237,11 @@ export default function LearningPath() {
                 {isStart && (
                   <>
                     <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
-                      <div className="bg-blue-500 text-white px-6 py-2 rounded-t-xl font-bold text-sm shadow-lg">
+                      <div
+                        className={`text-white px-6 py-2 rounded-t-xl font-bold text-sm shadow-lg ${
+                          mode === "iq" ? "bg-blue-500" : "bg-orange-500"
+                        }`}
+                      >
                         START
                       </div>
                     </div>
@@ -237,7 +259,7 @@ export default function LearningPath() {
                       <path
                         d="M 0 0 L 0 65"
                         fill="none"
-                        stroke="#3b82f6"
+                        stroke={mode === "iq" ? "#3b82f6" : "#f97316"}
                         strokeWidth="15"
                         strokeLinecap="round"
                       />
@@ -253,9 +275,13 @@ export default function LearningPath() {
                     disabled={!unlocked}
                     className={`w-28 h-28 rounded-full flex items-center justify-center shadow-2xl border-8 transition-all duration-300 ${
                       completed
-                        ? "bg-blue-400 border-blue-500 hover:scale-110"
+                        ? mode === "iq"
+                          ? "bg-blue-400 border-blue-500 hover:scale-110"
+                          : "bg-orange-400 border-orange-500 hover:scale-110"
                         : unlocked
-                        ? "bg-gradient-to-br from-yellow-400 to-orange-500 border-blue-500 animate-scale-pulse hover:scale-110 cursor-pointer"
+                        ? mode === "iq"
+                          ? "bg-gradient-to-br from-yellow-400 to-orange-500 border-blue-500 animate-scale-pulse hover:scale-110 cursor-pointer"
+                          : "bg-gradient-to-br from-yellow-400 to-orange-500 border-orange-500 animate-scale-pulse hover:scale-110 cursor-pointer"
                         : "bg-gray-600 border-gray-500 cursor-not-allowed"
                     }`}
                   >
@@ -287,10 +313,16 @@ export default function LearningPath() {
         </div>
 
         {/* Progress indicator */}
-        <div className="fixed bottom-6 right-6 bg-white rounded-full px-6 py-3 shadow-2xl">
+        <div
+          className={`fixed bottom-6 right-6 rounded-full px-6 py-3 shadow-2xl ${
+            mode === "iq"
+              ? "bg-blue-500 text-white"
+              : "bg-orange-500 text-white"
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-yellow-500" />
-            <span className="font-bold text-gray-900">
+            <Trophy className="w-5 h-5 text-white" />
+            <span className="font-bold">
               {completedLessons.length}/{lessons.length} Complete
             </span>
           </div>

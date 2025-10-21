@@ -28,21 +28,15 @@ const navigationItems = [
   },
   {
     title: "Learn",
-    url: createPageUrl("IQMode"),
+    url: createPageUrl("Learn"),
     icon: Brain,
-    description: "Basketball Theory",
-  },
-  {
-    title: "Drills",
-    url: "/drills",
-    icon: Target,
-    description: "Practice Drills",
+    description: "IQ & On Court Training",
   },
   {
     title: "Challenges",
     url: createPageUrl("Challenges"),
     icon: Trophy,
-    description: "Practice Library",
+    description: "Practice & Test Your Skills",
   },
   {
     title: "Trainers",

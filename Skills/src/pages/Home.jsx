@@ -85,7 +85,7 @@ export default function Home() {
             </p>
           </div>
           <div className="flex gap-3">
-            <Link to={createPageUrl("IQMode")}>
+            <Link to={createPageUrl("Learn")}>
               <Button className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white px-6 py-3 rounded-xl shadow-lg transition-all">
                 <Brain className="w-5 h-5 mr-2" />
                 Learn
@@ -198,7 +198,7 @@ export default function Home() {
                   <p className="text-gray-400 mb-4">
                     No lessons available yet.
                   </p>
-                  <Link to={createPageUrl("IQMode")}>
+                  <Link to={createPageUrl("Learn")}>
                     <Button className="bg-gradient-to-r from-blue-500 to-indigo-500">
                       Explore Lessons
                     </Button>

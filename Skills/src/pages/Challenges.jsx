@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Challenge } from "@/api/entities";
+import { useNavigate } from "react-router-dom";
+import { Challenge, ChallengeProgress } from "@/api/entities";
 import { Trainer } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,8 +20,9 @@ import {
 } from "lucide-react";
 
 export default function Challenges() {
+  const navigate = useNavigate();
   const [challenges, setChallenges] = useState([]);
-  const [trainers, setTrainers] = useState([]);
+  const [completedChallenges, setCompletedChallenges] = useState([]);
   const [featuredChallenge, setFeaturedChallenge] = useState(null);
   const [featuredTrainer, setFeaturedTrainer] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -34,13 +36,14 @@ export default function Challenges() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [allChallenges, allTrainers] = await Promise.all([
+      const [allChallenges, allTrainers, completedIds] = await Promise.all([
         Challenge.list(),
         Trainer.list(),
+        ChallengeProgress.getCompletedChallenges(),
       ]);
 
       setChallenges(allChallenges);
-      setTrainers(allTrainers);
+      setCompletedChallenges(completedIds);
 
       // Find the featured challenge - prioritize is_featured flag, then any challenge with trainer_id
       const featured =
@@ -113,6 +116,10 @@ export default function Challenges() {
       default:
         return "🏀";
     }
+  };
+
+  const isChallengeCompleted = (challengeId) => {
+    return completedChallenges.includes(challengeId);
   };
 
   if (isLoading) {
@@ -195,9 +202,21 @@ export default function Challenges() {
                   <Button
                     size="lg"
                     className="bg-white text-blue-600 hover:bg-gray-100 font-bold shadow-lg px-8 py-3"
+                    onClick={() =>
+                      navigate(`/challenges/${featuredChallenge.id}`)
+                    }
                   >
-                    <Play className="w-5 h-5 mr-2" />
-                    Attempt Challenge
+                    {isChallengeCompleted(featuredChallenge.id) ? (
+                      <>
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        Completed
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-5 h-5 mr-2" />
+                        Start Challenge
+                      </>
+                    )}
                   </Button>
                 </div>
 
@@ -396,9 +415,21 @@ export default function Challenges() {
                       </div>
                     )}
 
-                  <Button className="w-full bg-brand-orange hover:opacity-90 text-white shadow-lg hover:shadow-xl transition-all duration-200">
-                    <Play className="w-4 h-4 mr-2" />
-                    Start Challenge
+                  <Button
+                    className="w-full bg-brand-orange hover:opacity-90 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+                    onClick={() => navigate(`/challenges/${challenge.id}`)}
+                  >
+                    {isChallengeCompleted(challenge.id) ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Completed
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 mr-2" />
+                        Start Challenge
+                      </>
+                    )}
                   </Button>
                 </div>
               </CardContent>
