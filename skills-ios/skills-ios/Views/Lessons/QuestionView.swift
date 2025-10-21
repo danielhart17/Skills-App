@@ -355,11 +355,11 @@ struct ResultsView: View {
             }
             
             // XP Reward (if passed)
-            if passed {
+            if passed, let xpReward = lesson.xpReward {
                 HStack {
                     Image(systemName: "star.fill")
                         .foregroundColor(.orange)
-                    Text("+\(lesson.xpReward) XP")
+                    Text("+\(xpReward) XP")
                         .font(.headline)
                         .foregroundColor(.orange)
                 }
@@ -429,8 +429,7 @@ struct ResultsView: View {
                 videoUrl: nil,
                 content: nil,
                 isActive: true,
-                createdAt: Date(),
-                updatedAt: Date()
+                createdAt: Date()
             ),
             questions: [
                 Question(

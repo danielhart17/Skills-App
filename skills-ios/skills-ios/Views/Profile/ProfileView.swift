@@ -148,8 +148,30 @@ struct ProfileView: View {
                 .padding(.vertical)
             }
             .navigationTitle("Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: handleSignOut) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                            Text("Sign Out")
+                        }
+                        .foregroundColor(.red)
+                    }
+                }
+            }
             .onAppear {
                 loadData()
+            }
+        }
+    }
+    
+    private func handleSignOut() {
+        Task {
+            do {
+                try await AuthService.shared.signOut()
+            } catch {
+                print("Error signing out: \(error)")
             }
         }
     }

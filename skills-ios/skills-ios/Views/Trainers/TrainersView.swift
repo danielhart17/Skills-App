@@ -18,7 +18,7 @@ struct TrainersView: View {
         }
         return trainers.filter { trainer in
             trainer.name.localizedCaseInsensitiveContains(searchText) ||
-            trainer.specialization.contains { $0.localizedCaseInsensitiveContains(searchText) }
+            (trainer.specializations?.contains { $0.localizedCaseInsensitiveContains(searchText) } ?? false)
         }
     }
     
@@ -54,6 +54,16 @@ struct TrainersView: View {
                 }
             }
             .navigationTitle("Trainers")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NavigationLink(destination: ProfileView()) {
+                        Image(systemName: "person.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(.orange)
+                    }
+                }
+            }
             .onAppear {
                 loadTrainers()
             }
@@ -83,7 +93,7 @@ struct TrainerCard: View {
                     .fill(Color.orange.opacity(0.2))
                     .frame(width: 60, height: 60)
                 
-                if let avatarUrl = trainer.avatarUrl, let url = URL(string: avatarUrl) {
+                if let profileImage = trainer.profileImage, let url = URL(string: profileImage) {
                     AsyncImage(url: url) { image in
                         image
                             .resizable()
@@ -108,30 +118,31 @@ struct TrainerCard: View {
                     .foregroundColor(.primary)
                 
                 // Rating
-                HStack(spacing: 5) {
-                    Image(systemName: "star.fill")
-                        .foregroundColor(.yellow)
-                        .font(.caption)
-                    Text(String(format: "%.1f", NSDecimalNumber(decimal: trainer.rating).doubleValue))
-                        .font(.subheadline)
-                    Text("(\(trainer.totalReviews))")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                if let rating = trainer.rating {
+                    HStack(spacing: 5) {
+                        Image(systemName: "star.fill")
+                            .foregroundColor(.yellow)
+                            .font(.caption)
+                        Text(String(format: "%.1f", NSDecimalNumber(decimal: rating).doubleValue))
+                            .font(.subheadline)
+                    }
                 }
                 
                 // Specializations
-                if !trainer.specialization.isEmpty {
-                    Text(trainer.specialization.prefix(2).joined(separator: ", "))
+                if let specializations = trainer.specializations, !specializations.isEmpty {
+                    Text(specializations.prefix(2).joined(separator: ", "))
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
                 
                 // Rate
-                Text("$\(formatRate(trainer.hourlyRate))/hr")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.green)
+                if let hourlyRate = trainer.hourlyRate {
+                    Text("$\(formatRate(hourlyRate))/hr")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.green)
+                }
             }
             
             Spacer()

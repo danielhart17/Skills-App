@@ -38,6 +38,15 @@ struct AdminDashboardView: View {
             }
             .navigationTitle("Admin Dashboard")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NavigationLink(destination: ProfileView()) {
+                        Image(systemName: "person.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(.orange)
+                    }
+                }
+            }
         }
     }
 }

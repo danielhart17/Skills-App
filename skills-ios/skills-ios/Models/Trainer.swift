@@ -9,59 +9,49 @@ import Foundation
 
 struct Trainer: Codable, Identifiable {
     let id: UUID
-    var userId: UUID?
     var name: String
     var bio: String?
-    var specialization: [String]
+    var specializations: [String]?
     var location: String?
-    var hourlyRate: Decimal
-    var rating: Decimal
-    var totalReviews: Int
+    var hourlyRate: Decimal?
+    var rating: Decimal?
     var yearsExperience: Int?
-    var certifications: [String]?
-    var avatarUrl: String?
-    var isAvailable: Bool
+    var profileImage: String?
+    var verified: Bool?
     let createdAt: Date
-    let updatedAt: Date
     
     enum CodingKeys: String, CodingKey {
         case id
-        case userId = "user_id"
         case name
         case bio
-        case specialization
+        case specializations
         case location
         case hourlyRate = "hourly_rate"
         case rating
-        case totalReviews = "total_reviews"
         case yearsExperience = "years_experience"
-        case certifications
-        case avatarUrl = "avatar_url"
-        case isAvailable = "is_available"
+        case profileImage = "profile_image"
+        case verified
         case createdAt = "created_at"
-        case updatedAt = "updated_at"
     }
 }
 
 struct TrainerService: Codable, Identifiable, Hashable {
     let id: UUID
     var trainerId: UUID
-    var serviceName: String
+    var name: String
     var description: String?
-    var duration: Int
+    var durationMinutes: Int
     var price: Decimal
     let createdAt: Date
-    let updatedAt: Date
     
     enum CodingKeys: String, CodingKey {
         case id
         case trainerId = "trainer_id"
-        case serviceName = "service_name"
+        case name
         case description
-        case duration
+        case durationMinutes = "duration_minutes"
         case price
         case createdAt = "created_at"
-        case updatedAt = "updated_at"
     }
 }
 

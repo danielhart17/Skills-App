@@ -14,17 +14,16 @@ struct Lesson: Codable, Identifiable {
     var mode: LessonMode
     var chapter: String?
     var chapterId: UUID?
-    var difficulty: Difficulty
-    var level: Int
-    var orderIndex: Int
-    var estimatedTime: Int
-    var xpReward: Int
+    var difficulty: Difficulty?
+    var level: Int?
+    var orderIndex: Int?
+    var estimatedTime: Int?
+    var xpReward: Int?
     var thumbnailUrl: String?
     var videoUrl: String?
     var content: String?
-    var isActive: Bool
+    var isActive: Bool?
     let createdAt: Date
-    let updatedAt: Date
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -43,7 +42,6 @@ struct Lesson: Codable, Identifiable {
         case content
         case isActive = "is_active"
         case createdAt = "created_at"
-        case updatedAt = "updated_at"
     }
 }
 

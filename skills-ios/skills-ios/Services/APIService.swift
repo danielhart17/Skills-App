@@ -27,7 +27,7 @@ class APIService {
             from: "lessons",
             columns: "*",
             filter: filter,
-            order: "order_index.asc"
+            order: "chapter.asc,order_index.asc"
         )
     }
     
@@ -160,7 +160,6 @@ class APIService {
         return try await supabase.select(
             from: "trainers",
             columns: "*",
-            filter: "is_available=eq.true",
             order: "rating.desc"
         )
     }
@@ -191,7 +190,7 @@ class APIService {
         return try await supabase.select(
             from: "training_events",
             columns: "*",
-            order: "event_date.asc"
+            order: "date.asc"
         )
     }
     

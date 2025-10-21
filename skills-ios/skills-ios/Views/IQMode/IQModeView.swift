@@ -144,21 +144,27 @@ struct LessonCard: View {
                     .foregroundColor(.primary)
                 
                 HStack(spacing: 10) {
-                    Label("\(lesson.estimatedTime) min", systemImage: "clock")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if let estimatedTime = lesson.estimatedTime {
+                        Label("\(estimatedTime) min", systemImage: "clock")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                     
-                    Label("\(lesson.xpReward) XP", systemImage: "star.fill")
-                        .font(.caption)
-                        .foregroundColor(.orange)
+                    if let xpReward = lesson.xpReward {
+                        Label("\(xpReward) XP", systemImage: "star.fill")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
                     
-                    Text(lesson.difficulty.rawValue.capitalized)
-                        .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(difficultyColor.opacity(0.2))
-                        .foregroundColor(difficultyColor)
-                        .cornerRadius(5)
+                    if let difficulty = lesson.difficulty {
+                        Text(difficulty.rawValue.capitalized)
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(difficultyColor.opacity(0.2))
+                            .foregroundColor(difficultyColor)
+                            .cornerRadius(5)
+                    }
                 }
             }
             
@@ -173,7 +179,11 @@ struct LessonCard: View {
     }
     
     private var difficultyColor: Color {
-        switch lesson.difficulty {
+        guard let difficulty = lesson.difficulty else {
+            return .gray
+        }
+        
+        switch difficulty {
         case .beginner:
             return .green
         case .intermediate:

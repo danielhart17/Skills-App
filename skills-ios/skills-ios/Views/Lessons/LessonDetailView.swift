@@ -46,7 +46,7 @@ struct LessonDetailView: View {
                             .font(.subheadline)
                             .foregroundColor(.orange)
                         
-                        Text(lesson.difficulty.rawValue.capitalized)
+                        Text(lesson.difficulty!.rawValue.capitalized)
                             .font(.caption)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
@@ -125,6 +125,8 @@ struct LessonDetailView: View {
             return .orange
         case .advanced:
             return .red
+        case .none:
+            return .gray
         }
     }
     
@@ -158,8 +160,7 @@ struct LessonDetailView: View {
             videoUrl: nil,
             content: nil,
             isActive: true,
-            createdAt: Date(),
-            updatedAt: Date()
+            createdAt: Date()
         ))
     }
 }

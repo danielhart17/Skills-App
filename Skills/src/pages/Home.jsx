@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { User } from "@/api/entities";
 import { Lesson } from "@/api/entities";
+import { Challenge } from "@/api/entities";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,13 +9,22 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Brain, Trophy, Target, Flame, Star, Clock, Play } from "lucide-react";
+import {
+  Brain,
+  Trophy,
+  Flame,
+  Star,
+  Clock,
+  Play,
+  Dumbbell,
+} from "lucide-react";
 
 export default function Home() {
   const { isTrainer } = useAuth();
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [recentLessons, setRecentLessons] = useState([]);
+  const [todayChallenge, setTodayChallenge] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -26,8 +36,19 @@ export default function Home() {
       const currentUser = await User.me();
       setUser(currentUser);
 
-      const lessons = await Lesson.list();
+      const [lessons, allChallenges] = await Promise.all([
+        Lesson.list(),
+        Challenge.list(),
+      ]);
+
       setRecentLessons(lessons.slice(0, 3));
+
+      // Get a featured challenge or the first active one
+      const featuredChallenge = allChallenges.find(
+        (c) => c.is_featured && c.is_active
+      );
+      const activeChallenge = allChallenges.find((c) => c.is_active);
+      setTodayChallenge(featuredChallenge || activeChallenge || null);
     } catch (error) {
       console.error("Error loading user data:", error);
     }
@@ -91,10 +112,10 @@ export default function Home() {
                 Learn
               </Button>
             </Link>
-            <Link to="/drills">
+            <Link to="/challenges">
               <Button className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-6 py-3 rounded-xl shadow-lg transition-all">
-                <Target className="w-5 h-5 mr-2" />
-                Drills
+                <Trophy className="w-5 h-5 mr-2" />
+                Challenges
               </Button>
             </Link>
           </div>
@@ -166,16 +187,32 @@ export default function Home() {
                     className="flex items-center justify-between p-4 bg-gray-800 rounded-xl hover:bg-gray-700 transition-colors"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-500/20">
-                        <Brain className="w-5 h-5 text-blue-400" />
+                      <div
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                          lesson.mode === "iq"
+                            ? "bg-blue-500/20"
+                            : "bg-orange-500/20"
+                        }`}
+                      >
+                        {lesson.mode === "iq" ? (
+                          <Brain className="w-5 h-5 text-blue-400" />
+                        ) : (
+                          <Dumbbell className="w-5 h-5 text-orange-400" />
+                        )}
                       </div>
                       <div>
                         <h3 className="font-semibold text-white">
                           {lesson.title}
                         </h3>
                         <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="default" className="text-xs">
-                            Learn
+                          <Badge
+                            className={`text-xs ${
+                              lesson.mode === "iq"
+                                ? "bg-blue-500 hover:bg-blue-600"
+                                : "bg-orange-500 hover:bg-orange-600"
+                            } text-white`}
+                          >
+                            {lesson.mode === "iq" ? "IQ Mode" : "On Court"}
                           </Badge>
                           <span className="text-xs text-gray-400 flex items-center gap-1">
                             <Clock className="w-3 h-3" />
@@ -212,35 +249,52 @@ export default function Home() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl text-white">
                 <Trophy className="w-6 h-6 text-yellow-500" />
-                Today's Challenge
+                Today&apos;s Challenge
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-xl p-6 border border-yellow-500/30">
-                <h3 className="font-bold text-lg text-white mb-2">
-                  Perfect Your Free Throws
-                </h3>
-                <p className="text-gray-300 mb-4">
-                  Make 20 consecutive free throws to earn the &quot;Clutch
-                  Shooter&quot; badge
-                </p>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Badge className="bg-yellow-500 text-white">+50 XP</Badge>
-                    <Badge
-                      variant="outline"
-                      className="border-gray-600 text-gray-300"
+              {todayChallenge ? (
+                <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-xl p-6 border border-yellow-500/30">
+                  <h3 className="font-bold text-lg text-white mb-2">
+                    {todayChallenge.title}
+                  </h3>
+                  <p className="text-gray-300 mb-4">
+                    {todayChallenge.description}
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-yellow-500 text-white">
+                        +{todayChallenge.xp_reward} XP
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="border-gray-600 text-gray-300"
+                      >
+                        {todayChallenge.category || "Challenge"}
+                      </Badge>
+                    </div>
+                    <Button
+                      className="bg-brand-orange hover:opacity-90 text-white"
+                      onClick={() =>
+                        navigate(`/challenges/${todayChallenge.id}`)
+                      }
                     >
-                      🏆 Badge
-                    </Badge>
-                  </div>
-                  <Link to={createPageUrl("Challenges")}>
-                    <Button className="bg-brand-orange hover:opacity-90 text-white">
                       Accept Challenge
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-400 mb-4">
+                    No challenges available yet.
+                  </p>
+                  <Link to={createPageUrl("Challenges")}>
+                    <Button className="bg-gradient-to-r from-yellow-500 to-orange-500">
+                      Explore Challenges
                     </Button>
                   </Link>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </div>

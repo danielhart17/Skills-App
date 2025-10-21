@@ -24,7 +24,7 @@ struct TrainerDetailView: View {
                             .fill(Color.orange.opacity(0.2))
                             .frame(width: 120, height: 120)
                         
-                        if let avatarUrl = trainer.avatarUrl, let url = URL(string: avatarUrl) {
+                        if let profileImage = trainer.profileImage, let url = URL(string: profileImage) {
                             AsyncImage(url: url) { image in
                                 image
                                     .resizable()
@@ -49,16 +49,15 @@ struct TrainerDetailView: View {
                         .fontWeight(.bold)
                     
                     // Rating
-                    HStack(spacing: 5) {
-                        ForEach(0..<5) { index in
-                            Image(systemName: index < Int(NSDecimalNumber(decimal: trainer.rating).doubleValue) ? "star.fill" : "star")
-                                .foregroundColor(.yellow)
+                    if let rating = trainer.rating {
+                        HStack(spacing: 5) {
+                            ForEach(0..<5) { index in
+                                Image(systemName: index < Int(NSDecimalNumber(decimal: rating).doubleValue) ? "star.fill" : "star")
+                                    .foregroundColor(.yellow)
+                            }
+                            Text(String(format: "%.1f", NSDecimalNumber(decimal: rating).doubleValue))
+                                .font(.subheadline)
                         }
-                        Text(String(format: "%.1f", NSDecimalNumber(decimal: trainer.rating).doubleValue))
-                            .font(.subheadline)
-                        Text("(\(trainer.totalReviews) reviews)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
                     }
                     
                     // Location
@@ -94,13 +93,13 @@ struct TrainerDetailView: View {
                     }
                     
                     // Specializations
-                    if !trainer.specialization.isEmpty {
+                    if let specializations = trainer.specializations, !specializations.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Specializations")
                                 .font(.headline)
                             
                             FlowLayout(spacing: 10) {
-                                ForEach(trainer.specialization, id: \.self) { spec in
+                                ForEach(specializations, id: \.self) { spec in
                                     Text(spec)
                                         .font(.caption)
                                         .padding(.horizontal, 12)
@@ -108,23 +107,6 @@ struct TrainerDetailView: View {
                                         .background(Color.orange.opacity(0.2))
                                         .foregroundColor(.orange)
                                         .cornerRadius(15)
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Certifications
-                    if let certifications = trainer.certifications, !certifications.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Certifications")
-                                .font(.headline)
-                            
-                            ForEach(certifications, id: \.self) { cert in
-                                HStack {
-                                    Image(systemName: "checkmark.seal.fill")
-                                        .foregroundColor(.blue)
-                                    Text(cert)
-                                        .font(.subheadline)
                                 }
                             }
                         }
@@ -190,7 +172,7 @@ struct ServiceCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(service.serviceName)
+                Text(service.name)
                     .font(.subheadline)
                     .fontWeight(.medium)
                 Spacer()
@@ -205,7 +187,7 @@ struct ServiceCard: View {
                     .foregroundColor(.secondary)
             }
             
-            Label("\(service.duration) minutes", systemImage: "clock")
+            Label("\(service.durationMinutes) minutes", systemImage: "clock")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -279,7 +261,7 @@ struct BookingView: View {
                     Picker("Select Service", selection: $selectedService) {
                         Text("Choose...").tag(nil as TrainerService?)
                         ForEach(services) { service in
-                            Text("\(service.serviceName) - $\(formatServicePrice(service.price))").tag(service as TrainerService?)
+                            Text("\(service.name) - $\(formatServicePrice(service.price))").tag(service as TrainerService?)
                         }
                     }
                 }
@@ -357,20 +339,15 @@ struct BookingView: View {
     NavigationView {
         TrainerDetailView(trainer: Trainer(
             id: UUID(),
-            userId: nil,
             name: "Coach Johnson",
             bio: "Professional basketball trainer with 10 years of experience.",
-            specialization: ["Shooting", "Defense"],
+            specializations: ["Shooting", "Defense"],
             location: "Los Angeles, CA",
             hourlyRate: 100,
             rating: 4.8,
-            totalReviews: 45,
             yearsExperience: 10,
-            certifications: ["USA Basketball Certified"],
-            avatarUrl: nil,
-            isAvailable: true,
-            createdAt: Date(),
-            updatedAt: Date()
+            profileImage: nil,
+            createdAt: Date()
         ))
     }
 }

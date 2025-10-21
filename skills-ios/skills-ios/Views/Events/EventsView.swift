@@ -24,12 +24,12 @@ struct EventsView: View {
         
         switch selectedFilter {
         case .upcoming:
-            return events.filter { $0.eventDate >= now }.sorted { $0.eventDate < $1.eventDate }
+            return events.filter { $0.date >= now }.sorted { $0.date < $1.date }
         case .all:
-            return events.sorted { $0.eventDate < $1.eventDate }
+            return events.sorted { $0.date < $1.date }
         case .myEvents:
             let registeredEventIds = Set(registrations.keys)
-            return events.filter { registeredEventIds.contains($0.id) }.sorted { $0.eventDate < $1.eventDate }
+            return events.filter { registeredEventIds.contains($0.id) }.sorted { $0.date < $1.date }
         }
     }
     
@@ -73,6 +73,16 @@ struct EventsView: View {
                 }
             }
             .navigationTitle("Events")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NavigationLink(destination: ProfileView()) {
+                        Image(systemName: "person.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(.orange)
+                    }
+                }
+            }
             .onAppear {
                 loadData()
             }
@@ -114,11 +124,7 @@ struct EventCard: View {
     let isRegistered: Bool
     
     private var isPast: Bool {
-        event.eventDate < Date()
-    }
-    
-    private var isFull: Bool {
-        event.registeredCount >= event.maxParticipants
+        return event.date < Date()
     }
     
     private func formatPrice(_ decimal: Decimal) -> String {
@@ -133,16 +139,6 @@ struct EventCard: View {
                     Text(event.title)
                         .font(.headline)
                         .foregroundColor(.primary)
-                    
-                    if let category = event.category {
-                        Text(category)
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.orange.opacity(0.2))
-                            .foregroundColor(.orange)
-                            .cornerRadius(5)
-                    }
                 }
                 
                 Spacer()
@@ -156,15 +152,6 @@ struct EventCard: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.green)
                     }
-                } else if isFull {
-                    Text("Full")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.red.opacity(0.2))
-                        .foregroundColor(.red)
-                        .cornerRadius(5)
                 } else if isPast {
                     Text("Past")
                         .font(.caption)
@@ -178,41 +165,45 @@ struct EventCard: View {
                     Image(systemName: "calendar")
                         .foregroundColor(.secondary)
                         .font(.caption)
-                    Text(event.eventDate, style: .date)
+                    Text(event.date, style: .date)
                         .font(.subheadline)
                         .foregroundColor(.primary)
                     Text("•")
                         .foregroundColor(.secondary)
-                    Text(event.eventDate, style: .time)
+                    Text(event.date, style: .time)
                         .font(.subheadline)
                         .foregroundColor(.primary)
                 }
                 
-                HStack(spacing: 5) {
-                    Image(systemName: "location.fill")
-                        .foregroundColor(.secondary)
-                        .font(.caption)
-                    Text(event.location)
-                        .font(.subheadline)
-                        .foregroundColor(.primary)
-                }
-                
-                HStack(spacing: 15) {
+                if let location = event.location {
                     HStack(spacing: 5) {
-                        Image(systemName: "person.3.fill")
+                        Image(systemName: "location.fill")
                             .foregroundColor(.secondary)
                             .font(.caption)
-                        Text("\(event.registeredCount)/\(event.maxParticipants)")
+                        Text(location)
                             .font(.subheadline)
                             .foregroundColor(.primary)
                     }
+                }
+                
+                HStack(spacing: 15) {
+                    if let spots = event.spotsAvailable {
+                        HStack(spacing: 5) {
+                            Image(systemName: "person.3.fill")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                            Text("\(spots) spots")
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                        }
+                    }
                     
-                    if event.price > 0 {
+                    if let price = event.price, price > 0 {
                         HStack(spacing: 5) {
                             Image(systemName: "dollarsign.circle.fill")
                                 .foregroundColor(.green)
                                 .font(.caption)
-                            Text("$\(formatPrice(event.price))")
+                            Text("$\(formatPrice(price))")
                                 .font(.subheadline)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.green)
@@ -247,11 +238,7 @@ struct EventDetailView: View {
     @Environment(\.presentationMode) var presentationMode
     
     private var isPast: Bool {
-        event.eventDate < Date()
-    }
-    
-    private var isFull: Bool {
-        event.registeredCount >= event.maxParticipants
+        return event.date < Date()
     }
     
     private var isRegistered: Bool {
@@ -286,25 +273,27 @@ struct EventDetailView: View {
                         HStack(spacing: 5) {
                             Image(systemName: "calendar")
                                 .foregroundColor(.orange)
-                            Text(event.eventDate, style: .date)
+                            Text(event.date, style: .date)
                             Text("at")
                                 .foregroundColor(.secondary)
-                            Text(event.eventDate, style: .time)
+                            Text(event.date, style: .time)
                         }
                         .font(.subheadline)
                         
-                        HStack(spacing: 5) {
-                            Image(systemName: "location.fill")
-                                .foregroundColor(.orange)
-                            Text(event.location)
+                        if let location = event.location {
+                            HStack(spacing: 5) {
+                                Image(systemName: "location.fill")
+                                    .foregroundColor(.orange)
+                                Text(location)
+                            }
+                            .font(.subheadline)
                         }
-                        .font(.subheadline)
                         
-                        HStack(spacing: 15) {
+                        if let spots = event.spotsAvailable {
                             HStack(spacing: 5) {
                                 Image(systemName: "person.3.fill")
                                     .foregroundColor(.orange)
-                                Text("\(event.registeredCount) / \(event.maxParticipants) participants")
+                                Text("\(spots) spots available")
                             }
                             .font(.subheadline)
                         }
@@ -312,40 +301,13 @@ struct EventDetailView: View {
                     
                     Divider()
                     
-                    // Description
-                    if let description = event.description {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("About")
-                                .font(.headline)
-                            Text(description)
-                                .font(.body)
-                                .foregroundColor(.primary)
-                        }
-                    }
-                    
-                    // Difficulty
-                    if let difficulty = event.difficulty {
-                        HStack {
-                            Text("Difficulty:")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            Text(difficulty.rawValue.capitalized)
-                                .font(.subheadline)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(difficultyColor.opacity(0.2))
-                                .foregroundColor(difficultyColor)
-                                .cornerRadius(5)
-                        }
-                    }
-                    
                     // Price
                     HStack {
                         Text("Price:")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
-                        if event.price > 0 {
-                            Text("$\(formatEventPrice(event.price))")
+                        if let price = event.price, price > 0 {
+                            Text("$\(formatEventPrice(price))")
                                 .font(.headline)
                                 .foregroundColor(.green)
                         } else {
@@ -375,14 +337,6 @@ struct EventDetailView: View {
                             .background(Color(.systemGray5))
                             .foregroundColor(.secondary)
                             .cornerRadius(10)
-                    } else if isFull {
-                        Text("Event is Full")
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color(.systemGray5))
-                            .foregroundColor(.secondary)
-                            .cornerRadius(10)
                     } else {
                         Button(action: registerForEvent) {
                             if isRegistering {
@@ -390,7 +344,7 @@ struct EventDetailView: View {
                                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             } else {
                                 HStack {
-                                    Text(event.price > 0 ? "Register ($\(formatEventPrice(event.price)))" : "Register (Free)")
+                                    Text((event.price ?? 0) > 0 ? "Register ($\(formatEventPrice(event.price ?? 0)))" : "Register (Free)")
                                         .fontWeight(.semibold)
                                     Spacer()
                                     Image(systemName: "arrow.right.circle.fill")
@@ -416,23 +370,11 @@ struct EventDetailView: View {
         }
     }
     
-    private var difficultyColor: Color {
-        guard let difficulty = event.difficulty else { return .gray }
-        switch difficulty {
-        case .beginner:
-            return .green
-        case .intermediate:
-            return .orange
-        case .advanced:
-            return .red
-        }
-    }
-    
     private func registerForEvent() {
         isRegistering = true
         Task {
             do {
-                if event.price > 0 {
+                if (event.price ?? 0) > 0 {
                     // For paid events, would integrate Stripe here
                     // For now, show a message
                     errorMessage = "Payment integration coming soon. For now, free events only."

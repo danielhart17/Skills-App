@@ -28,14 +28,9 @@ struct MainTabView: View {
                     }
             }
             
-            HomeView()
+            LearnView()
                 .tabItem {
-                    Label("Home", systemImage: "house.fill")
-                }
-            
-            IQModeView()
-                .tabItem {
-                    Label("IQ Mode", systemImage: "brain.head.profile")
+                    Label("Learn", systemImage: "book.fill")
                 }
             
             ChallengesView()
@@ -43,19 +38,14 @@ struct MainTabView: View {
                     Label("Challenges", systemImage: "target")
                 }
             
-            EventsView()
-                .tabItem {
-                    Label("Events", systemImage: "calendar")
-                }
-            
             TrainersView()
                 .tabItem {
                     Label("Trainers", systemImage: "person.3.fill")
                 }
             
-            ProfileView()
+            EventsView()
                 .tabItem {
-                    Label("Profile", systemImage: "person.circle.fill")
+                    Label("Events", systemImage: "calendar")
                 }
         }
         .accentColor(.orange)

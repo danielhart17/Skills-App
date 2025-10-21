@@ -10,34 +10,24 @@ import Foundation
 struct TrainingEvent: Codable, Identifiable {
     let id: UUID
     var title: String
-    var description: String?
-    var trainerId: UUID?
-    var eventDate: Date
-    var location: String
-    var maxParticipants: Int
-    var registeredCount: Int
-    var price: Decimal
-    var category: String?
-    var difficulty: Difficulty?
-    var thumbnailUrl: String?
+    var trainerId: UUID
+    var date: Date
+    var location: String?
+    var price: Decimal?
+    var spotsAvailable: Int?
+    var registeredCount: Int?
     let createdAt: Date
-    let updatedAt: Date
     
     enum CodingKeys: String, CodingKey {
         case id
         case title
-        case description
         case trainerId = "trainer_id"
-        case eventDate = "event_date"
+        case date
         case location
-        case maxParticipants = "max_participants"
-        case registeredCount = "registered_count"
         case price
-        case category
-        case difficulty
-        case thumbnailUrl = "thumbnail_url"
+        case spotsAvailable = "spots_available"
+        case registeredCount = "registered_count"
         case createdAt = "created_at"
-        case updatedAt = "updated_at"
     }
 }
 
@@ -48,7 +38,6 @@ struct EventRegistration: Codable, Identifiable {
     var status: RegistrationStatus
     var notes: String?
     let createdAt: Date
-    let updatedAt: Date
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -57,7 +46,6 @@ struct EventRegistration: Codable, Identifiable {
         case status
         case notes
         case createdAt = "created_at"
-        case updatedAt = "updated_at"
     }
 }
 
