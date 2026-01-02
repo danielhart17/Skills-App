@@ -93,6 +93,15 @@ class APIService {
         )
     }
     
+    func fetchTrainerChallenges(trainerId: UUID) async throws -> [Challenge] {
+        return try await supabase.select(
+            from: "challenges",
+            columns: "*",
+            filter: "created_by=eq.\(trainerId.uuidString)",
+            order: "created_at.desc"
+        )
+    }
+    
     func fetchChallenge(id: UUID) async throws -> Challenge {
         let challenges: [Challenge] = try await supabase.select(
             from: "challenges",
@@ -240,32 +249,49 @@ class APIService {
     
     // MARK: - Bookings
     
-    func createBooking(trainerId: UUID, serviceId: UUID, datetime: Date, notes: String?, price: Decimal) async throws {
-        guard let userId = AuthService.shared.currentUser?.id else {
-            throw APIError.notAuthenticated
-        }
-        
+    func createBooking(
+        trainerId: UUID,
+        userId: UUID,
+        serviceId: UUID,
+        serviceName: String,
+        bookingDatetime: Date,
+        durationMinutes: Int,
+        totalPrice: Decimal,
+        userNotes: String?
+    ) async throws {
         struct BookingData: Encodable {
             let user_id: String
             let trainer_id: String
             let service_id: String
+            let service_name: String
             let booking_datetime: String
+            let duration_minutes: Int
+            let total_price: Double
+            let user_notes: String?
             let status: String
-            let notes: String
-            let price: Double
         }
         
         let booking = BookingData(
             user_id: userId.uuidString,
             trainer_id: trainerId.uuidString,
             service_id: serviceId.uuidString,
-            booking_datetime: ISO8601DateFormatter().string(from: datetime),
-            status: "pending",
-            notes: notes ?? "",
-            price: NSDecimalNumber(decimal: price).doubleValue
+            service_name: serviceName,
+            booking_datetime: ISO8601DateFormatter().string(from: bookingDatetime),
+            duration_minutes: durationMinutes,
+            total_price: NSDecimalNumber(decimal: totalPrice).doubleValue,
+            user_notes: userNotes,
+            status: "confirmed"
         )
         
         try await supabase.insert(into: "bookings", values: booking)
+    }
+    
+    func fetchBookings() async throws -> [Booking] {
+        return try await supabase.select(
+            from: "bookings",
+            columns: "*",
+            order: "booking_datetime.desc"
+        )
     }
     
     func fetchUserBookings() async throws -> [Booking] {
@@ -338,7 +364,8 @@ class APIService {
             filter: "user_id=eq.\(userId.uuidString)&passed=eq.true"
         )
         
-        return attempts.map { $0.lessonId }
+        // Return unique lesson IDs only (remove duplicates)
+        return Array(Set(attempts.map { $0.lessonId }))
     }
 }
 

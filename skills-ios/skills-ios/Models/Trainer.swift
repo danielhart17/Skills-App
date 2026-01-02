@@ -9,6 +9,7 @@ import Foundation
 
 struct Trainer: Codable, Identifiable {
     let id: UUID
+    var userId: UUID?
     var name: String
     var bio: String?
     var specializations: [String]?
@@ -22,6 +23,7 @@ struct Trainer: Codable, Identifiable {
     
     enum CodingKeys: String, CodingKey {
         case id
+        case userId = "user_id"
         case name
         case bio
         case specializations

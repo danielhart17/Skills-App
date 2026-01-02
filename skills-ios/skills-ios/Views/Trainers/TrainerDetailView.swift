@@ -10,7 +10,10 @@ import SwiftUI
 struct TrainerDetailView: View {
     let trainer: Trainer
     @State private var services: [TrainerService] = []
+    @State private var challenges: [Challenge] = []
     @State private var isLoading = true
+    @State private var isLoadingChallenges = true
+    @State private var selectedServiceForBooking: TrainerService? = nil
     @State private var showingBooking = false
     
     var body: some View {
@@ -123,23 +126,35 @@ struct TrainerDetailView: View {
                             .frame(maxWidth: .infinity)
                     } else {
                         ForEach(services) { service in
-                            ServiceCard(service: service)
+                            ServiceCard(
+                                service: service,
+                                onBook: {
+                                    selectedServiceForBooking = service
+                                    showingBooking = true
+                                }
+                            )
                         }
                     }
                     
-                    // Book Button
-                    Button(action: { showingBooking = true }) {
-                        HStack {
-                            Text("Book Session")
-                                .fontWeight(.semibold)
-                            Spacer()
-                            Image(systemName: "calendar.badge.plus")
+                    // Challenges Section
+                    if !challenges.isEmpty {
+                        Divider()
+                            .padding(.top)
+                        
+                        Text("Challenges Created")
+                            .font(.headline)
+                        
+                        if isLoadingChallenges {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            ForEach(challenges) { challenge in
+                                NavigationLink(destination: ChallengeDetailView(challenge: challenge)) {
+                                    TrainerChallengeCard(challenge: challenge)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
                         }
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.orange)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
                     }
                 }
                 .padding()
@@ -148,9 +163,12 @@ struct TrainerDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             loadServices()
+            loadChallenges()
         }
         .sheet(isPresented: $showingBooking) {
-            BookingView(trainer: trainer, services: services)
+            if let service = selectedServiceForBooking {
+                BookingView(trainer: trainer, service: service)
+            }
         }
     }
     
@@ -164,10 +182,23 @@ struct TrainerDetailView: View {
             isLoading = false
         }
     }
+    
+    private func loadChallenges() {
+        Task {
+            do {
+                // Assuming trainer is linked to a user account with the same ID
+                challenges = try await APIService.shared.fetchTrainerChallenges(trainerId: trainer.userId ?? trainer.id)
+            } catch {
+                print("Error loading challenges: \(error)")
+            }
+            isLoadingChallenges = false
+        }
+    }
 }
 
 struct ServiceCard: View {
     let service: TrainerService
+    let onBook: () -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -187,9 +218,24 @@ struct ServiceCard: View {
                     .foregroundColor(.secondary)
             }
             
-            Label("\(service.durationMinutes) minutes", systemImage: "clock")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            HStack {
+                Label("\(service.durationMinutes) minutes", systemImage: "clock")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Button(action: onBook) {
+                    Text("Book")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.orange)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                }
+            }
         }
         .padding()
         .background(Color(.systemGray6))
@@ -244,94 +290,79 @@ struct FlowLayout: Layout {
     }
 }
 
-struct BookingView: View {
-    let trainer: Trainer
-    let services: [TrainerService]
-    
-    @State private var selectedService: TrainerService?
-    @State private var selectedDate = Date()
-    @State private var notes = ""
-    @State private var isSubmitting = false
-    @Environment(\.presentationMode) var presentationMode
+struct TrainerChallengeCard: View {
+    let challenge: Challenge
     
     var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Service")) {
-                    Picker("Select Service", selection: $selectedService) {
-                        Text("Choose...").tag(nil as TrainerService?)
-                        ForEach(services) { service in
-                            Text("\(service.name) - $\(formatServicePrice(service.price))").tag(service as TrainerService?)
-                        }
-                    }
-                }
+        HStack(spacing: 12) {
+            // Challenge Icon
+            ZStack {
+                Circle()
+                    .fill(getDifficultyColor(challenge.difficulty).opacity(0.2))
+                    .frame(width: 50, height: 50)
                 
-                if selectedService != nil {
-                    Section(header: Text("Date & Time")) {
-                        DatePicker("Date", selection: $selectedDate, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                Image(systemName: getCategoryIcon(challenge.category))
+                    .foregroundColor(getDifficultyColor(challenge.difficulty))
+                    .font(.title3)
+            }
+            
+            // Challenge Info
+            VStack(alignment: .leading, spacing: 4) {
+                Text(challenge.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                
+                HStack(spacing: 8) {
+                    Text(challenge.difficulty.rawValue.capitalized)
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(getDifficultyColor(challenge.difficulty).opacity(0.2))
+                        .foregroundColor(getDifficultyColor(challenge.difficulty))
+                        .cornerRadius(4)
+                    
+                    if let duration = challenge.duration {
+                        Label("\(duration) min", systemImage: "clock")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                     
-                    Section(header: Text("Notes (Optional)")) {
-                        TextEditor(text: $notes)
-                            .frame(height: 100)
-                    }
-                    
-                    Section {
-                        Button(action: submitBooking) {
-                            if isSubmitting {
-                                HStack {
-                                    Spacer()
-                                    ProgressView()
-                                    Spacer()
-                                }
-                            } else {
-                                HStack {
-                                    Spacer()
-                                    Text("Confirm Booking")
-                                        .fontWeight(.semibold)
-                                    Spacer()
-                                }
-                            }
-                        }
-                        .disabled(selectedService == nil || isSubmitting)
-                    }
+                    Label("\(challenge.xpReward) XP", systemImage: "star.fill")
+                        .font(.caption)
+                        .foregroundColor(.orange)
                 }
             }
-            .navigationTitle("Book Session")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .foregroundColor(.secondary)
+                .font(.caption)
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+    }
+    
+    private func getDifficultyColor(_ difficulty: Difficulty) -> Color {
+        switch difficulty {
+        case .beginner: return .green
+        case .intermediate: return .orange
+        case .advanced: return .red
         }
     }
     
-    private func submitBooking() {
-        guard let service = selectedService else { return }
-        
-        isSubmitting = true
-        Task {
-            do {
-                try await APIService.shared.createBooking(
-                    trainerId: trainer.id,
-                    serviceId: service.id,
-                    datetime: selectedDate,
-                    notes: notes.isEmpty ? nil : notes,
-                    price: service.price
-                )
-                presentationMode.wrappedValue.dismiss()
-            } catch {
-                print("Error creating booking: \(error)")
-            }
-            isSubmitting = false
+    private func getCategoryIcon(_ category: String) -> String {
+        switch category.lowercased() {
+        case "shooting": return "target"
+        case "dribbling": return "figure.basketball"
+        case "defense": return "shield.lefthalf.filled"
+        case "passing": return "arrow.triangle.turn.up.right.diamond.fill"
+        case "conditioning": return "bolt.heart.fill"
+        case "footwork": return "figure.walk"
+        default: return "sportscourt"
         }
-    }
-    
-    private func formatServicePrice(_ decimal: Decimal) -> String {
-        return String(format: "%.2f", NSDecimalNumber(decimal: decimal).doubleValue)
     }
 }
 
@@ -339,6 +370,7 @@ struct BookingView: View {
     NavigationView {
         TrainerDetailView(trainer: Trainer(
             id: UUID(),
+            userId: UUID(),
             name: "Coach Johnson",
             bio: "Professional basketball trainer with 10 years of experience.",
             specializations: ["Shooting", "Defense"],
@@ -347,6 +379,7 @@ struct BookingView: View {
             rating: 4.8,
             yearsExperience: 10,
             profileImage: nil,
+            verified: true,
             createdAt: Date()
         ))
     }
