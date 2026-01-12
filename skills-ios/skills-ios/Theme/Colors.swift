@@ -8,10 +8,13 @@
 import SwiftUI
 
 extension Color {
-    // Primary brand color (Orange) - matching web app
-    static let brandOrange = Color(hex: "#DD6B20")
+    // Primary brand color (Orange) - matching web app exactly
+    static let brandOrange = Color(hex: "#F15A29")  // Exact match with web
     static let brandOrangeDark = Color(hex: "#C05621")
     static let brandOrangeLight = Color(hex: "#ED8936")
+    
+    // Blue accent - matching web app gradient
+    static let brandBlue = Color(hex: "#0077FF")  // For gradients matching web
     
     // Background colors - matching web app's dark theme
     static let appBackground = Color(hex: "#0A0A0A")
@@ -65,3 +68,12 @@ extension Color {
     }
 }
 
+// MARK: - Gradients
+extension LinearGradient {
+    // Orange to Blue gradient - matching web app active tab
+    static let brandGradient = LinearGradient(
+        gradient: Gradient(colors: [.brandOrange, .brandBlue]),
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+}

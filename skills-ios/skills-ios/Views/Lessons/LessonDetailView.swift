@@ -16,19 +16,34 @@ struct LessonDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // Header Image (placeholder)
-                Rectangle()
-                    .fill(LinearGradient(
-                        gradient: Gradient(colors: [.orange, .blue]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
-                    .frame(height: 200)
-                    .overlay(
-                        Image(systemName: "book.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.white)
+                // Video or Header Image
+                if let videoUrl = lesson.videoUrl, !videoUrl.isEmpty {
+                    VideoPlayerView(videoURL: videoUrl)
+                        .frame(height: 250)
+                        .clipped()
+                } else if let thumbnailUrl = lesson.thumbnailUrl, !thumbnailUrl.isEmpty {
+                    RemoteImageView(
+                        imageURL: thumbnailUrl,
+                        maxHeight: 200,
+                        cornerRadius: 0,
+                        contentMode: .fill
                     )
+                    .clipped()
+                } else {
+                    // Fallback placeholder
+                    Rectangle()
+                        .fill(LinearGradient(
+                            gradient: Gradient(colors: [.brandOrange, .brandBlue]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .frame(height: 200)
+                        .overlay(
+                            Image(systemName: "book.fill")
+                                .font(.system(size: 60))
+                                .foregroundColor(.white)
+                        )
+                }
                 
                 VStack(alignment: .leading, spacing: 15) {
                     // Title
