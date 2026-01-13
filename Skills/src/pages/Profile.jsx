@@ -29,6 +29,118 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
+// Court zones configuration (matches ShootingSession.jsx exactly)
+const COURT_ZONES = [
+  {
+    id: "left-corner",
+    name: "Left Corner",
+    color: "rgba(128, 128, 128, 0.5)",
+    path: "M 0 5 L 0 40 L 10.5 35 Q 7.5 30 8 5 Z",
+  },
+  {
+    id: "right-corner",
+    name: "Right Corner",
+    color: "rgba(128, 128, 128, 0.5)",
+    path: "M 92 5 Q 92.5 30 89.5 35 L 100 40 L 100 5 Z",
+  },
+  {
+    id: "left-mid",
+    name: "Left Mid",
+    color: "rgba(59, 130, 246, 0.5)",
+    path: "M 8 5 Q 7.5 30 10.5 35 L 25 28 L 25 5 Z",
+  },
+  {
+    id: "right-mid",
+    name: "Right Mid",
+    color: "rgba(239, 68, 68, 0.5)",
+    path: "M 75 5 L 75 28 L 89.5 35 Q 92.5 30  92 5 Z",
+  },
+  {
+    id: "left-inside",
+    name: "Left Inside",
+    color: "rgba(59, 130, 246, 0.5)",
+    path: "M 25 5 L 40 5 Q 39 21 43 24 L 30 36 Q 25 31 25 27 L 25 5 Z",
+  },
+  {
+    id: "inside",
+    name: "Inside",
+    color: "rgba(239, 68, 68, 0.5)",
+    path: "M 43 24 Q 50 29.5 57 24 L 70 36 Q 67.5 39 63 41 Q 50 44.5 37 41 Q 32.5 39 30 36 L 43 24 Z",
+  },
+  {
+    id: "right-inside",
+    name: "Right Inside",
+    color: "rgba(239, 68, 68, 0.5)",
+    path: "M 75 5 L 60 5 Q 61 21 57 24 L 70 36 Q 75 31 75 27  L 75 5 Z",
+  },
+  {
+    id: "restricted",
+    name: "Restricted Area",
+    color: "rgba(239, 68, 68, 0.5)",
+    path: "M 40 5 L 40 17 A 3 3 0 1 0 60 17 L 60 5 Z",
+  },
+  {
+    id: "top-key",
+    name: "Top of Key",
+    color: "rgba(239, 68, 68, 0.5)",
+    path: "M 30 55 L 20 100 L 80 100 L 70 55 Q 50 64 30 55 Z",
+  },
+  {
+    id: "free-throw",
+    name: "Free Throw",
+    color: "rgba(239, 68, 68, 0.5)",
+    path: "M 37 41 L 30 55 Q 50 64 70 55 L 63 41 Q 50 45 37 41 Z",
+  },
+  {
+    id: "left-elbow",
+    name: "Left Elbow",
+    color: "rgba(239, 68, 68, 0.5)",
+    path: "M 10.5 35 L 25 28 Q 27 35 37 41 L 30 55 Q 18 50 10.5 35 Z",
+  },
+  {
+    id: "right-elbow",
+    name: "Right Elbow",
+    color: "rgba(239, 68, 68, 0.5)",
+    path: "M 89.5 35 L 75 28 Q 73 35 63 41 L 70 55 Q 82 50 89.5 35 Z",
+  },
+  {
+    id: "left-wing",
+    name: "Left Wing",
+    color: "rgba(239, 68, 68, 0.5)",
+    path: "M 10.5 35 L 0 40 L 0 100 L 20 100 L 30 55 Q 18 50 10.5 35 Z",
+  },
+  {
+    id: "right-wing",
+    name: "Right Wing",
+    color: "rgba(239, 68, 68, 0.5)",
+    path: "M 89.5 35 L 100 40 L 100 100 L 80 100 L 70 55 Q 82 50 89.5 35 Z",
+  },
+];
+
+// Label positions (matches ShootingSession.jsx exactly)
+const getZoneLabelPosition = (zoneId) => {
+  const positions = {
+    "left-corner": { x: 5, y: 20 },
+    "right-corner": { x: 95, y: 20 },
+    "left-mid": { x: 17, y: 15 },
+    "right-mid": { x: 83, y: 15 },
+    "left-inside": { x: 33, y: 18 },
+    inside: { x: 50, y: 34 },
+    "right-inside": { x: 67, y: 18 },
+    restricted: { x: 50, y: 18 },
+    "top-key": { x: 50, y: 75 },
+    "free-throw": { x: 50, y: 50 },
+    "left-elbow": { x: 25, y: 42 },
+    "right-elbow": { x: 75, y: 42 },
+    "left-wing": { x: 12, y: 70 },
+    "right-wing": { x: 88, y: 70 },
+  };
+  return positions[zoneId] || { x: 50, y: 50 };
+};
+
+// Helper function to get court zones
+const getCourtZones = () => COURT_ZONES;
+
 export default function Profile() {
   const { isTrainer } = useAuth();
   const [user, setUser] = useState(null);
@@ -408,28 +520,28 @@ export default function Profile() {
                   <div
                     key={session.id}
                     onClick={() => handleViewSession(session)}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-100 cursor-pointer transition-all group"
                   >
                     <div className="flex items-center gap-3">
-                      <Calendar className="w-4 h-4 text-gray-500" />
-                      <span className="font-medium">
+                      <Calendar className="w-4 h-4 text-gray-500 group-hover:text-orange-500 transition-colors" />
+                      <span className="font-medium group-hover:text-orange-600 transition-colors">
                         {format(new Date(session.date), "MMM d, yyyy")}
                       </span>
                     </div>
                     <div className="flex items-center gap-4 text-sm">
-                      <span className="text-gray-600">
+                      <span className="text-gray-600 group-hover:text-gray-800 transition-colors">
                         {session.made_shots}/{session.total_shots} shots
                       </span>
                       <Badge
                         className={
                           session.shooting_percentage >= 50
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
+                            ? "bg-green-100 text-green-800 group-hover:bg-green-200 transition-colors"
+                            : "bg-red-100 text-red-800 group-hover:bg-red-200 transition-colors"
                         }
                       >
                         {Math.round(session.shooting_percentage)}%
                       </Badge>
-                      <Eye className="w-4 h-4 text-gray-400" />
+                      <Eye className="w-4 h-4 text-gray-400 group-hover:text-orange-500 transition-colors" />
                     </div>
                   </div>
                 ))}
@@ -441,7 +553,7 @@ export default function Profile() {
 
       {/* Session Details Dialog */}
       <Dialog open={showSessionDialog} onOpenChange={setShowSessionDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Target className="w-6 h-6 text-orange-500" />
@@ -454,7 +566,8 @@ export default function Profile() {
           </DialogHeader>
 
           {selectedSession && (
-            <div className="space-y-4 py-4">
+            <div className="space-y-6 py-4">
+              {/* Summary Stats */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="text-center p-4 bg-blue-50 rounded-lg">
                   <div className="text-3xl font-bold text-blue-600">
@@ -491,6 +604,128 @@ export default function Profile() {
                   <div className="text-sm text-gray-600 mt-1">
                     Session Duration
                   </div>
+                </div>
+              )}
+
+              {/* Zone Stats Court View */}
+              {selectedSession.zone_stats && Object.keys(selectedSession.zone_stats).length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold text-center">Zone Breakdown</h3>
+                  
+                  {/* Court with Zone Stats */}
+                  <div className="relative">
+                    <div
+                      className="relative w-full rounded-lg border-2 border-gray-300 overflow-hidden bg-black"
+                      style={{ aspectRatio: "1 / 1" }}
+                    >
+                      {/* Background court image */}
+                      <img
+                        src="/images/half-court.png"
+                        alt="Basketball Court"
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+
+                      {/* Interactive SVG zones overlay */}
+                      <svg
+                        viewBox="0 0 100 100"
+                        className="absolute inset-0 w-full h-full"
+                        preserveAspectRatio="none"
+                      >
+                        {getCourtZones().map((zone) => {
+                          const stats = selectedSession.zone_stats[zone.id];
+                          const hasStats = stats && stats.attempts > 0;
+                          const percentage = hasStats
+                            ? ((stats.made / stats.attempts) * 100).toFixed(0)
+                            : "0";
+
+                          return (
+                            <g key={zone.id}>
+                              {/* Zone area */}
+                              <path
+                                d={zone.path}
+                                fill={
+                                  hasStats
+                                    ? zone.color
+                                    : "rgba(255, 255, 255, 0.05)"
+                                }
+                                stroke="rgba(255, 255, 255, 0.3)"
+                                strokeWidth="0.2"
+                              />
+
+                              {/* Zone stats text */}
+                              {hasStats && (
+                                <>
+                                  <text
+                                    x={getZoneLabelPosition(zone.id).x}
+                                    y={getZoneLabelPosition(zone.id).y}
+                                    textAnchor="middle"
+                                    fill="white"
+                                    fontSize="4"
+                                    fontWeight="bold"
+                                    className="pointer-events-none"
+                                    style={{
+                                      textShadow: "0 0 3px rgba(0,0,0,0.8)",
+                                    }}
+                                  >
+                                    {stats.made}-{stats.attempts}
+                                  </text>
+                                  <text
+                                    x={getZoneLabelPosition(zone.id).x}
+                                    y={getZoneLabelPosition(zone.id).y + 5}
+                                    textAnchor="middle"
+                                    fill="white"
+                                    fontSize="3.5"
+                                    fontWeight="bold"
+                                    className="pointer-events-none"
+                                    style={{
+                                      textShadow: "0 0 3px rgba(0,0,0,0.8)",
+                                    }}
+                                  >
+                                    {percentage}%
+                                  </text>
+                                </>
+                              )}
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Best Zone Highlight */}
+                  {(() => {
+                    const bestZone = Object.entries(selectedSession.zone_stats).reduce(
+                      (best, [zoneId, stats]) => {
+                        if (stats.attempts === 0) return best;
+                        const percentage = (stats.made / stats.attempts) * 100;
+                        if (!best || percentage > best.percentage) {
+                          const zoneName = getCourtZones().find((z) => z.id === zoneId)?.name;
+                          return {
+                            name: zoneName,
+                            percentage,
+                            made: stats.made,
+                            attempts: stats.attempts,
+                          };
+                        }
+                        return best;
+                      },
+                      null
+                    );
+
+                    return bestZone ? (
+                      <div className="text-center p-4 bg-purple-50 rounded-lg border-2 border-purple-300">
+                        <div className="text-lg font-bold text-purple-800 mb-1">
+                          🏆 Best Zone
+                        </div>
+                        <div className="text-2xl font-bold text-purple-600">
+                          {bestZone.name}
+                        </div>
+                        <div className="text-sm text-gray-600 mt-2">
+                          {bestZone.made}-{bestZone.attempts} ({bestZone.percentage.toFixed(0)}%)
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
               )}
 

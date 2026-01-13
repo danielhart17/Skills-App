@@ -346,8 +346,8 @@ class APIService {
             from: "shooting_sessions",
             columns: "*",
             filter: "user_id=eq.\(userId.uuidString)",
-            order: "date.desc",
-            limit: 20
+            order: "date.desc"
+            // Removed limit to show all sessions
         )
     }
     

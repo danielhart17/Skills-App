@@ -21,14 +21,119 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+// Define court zones matching the reference screenshot
+// Court orientation: Hoop at TOP (Y=0), Half-court at BOTTOM (Y=100)
+const COURT_ZONES = [
+  {
+    id: "left-corner",
+    name: "Left Corner",
+    color: "rgba(128, 128, 128, 0.5)", // Gray
+    hoverColor: "rgba(128, 128, 128, 0.7)",
+    path: "M 0 5 L 0 40 L 10.5 35 Q 7.5 30 8 5 Z", // Top left corner
+  },
+  {
+    id: "right-corner",
+    name: "Right Corner",
+    color: "rgba(128, 128, 128, 0.5)", // Gray
+    hoverColor: "rgba(128, 128, 128, 0.7)",
+    path: "M 92 5 Q 92.5 30 89.5 35 L 100 40 L 100 5 Z", // Top right corner
+  },
+  {
+    id: "left-mid",
+    name: "Left Mid",
+    color: "rgba(59, 130, 246, 0.5)", // Blue
+    hoverColor: "rgba(59, 130, 246, 0.7)",
+    path: "M 8 5 Q 7.5 30 10.5 35 L 25 28 L 25 5 Z", // Left wing/elbow
+  },
+  {
+    id: "right-mid",
+    name: "Right Mid",
+    color: "rgba(239, 68, 68, 0.5)", // Red
+    hoverColor: "rgba(239, 68, 68, 0.7)",
+    path: "M 75 5 L 75 28 L 89.5 35 Q 92.5 30  92 5 Z", // Right wing/elbow
+  },
+  {
+    id: "left-inside",
+    name: "Left Inside",
+    color: "rgba(59, 130, 246, 0.5)", // Blue
+    hoverColor: "rgba(59, 130, 246, 0.7)",
+    path: "M 25 5 L 40 5 Q 39 21 43 24 L 30 36 Q 25 31 25 27 L 25 5 Z", // Left wing/elbow
+  },
+  {
+    id: "inside",
+    name: "Inside",
+    color: "rgba(239, 68, 68, 0.5)", // Red
+    hoverColor: "rgba(239, 68, 68, 0.7)",
+    path: "M 43 24 Q 50 29.5 57 24 L 70 36 Q 67.5 39 63 41 Q 50 44.5 37 41 Q 32.5 39 30 36 L 43 24 Z", // Free throw circle area
+  },
+  {
+    id: "right-inside",
+    name: "Right Inside",
+    color: "rgba(239, 68, 68, 0.5)", // Red
+    hoverColor: "rgba(239, 68, 68, 0.7)",
+    path: "M 75 5 L 60 5 Q 61 21 57 24 L 70 36 Q 75 31 75 27  L 75 5 Z", // Right wing/elbow
+  },
+  {
+    id: "restricted",
+    name: "Restricted Area",
+    color: "rgba(239, 68, 68, 0.5)", // Red
+    hoverColor: "rgba(239, 68, 68, 0.7)",
+    path: "M 40 5 L 40 17 A 3 3 0 1 0 60 17 L 60 5 Z", // Center paint/restricted
+  },
+  {
+    id: "top-key",
+    name: "Top of Key",
+    color: "rgba(239, 68, 68, 0.5)", // Red
+    hoverColor: "rgba(239, 68, 68, 0.7)",
+    path: "M 30 55 L 20 100 L 80 100 L 70 55 Q 50 64 30 55 Z", // Top of key area
+  },
+  {
+    id: "free-throw",
+    name: "Free Throw",
+    color: "rgba(239, 68, 68, 0.5)", // Red
+    hoverColor: "rgba(239, 68, 68, 0.7)",
+    path: "M 37 41 L 30 55 Q 50 64 70 55 L 63 41 Q 50 45 37 41 Z", // Free throw circle area
+  },
+  {
+    id: "left-elbow",
+    name: "Left Elbow",
+    color: "rgba(239, 68, 68, 0.5)", // Red
+    hoverColor: "rgba(239, 68, 68, 0.7)",
+    path: "M 10.5 35 L 25 28 Q 27 35 37 41 L 30 55 Q 18 50 10.5 35 Z", // Left mid-range
+  },
+  {
+    id: "right-elbow",
+    name: "Right Elbow",
+    color: "rgba(239, 68, 68, 0.5)", // Red
+    hoverColor: "rgba(239, 68, 68, 0.7)",
+    path: "M 89.5 35 L 75 28 Q 73 35 63 41 L 70 55 Q 82 50 89.5 35 Z", // Right baseline area
+  },
+  {
+    id: "left-wing",
+    name: "Left Wing",
+    color: "rgba(239, 68, 68, 0.5)", // Red
+    hoverColor: "rgba(239, 68, 68, 0.7)",
+    path: "M 10.5 35 L 0 40 L 0 100 L 20 100 L 30 55 Q 18 50 10.5 35 Z", // Left mid-range
+  },
+  {
+    id: "right-wing",
+    name: "Right Wing",
+    color: "rgba(239, 68, 68, 0.5)", // Red
+    hoverColor: "rgba(239, 68, 68, 0.7)",
+    path: "M 89.5 35 L 100 40 L 100 100 L 80 100 L 70 55 Q 82 50 89.5 35 Z", // Right mid-range
+  },
+];
+
 export default function ShootingSessionPage() {
   const navigate = useNavigate();
   const [isActive, setIsActive] = useState(false);
   const [shots, setShots] = useState([]);
   const [sessionTime, setSessionTime] = useState(0);
-  const [selectedSpot, setSelectedSpot] = useState(null);
+  const [selectedZone, setSelectedZone] = useState(null);
+  const [hoveredZone, setHoveredZone] = useState(null);
   const [showSummary, setShowSummary] = useState(false);
   const [sessionSummary, setSessionSummary] = useState(null);
+  const [zoneStats, setZoneStats] = useState({});
   const courtRef = useRef(null);
   const timerRef = useRef(null);
 
@@ -44,34 +149,43 @@ export default function ShootingSessionPage() {
     return () => clearInterval(timerRef.current);
   }, [isActive]);
 
-  const handleCourtClick = (event) => {
+  const handleZoneClick = (zoneId) => {
     if (!isActive) return;
-
-    const rect = courtRef.current.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 100;
-    const y = ((event.clientY - rect.top) / rect.height) * 100;
-
-    setSelectedSpot({ x, y });
+    setSelectedZone(zoneId);
   };
 
   const recordShot = (made) => {
-    if (!selectedSpot) return;
+    if (!selectedZone) return;
 
     const newShot = {
-      x: selectedSpot.x,
-      y: selectedSpot.y,
+      zone: selectedZone,
       made,
       timestamp: new Date().toISOString(),
     };
 
     setShots((prev) => [...prev, newShot]);
-    setSelectedSpot(null);
+
+    // Update zone stats
+    setZoneStats((prev) => {
+      const current = prev[selectedZone] || { made: 0, attempts: 0 };
+      return {
+        ...prev,
+        [selectedZone]: {
+          made: current.made + (made ? 1 : 0),
+          attempts: current.attempts + 1,
+        },
+      };
+    });
+
+    setSelectedZone(null);
   };
 
   const startSession = () => {
     setIsActive(true);
     setShots([]);
     setSessionTime(0);
+    setZoneStats({});
+    setSelectedZone(null);
   };
 
   const pauseSession = () => {
@@ -85,12 +199,31 @@ export default function ShootingSessionPage() {
       const madeShots = shots.filter((shot) => shot.made).length;
       const percentage = (madeShots / shots.length) * 100;
 
+      // Get best zone stats
+      const bestZone = Object.entries(zoneStats).reduce(
+        (best, [zoneId, stats]) => {
+          const zonePercentage = (stats.made / stats.attempts) * 100;
+          if (!best || zonePercentage > best.percentage) {
+            const zoneName = COURT_ZONES.find((z) => z.id === zoneId)?.name;
+            return {
+              name: zoneName,
+              percentage: zonePercentage,
+              made: stats.made,
+              attempts: stats.attempts,
+            };
+          }
+          return best;
+        },
+        null
+      );
+
       try {
         const user = await User.me();
         await ShootingSession.create({
           user_id: user.id,
           date: new Date().toISOString().split("T")[0],
           shots_data: shots,
+          zone_stats: zoneStats, // Save zone stats
           total_shots: shots.length,
           made_shots: madeShots,
           shooting_percentage: percentage,
@@ -103,6 +236,7 @@ export default function ShootingSessionPage() {
           madeShots,
           percentage: percentage.toFixed(1),
           duration: formatTime(sessionTime),
+          bestZone,
         });
         setShowSummary(true);
       } catch (error) {
@@ -122,7 +256,8 @@ export default function ShootingSessionPage() {
     setIsActive(false);
     setShots([]);
     setSessionTime(0);
-    setSelectedSpot(null);
+    setSelectedZone(null);
+    setZoneStats({});
   };
 
   const formatTime = (seconds) => {
@@ -137,8 +272,43 @@ export default function ShootingSessionPage() {
   const getPercentage = () =>
     shots.length > 0 ? Math.round((getMadeShots() / shots.length) * 100) : 0;
 
-  const getZoneColor = (shot) => {
-    return shot.made ? "bg-green-500" : "bg-red-500";
+  // // Helper function to get approximate center X of a zone path
+  // const getZoneCenterX = (path) => {
+  //   // Extract numbers from path and average the X coordinates
+  //   const coords = path.match(/\d+/g);
+  //   if (!coords || coords.length === 0) return 50;
+  //   const xCoords = coords.filter((_, i) => i % 2 === 0).map(Number);
+  //   return xCoords.reduce((a, b) => a + b, 0) / xCoords.length;
+  // };
+
+  // // Helper function to get approximate center Y of a zone path
+  // const getZoneCenterY = (path) => {
+  //   // Extract numbers from path and average the Y coordinates
+  //   const coords = path.match(/\d+/g);
+  //   if (!coords || coords.length === 0) return 50;
+  //   const yCoords = coords.filter((_, i) => i % 2 === 1).map(Number);
+  //   return yCoords.reduce((a, b) => a + b, 0) / yCoords.length;
+  // };
+
+  // Around line 145, replace the helper functions with:
+  const getZoneLabelPosition = (zoneId) => {
+    const positions = {
+      "left-corner": { x: 5, y: 20 },
+      "right-corner": { x: 95, y: 20 },
+      "left-mid": { x: 17, y: 15 },
+      "right-mid": { x: 83, y: 15 },
+      "left-inside": { x: 33, y: 18 },
+      inside: { x: 50, y: 34 },
+      "right-inside": { x: 67, y: 18 },
+      restricted: { x: 50, y: 18 },
+      "top-key": { x: 50, y: 75 },
+      "free-throw": { x: 50, y: 50 },
+      "left-elbow": { x: 25, y: 42 },
+      "right-elbow": { x: 75, y: 42 },
+      "left-wing": { x: 12, y: 70 },
+      "right-wing": { x: 88, y: 70 },
+    };
+    return positions[zoneId] || { x: 50, y: 50 };
   };
 
   return (
@@ -178,134 +348,141 @@ export default function ShootingSessionPage() {
                 <div className="relative">
                   <div
                     ref={courtRef}
-                    onClick={handleCourtClick}
-                    className={`relative w-full bg-orange-200 rounded-lg border-2 border-orange-800 ${
-                      isActive ? "cursor-crosshair" : "cursor-not-allowed"
-                    } overflow-hidden`}
-                    style={{ aspectRatio: "94 / 85" }} // Realistic half-court aspect ratio
+                    className={`relative w-full rounded-lg border-2 border-gray-300 ${
+                      isActive ? "cursor-pointer" : "cursor-not-allowed"
+                    } overflow-hidden bg-black`}
+                    style={{ aspectRatio: "1 / 1" }}
                   >
-                    {/* SVG Court Lines based on reference image */}
+                    {/* Background court image */}
+                    <img
+                      src="/images/half-court.png"
+                      alt="Basketball Court"
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+
+                    {/* Interactive SVG zones overlay */}
                     <svg
-                      viewBox="0 0 940 850"
+                      viewBox="0 0 100 100"
                       className="absolute inset-0 w-full h-full"
                       preserveAspectRatio="none"
                     >
-                      <g stroke="#FF6B35" strokeWidth="8" fill="none">
-                        {/* The Key / Paint */}
-                        <rect
-                          x="310"
-                          y="0"
-                          width="320"
-                          height="380"
-                          fill="rgba(255, 107, 53, 0.15)"
-                        />
-                        {/* Free Throw Circle */}
-                        <circle cx="470" cy="380" r="120" strokeWidth="8" />
-                        {/* Free Throw Line */}
-                        <line
-                          x1="310"
-                          y1="380"
-                          x2="630"
-                          y2="380"
-                          strokeWidth="8"
-                        />
-                        {/* 3-Point Line - Curved arc at bottom */}
-                        <path d="M 50 260 Q 475 800, 875 260" strokeWidth="8" />
-                        <line x1="50" y1="0" x2="50" y2="262" />
-                        <line x1="875" y1="0" x2="875" y2="262" />
-                        {/* Key Hash Marks */}
-                        <g strokeWidth="6">
-                          <line x1="310" y1="140" x2="290" y2="140" />
-                          <line x1="310" y1="190" x2="290" y2="190" />
-                          <line x1="310" y1="240" x2="290" y2="240" />
+                      {COURT_ZONES.map((zone) => {
+                        const stats = zoneStats[zone.id];
+                        const isSelected = selectedZone === zone.id;
+                        const isHovered = hoveredZone === zone.id;
+                        const hasStats = stats && stats.attempts > 0;
+                        const percentage = hasStats
+                          ? ((stats.made / stats.attempts) * 100).toFixed(0)
+                          : "0";
 
-                          <line x1="630" y1="140" x2="650" y2="140" />
-                          <line x1="630" y1="190" x2="650" y2="190" />
-                          <line x1="630" y1="240" x2="650" y2="240" />
-                        </g>
-                      </g>
+                        return (
+                          <g key={zone.id}>
+                            {/* Zone area */}
+                            <path
+                              d={zone.path}
+                              fill={
+                                isSelected
+                                  ? "rgba(59, 130, 246, 0.8)"
+                                  : isHovered
+                                  ? zone.hoverColor
+                                  : hasStats
+                                  ? zone.color
+                                  : "rgba(255, 255, 255, 0.1)"
+                              }
+                              stroke={
+                                isSelected || isHovered
+                                  ? "#ffffff"
+                                  : "rgba(255, 255, 255, 0.3)"
+                              }
+                              strokeWidth={isSelected ? "0.5" : "0.2"}
+                              className={`transition-all duration-200 ${
+                                isActive ? "cursor-pointer" : ""
+                              }`}
+                              onClick={() => handleZoneClick(zone.id)}
+                              onMouseEnter={() => setHoveredZone(zone.id)}
+                              onMouseLeave={() => setHoveredZone(null)}
+                            />
 
-                      {/* Hoop and Backboard */}
-                      <g>
-                        <rect
-                          x="390"
-                          y="60"
-                          width="160"
-                          height="4"
-                          fill="rgba(0,0,0,0.2)"
-                        />
-                        <line
-                          x1="470"
-                          y1="64"
-                          x2="470"
-                          y2="88"
-                          stroke="rgba(0,0,0,0.3)"
-                          strokeWidth="4"
-                        />
-                        <circle
-                          cx="470"
-                          cy="105"
-                          r="15"
-                          fill="none"
-                          stroke="#FF6B35"
-                          strokeWidth="6"
-                        />
-                      </g>
+                            {/* Zone stats text */}
+                            {hasStats && (
+                              <>
+                                <text
+                                  // x={getZoneCenterX(zone.path)}
+                                  // y={getZoneCenterY(zone.path) - 2}
+                                  x={getZoneLabelPosition(zone.id).x}
+                                  y={getZoneLabelPosition(zone.id).y}
+                                  textAnchor="middle"
+                                  fill="white"
+                                  fontSize="4"
+                                  fontWeight="bold"
+                                  className="pointer-events-none"
+                                  style={{
+                                    textShadow: "0 0 3px rgba(0,0,0,0.8)",
+                                  }}
+                                >
+                                  {stats.made}-{stats.attempts}
+                                </text>
+                                <text
+                                  // x={getZoneCenterX(zone.path)}
+                                  // y={getZoneCenterY(zone.path) + 3}
+                                  x={getZoneLabelPosition(zone.id).x}
+                                  y={getZoneLabelPosition(zone.id).y + 5} // 5 units below the made-attempts
+                                  textAnchor="middle"
+                                  fill="white"
+                                  fontSize="3.5"
+                                  fontWeight="bold"
+                                  className="pointer-events-none"
+                                  style={{
+                                    textShadow: "0 0 3px rgba(0,0,0,0.8)",
+                                  }}
+                                >
+                                  {percentage}%
+                                </text>
+                              </>
+                            )}
+                          </g>
+                        );
+                      })}
                     </svg>
-
-                    {/* Shot markers */}
-                    {shots.map((shot, index) => (
-                      <div
-                        key={index}
-                        className={`absolute w-3 h-3 rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 ${getZoneColor(
-                          shot
-                        )}`}
-                        style={{
-                          left: `${shot.x}%`,
-                          top: `${shot.y}%`,
-                        }}
-                      />
-                    ))}
-
-                    {/* Selected spot indicator */}
-                    {selectedSpot && (
-                      <div
-                        className="absolute w-6 h-6 border-4 border-blue-500 rounded-full bg-blue-200/50 transform -translate-x-1/2 -translate-y-1/2 animate-pulse"
-                        style={{
-                          left: `${selectedSpot.x}%`,
-                          top: `${selectedSpot.y}%`,
-                        }}
-                      />
-                    )}
 
                     {/* Instructions overlay */}
                     {!isActive && shots.length === 0 && (
-                      <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+                      <div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center rounded-lg">
                         <div className="text-center text-white">
                           <Target className="w-12 h-12 mx-auto mb-4" />
                           <h3 className="text-xl font-bold mb-2">
                             Start Your Session
                           </h3>
                           <p className="text-sm opacity-90">
-                            Click start to begin tracking shots
+                            Click start to begin tracking shots by zone
                           </p>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Selected zone indicator */}
+                    {selectedZone && isActive && (
+                      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg">
+                        <p className="font-bold">
+                          {COURT_ZONES.find((z) => z.id === selectedZone)?.name}
+                        </p>
+                        <p className="text-xs">Did you make the shot?</p>
                       </div>
                     )}
                   </div>
 
                   {/* Shot recording buttons */}
-                  {selectedSpot && isActive && (
+                  {selectedZone && isActive && (
                     <div className="flex justify-center gap-4 mt-4">
                       <Button
                         onClick={() => recordShot(true)}
-                        className="bg-green-500 hover:bg-green-600 text-white px-8"
+                        className="bg-green-500 hover:bg-green-600 text-white px-8 py-6 text-lg"
                       >
                         ✅ Made
                       </Button>
                       <Button
                         onClick={() => recordShot(false)}
-                        className="bg-red-500 hover:bg-red-600 text-white px-8"
+                        className="bg-red-500 hover:bg-red-600 text-white px-8 py-6 text-lg"
                       >
                         ❌ Miss
                       </Button>
@@ -426,11 +603,10 @@ export default function ShootingSessionPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-orange-700 space-y-2">
-                <p>
-                  • Click anywhere on the court to mark your shooting position
-                </p>
-                <p>• Track makes and misses to build your shot chart</p>
-                <p>• Green dots = made shots, Red dots = misses</p>
+                <p>• Click any zone on the court to select it</p>
+                <p>• Mark each shot as Made (✅) or Miss (❌)</p>
+                <p>• Stats update in real-time for each zone</p>
+                <p>• Hover over zones to highlight them</p>
                 <p>• Session data saves automatically when you finish</p>
               </CardContent>
             </Card>
@@ -474,9 +650,25 @@ export default function ShootingSessionPage() {
                   {sessionSummary.percentage}%
                 </div>
                 <div className="text-sm text-gray-600 mt-2">
-                  Shooting Percentage
+                  Overall Shooting Percentage
                 </div>
               </div>
+
+              {sessionSummary.bestZone && (
+                <div className="text-center p-4 bg-purple-50 rounded-lg border-2 border-purple-300">
+                  <div className="text-lg font-bold text-purple-800 mb-1">
+                    🏆 Best Zone
+                  </div>
+                  <div className="text-2xl font-bold text-purple-600">
+                    {sessionSummary.bestZone.name}
+                  </div>
+                  <div className="text-sm text-gray-600 mt-2">
+                    {sessionSummary.bestZone.made}-
+                    {sessionSummary.bestZone.attempts} (
+                    {sessionSummary.bestZone.percentage.toFixed(0)}%)
+                  </div>
+                </div>
+              )}
 
               <div className="text-center p-4 bg-gray-50 rounded-lg">
                 <div className="text-2xl font-bold text-gray-700">

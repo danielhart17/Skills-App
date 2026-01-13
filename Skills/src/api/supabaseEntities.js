@@ -200,6 +200,9 @@ export const ShootingSession = {
       }
     });
 
+    // Order by date, newest first
+    queryBuilder = queryBuilder.order("date", { ascending: false });
+
     const { data, error } = await queryBuilder;
     if (error) throw error;
     return data || [];
