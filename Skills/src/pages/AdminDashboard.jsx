@@ -46,8 +46,10 @@ import {
   Target,
   Brain,
   Dumbbell,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ImageUpload } from "@/components/ImageUpload";
 
 export default function AdminDashboard() {
   const { isAdmin, profile } = useAuth();
@@ -198,10 +200,63 @@ export default function AdminDashboard() {
 
   const handleSave = async (table, data, isEdit = false) => {
     try {
-      const saveData = {
+      let saveData = {
         ...data,
         created_by: profile.id,
       };
+
+      // Special handling for lessons with new chapters
+      if (table === "lessons" && data.chapter && !data.chapter_id) {
+        // Check if chapter already exists
+        const { data: existingChapters } = await supabase
+          .from("chapters")
+          .select("*")
+          .eq("title", data.chapter)
+          .eq("mode", data.mode);
+
+        if (existingChapters && existingChapters.length > 0) {
+          // Use existing chapter
+          saveData.chapter_id = existingChapters[0].id;
+        } else {
+          // Create new chapter
+          console.log("📚 Creating new chapter:", data.chapter);
+          
+          // Get max order_index for this mode
+          const { data: maxOrderData } = await supabase
+            .from("chapters")
+            .select("order_index")
+            .eq("mode", data.mode)
+            .order("order_index", { ascending: false })
+            .limit(1);
+
+          const nextOrderIndex = maxOrderData && maxOrderData.length > 0 
+            ? (maxOrderData[0].order_index || 0) + 1 
+            : 1;
+
+          const { data: newChapter, error: chapterError } = await supabase
+            .from("chapters")
+            .insert([
+              {
+                title: data.chapter,
+                description: `Learn about ${data.chapter}`,
+                mode: data.mode,
+                order_index: nextOrderIndex,
+                is_active: true,
+              },
+            ])
+            .select()
+            .single();
+
+          if (chapterError) {
+            console.error("Error creating chapter:", chapterError);
+            throw chapterError;
+          }
+
+          console.log("✅ Chapter created:", newChapter);
+          saveData.chapter_id = newChapter.id;
+          toast.success(`Chapter "${data.chapter}" created!`);
+        }
+      }
 
       if (isEdit) {
         const { error } = await supabase
@@ -219,7 +274,7 @@ export default function AdminDashboard() {
       loadData();
     } catch (error) {
       console.error("Error saving:", error);
-      toast.error("Failed to save");
+      toast.error(error.message || "Failed to save");
     }
   };
 
@@ -327,6 +382,150 @@ export default function AdminDashboard() {
     }
   };
 
+  const recalculateAllChapterXP = async () => {
+    try {
+      toast.info("Recalculating XP for all chapters...");
+      
+      for (const chapter of chapters) {
+        const { data: chapterLessons } = await supabase
+          .from("lessons")
+          .select("xp_reward")
+          .eq("chapter_id", chapter.id);
+
+        const totalXP = chapterLessons
+          ? chapterLessons.reduce((sum, l) => sum + (l.xp_reward || 0), 0)
+          : 0;
+
+        await supabase
+          .from("chapters")
+          .update({ total_xp: totalXP })
+          .eq("id", chapter.id);
+
+        console.log(`✅ Updated ${chapter.title}: ${totalXP} XP`);
+      }
+
+      toast.success("All chapter XP recalculated!");
+      loadData();
+    } catch (error) {
+      console.error("Error recalculating XP:", error);
+      toast.error("Failed to recalculate XP");
+    }
+  };
+
+  const handleSaveChapter = async (chapterData, isEdit = false) => {
+    try {
+      const { selectedLessons, ...saveData } = chapterData;
+
+      // Calculate total XP from selected lessons
+      const totalXP = selectedLessons
+        ? selectedLessons.reduce((sum, lessonId) => {
+            const lesson = lessons.find((l) => l.id === lessonId);
+            return sum + (lesson?.xp_reward || 0);
+          }, 0)
+        : 0;
+
+      saveData.total_xp = totalXP;
+
+      console.log("💾 Saving chapter with total_xp:", totalXP, "saveData:", saveData);
+
+      if (isEdit) {
+        // Update chapter
+        const { error } = await supabase
+          .from("chapters")
+          .update(saveData)
+          .eq("id", chapterData.id);
+        if (error) throw error;
+
+        // Update lessons to belong to this chapter
+        if (selectedLessons) {
+          // First, remove chapter_id from all lessons that were in this chapter
+          await supabase
+            .from("lessons")
+            .update({ chapter_id: null })
+            .eq("chapter_id", chapterData.id);
+
+          // Then assign selected lessons to this chapter and update their order
+          if (selectedLessons.length > 0) {
+            // Update each lesson with its position
+            for (let i = 0; i < selectedLessons.length; i++) {
+              await supabase
+                .from("lessons")
+                .update({ 
+                  chapter_id: chapterData.id,
+                  order_index: i + 1 
+                })
+                .eq("id", selectedLessons[i]);
+            }
+          }
+        }
+
+        // Recalculate and update total_xp after lesson assignment
+        const { data: updatedLessons } = await supabase
+          .from("lessons")
+          .select("xp_reward")
+          .eq("chapter_id", chapterData.id);
+
+        const finalTotalXP = updatedLessons
+          ? updatedLessons.reduce((sum, l) => sum + (l.xp_reward || 0), 0)
+          : 0;
+
+        await supabase
+          .from("chapters")
+          .update({ total_xp: finalTotalXP })
+          .eq("id", chapterData.id);
+
+        console.log("✅ Chapter updated with final total_xp:", finalTotalXP);
+        toast.success("Chapter updated successfully");
+      } else {
+        // Create new chapter
+        const { data: newChapter, error } = await supabase
+          .from("chapters")
+          .insert([saveData])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // Assign selected lessons to new chapter with order
+        if (selectedLessons && selectedLessons.length > 0) {
+          for (let i = 0; i < selectedLessons.length; i++) {
+            await supabase
+              .from("lessons")
+              .update({ 
+                chapter_id: newChapter.id,
+                order_index: i + 1 
+              })
+              .eq("id", selectedLessons[i]);
+          }
+
+          // Recalculate total_xp after assignment
+          const { data: assignedLessons } = await supabase
+            .from("lessons")
+            .select("xp_reward")
+            .eq("chapter_id", newChapter.id);
+
+          const finalTotalXP = assignedLessons
+            ? assignedLessons.reduce((sum, l) => sum + (l.xp_reward || 0), 0)
+            : 0;
+
+          await supabase
+            .from("chapters")
+            .update({ total_xp: finalTotalXP })
+            .eq("id", newChapter.id);
+
+          console.log("✅ New chapter created with total_xp:", finalTotalXP);
+        }
+
+        toast.success("Chapter created successfully");
+      }
+
+      loadData();
+    } catch (error) {
+      console.error("Error saving chapter:", error);
+      toast.error(error.message || "Failed to save chapter");
+    }
+  };
+
   if (!isAdmin()) return null;
 
   return (
@@ -344,7 +543,11 @@ export default function AdminDashboard() {
         onValueChange={setActiveTab}
         className="space-y-6"
       >
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
+          <TabsTrigger value="chapters">
+            <BookOpen className="w-4 h-4 mr-2" />
+            Chapters
+          </TabsTrigger>
           <TabsTrigger value="lessons">
             <BookOpen className="w-4 h-4 mr-2" />
             Lessons
@@ -370,6 +573,106 @@ export default function AdminDashboard() {
             Users
           </TabsTrigger>
         </TabsList>
+
+        {/* Chapters Tab */}
+        <TabsContent value="chapters" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-semibold">
+              Chapters ({chapters.length})
+            </h2>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={recalculateAllChapterXP}
+              >
+                Recalculate All XP
+              </Button>
+              <ChapterDialog
+                onSave={(data) => handleSaveChapter(data)}
+                lessons={lessons}
+                trigger={
+                  <Button>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Chapter
+                  </Button>
+                }
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4">
+            {chapters.map((chapter) => (
+              <Card key={chapter.id}>
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <CardTitle className="flex items-center gap-2">
+                        {chapter.title}
+                        <Badge variant={chapter.mode === "iq" ? "default" : "secondary"}>
+                          {chapter.mode === "iq" ? (
+                            <>
+                              <Brain className="w-3 h-3 mr-1" />
+                              IQ Mode
+                            </>
+                          ) : (
+                            <>
+                              <Dumbbell className="w-3 h-3 mr-1" />
+                              On Court
+                            </>
+                          )}
+                        </Badge>
+                      </CardTitle>
+                      <CardDescription>{chapter.description}</CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      <ChapterDialog
+                        chapter={chapter}
+                        onSave={(data) => handleSaveChapter(data, true)}
+                        lessons={lessons}
+                        trigger={
+                          <Button variant="outline" size="sm">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        }
+                      />
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDelete("chapters", chapter.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Order:</span>
+                      <span className="ml-2 font-semibold">#{chapter.order_index}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Lessons:</span>
+                      <span className="ml-2 font-semibold">
+                        {lessons.filter((l) => l.chapter_id === chapter.id).length}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Total XP:</span>
+                      <span className="ml-2 font-semibold">{chapter.total_xp || 0}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Status:</span>
+                      <Badge variant={chapter.is_active ? "default" : "secondary"}>
+                        {chapter.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
 
         {/* Lessons Tab */}
         <TabsContent value="lessons" className="space-y-4">
@@ -1034,41 +1337,52 @@ function QuestionDialog({ question, lessonId: _lessonId, onSave, trigger }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="media_type">Media Type</Label>
-              <Select
-                value={formData.media_type}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, media_type: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="image">Image</SelectItem>
-                  <SelectItem value="video">Video</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {formData.media_type !== "none" && (
-              <div>
-                <Label htmlFor="media_url">Media URL</Label>
-                <Input
-                  id="media_url"
-                  type="url"
-                  value={formData.media_url}
-                  onChange={(e) =>
-                    setFormData({ ...formData, media_url: e.target.value })
-                  }
-                  placeholder="https://..."
-                />
-              </div>
-            )}
+          <div>
+            <Label htmlFor="media_type">Media Type</Label>
+            <Select
+              value={formData.media_type}
+              onValueChange={(value) =>
+                setFormData({ ...formData, media_type: value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="image">Image</SelectItem>
+                <SelectItem value="video">Video</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+
+          {formData.media_type === "image" && (
+            <ImageUpload
+              value={formData.media_url}
+              onChange={(url) =>
+                setFormData({ ...formData, media_url: url })
+              }
+              label="Question Image"
+            />
+          )}
+
+          {formData.media_type === "video" && (
+            <div>
+              <Label htmlFor="media_url">Video URL</Label>
+              <Input
+                id="media_url"
+                type="url"
+                value={formData.media_url}
+                onChange={(e) =>
+                  setFormData({ ...formData, media_url: e.target.value })
+                }
+                placeholder="https://www.youtube.com/watch?v=... or https://..."
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Paste a YouTube URL or direct video link
+              </p>
+            </div>
+          )}
 
           <div className="space-y-3">
             <Label>Answer Options *</Label>
@@ -1209,7 +1523,19 @@ function LessonDialog({ lesson, onSave, trigger, chapters }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(formData);
+    
+    // Find chapter_id if chapter name is selected from existing chapters
+    const dataToSave = { ...formData };
+    if (dataToSave.chapter && !isCreatingNewChapter) {
+      const selectedChapter = chapters.find(
+        (ch) => ch.title === dataToSave.chapter && ch.mode === dataToSave.mode
+      );
+      if (selectedChapter) {
+        dataToSave.chapter_id = selectedChapter.id;
+      }
+    }
+    
+    onSave(dataToSave);
     setOpen(false);
   };
 
@@ -1952,6 +2278,293 @@ function DrillDialog({ drill, onSave, trigger }) {
               Cancel
             </Button>
             <Button type="submit">{drill ? "Update" : "Create"} Drill</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Chapter Dialog Component
+function ChapterDialog({ chapter, onSave, trigger, lessons }) {
+  const [open, setOpen] = useState(false);
+  const [formData, setFormData] = useState(
+    chapter || {
+      title: "",
+      description: "",
+      mode: "iq",
+      order_index: 1,
+      is_active: true,
+    }
+  );
+  const [selectedLessons, setSelectedLessons] = useState(
+    chapter
+      ? lessons.filter((l) => l.chapter_id === chapter.id).map((l) => l.id)
+      : []
+  );
+  const [draggedIndex, setDraggedIndex] = useState(null);
+
+  // Filter lessons by mode
+  const availableLessons = lessons.filter((l) => l.mode === formData.mode);
+
+  // Calculate total XP
+  const totalXP = selectedLessons.reduce((sum, lessonId) => {
+    const lesson = lessons.find((l) => l.id === lessonId);
+    return sum + (lesson?.xp_reward || 0);
+  }, 0);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave({ ...formData, selectedLessons });
+    setOpen(false);
+  };
+
+  const toggleLesson = (lessonId) => {
+    setSelectedLessons((prev) =>
+      prev.includes(lessonId)
+        ? prev.filter((id) => id !== lessonId)
+        : [...prev, lessonId]
+    );
+  };
+
+  const handleDragStart = (index) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const newLessons = [...selectedLessons];
+    const draggedLesson = newLessons[draggedIndex];
+    newLessons.splice(draggedIndex, 1);
+    newLessons.splice(index, 0, draggedLesson);
+
+    setSelectedLessons(newLessons);
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            {chapter ? "Edit Chapter" : "Create New Chapter"}
+          </DialogTitle>
+          <DialogDescription>
+            {chapter
+              ? "Update chapter details and manage lessons"
+              : "Add a new chapter to organize lessons"}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="chapter-title">Title *</Label>
+            <Input
+              id="chapter-title"
+              value={formData.title}
+              onChange={(e) =>
+                setFormData({ ...formData, title: e.target.value })
+              }
+              required
+              placeholder="e.g., Fundamentals, Defense, Offense"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="chapter-description">Description</Label>
+            <Textarea
+              id="chapter-description"
+              value={formData.description}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
+              rows={2}
+              placeholder="Brief description of what this chapter covers"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="chapter-mode">Mode</Label>
+              <Select
+                value={formData.mode}
+                onValueChange={(value) => {
+                  setFormData({ ...formData, mode: value });
+                  setSelectedLessons([]); // Clear lessons when mode changes
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="iq">
+                    <div className="flex items-center gap-2">
+                      <Brain className="w-4 h-4" />
+                      IQ Mode
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="oncourt">
+                    <div className="flex items-center gap-2">
+                      <Dumbbell className="w-4 h-4" />
+                      On Court
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="chapter-order">Order Index</Label>
+              <Input
+                id="chapter-order"
+                type="number"
+                value={formData.order_index}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    order_index: parseInt(e.target.value) || 1,
+                  })
+                }
+                min="1"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="chapter-active"
+              checked={formData.is_active}
+              onChange={(e) =>
+                setFormData({ ...formData, is_active: e.target.checked })
+              }
+              className="rounded"
+            />
+            <Label htmlFor="chapter-active">Active Chapter</Label>
+          </div>
+
+          {/* Lesson Selection */}
+          <div className="border-t pt-4">
+            <div className="flex justify-between items-center mb-3">
+              <Label>Lessons in this Chapter</Label>
+              <Badge variant="secondary">
+                Total XP: {totalXP}
+              </Badge>
+            </div>
+
+            {availableLessons.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No lessons available for {formData.mode === "iq" ? "IQ Mode" : "On Court"}. Create lessons first.
+              </p>
+            ) : (
+              <>
+                {/* Available Lessons */}
+                <div className="mb-4">
+                  <p className="text-sm font-medium mb-2">Available Lessons:</p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-2">
+                    {availableLessons
+                      .filter((lesson) => !selectedLessons.includes(lesson.id))
+                      .map((lesson) => (
+                        <div
+                          key={lesson.id}
+                          className="flex items-center justify-between p-2 hover:bg-gray-100 rounded cursor-pointer"
+                          onClick={() => toggleLesson(lesson.id)}
+                        >
+                          <div className="flex-1">
+                            <p className="font-medium text-sm">{lesson.title}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {lesson.xp_reward} XP
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleLesson(lesson.id);
+                            }}
+                          >
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Selected Lessons (Draggable) */}
+                {selectedLessons.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium mb-2">
+                      Selected Lessons ({selectedLessons.length}):
+                    </p>
+                    <div className="space-y-2 border rounded-lg p-2 bg-blue-50">
+                      {selectedLessons.map((lessonId, index) => {
+                        const lesson = lessons.find((l) => l.id === lessonId);
+                        if (!lesson) return null;
+
+                        return (
+                          <div
+                            key={lessonId}
+                            draggable
+                            onDragStart={() => handleDragStart(index)}
+                            onDragOver={(e) => handleDragOver(e, index)}
+                            onDragEnd={handleDragEnd}
+                            className={`flex items-center justify-between p-2 bg-white rounded border-2 cursor-move ${
+                              draggedIndex === index
+                                ? "border-blue-500 opacity-50"
+                                : "border-gray-200"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 flex-1">
+                              <span className="text-gray-400">☰</span>
+                              <div>
+                                <p className="font-medium text-sm">
+                                  {index + 1}. {lesson.title}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {lesson.xp_reward} XP
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => toggleLesson(lessonId)}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      💡 Drag to reorder lessons
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit">
+              {chapter ? "Update" : "Create"} Chapter
+            </Button>
           </div>
         </form>
       </DialogContent>
