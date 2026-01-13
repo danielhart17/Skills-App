@@ -10,6 +10,26 @@ import SwiftUI
 struct MainTabView: View {
     @StateObject private var authService = AuthService.shared
     
+    init() {
+        // Configure tab bar appearance to match web version
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = UIColor(Color.appBackground)
+        
+        // Selected tab color - use the orange from the gradient
+        // Note: UITabBar doesn't support gradients natively, so we use the primary orange color
+        // For a true gradient effect on the icon, you'd need a custom tab bar
+        UITabBar.appearance().tintColor = UIColor(Color.brandOrange)
+        
+        // Unselected tab color
+        UITabBar.appearance().unselectedItemTintColor = UIColor(Color.textSecondary)
+        
+        UITabBar.appearance().standardAppearance = appearance
+        if #available(iOS 15.0, *) {
+            UITabBar.appearance().scrollEdgeAppearance = appearance
+        }
+    }
+    
     var body: some View {
         TabView {
             // Admin Dashboard (admins only)
@@ -48,7 +68,7 @@ struct MainTabView: View {
                     Label("Events", systemImage: "calendar")
                 }
         }
-        .accentColor(.orange)
+        .accentColor(.brandOrange)
     }
 }
 

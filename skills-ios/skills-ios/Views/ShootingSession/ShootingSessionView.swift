@@ -267,8 +267,8 @@ struct BasketballCourt: Shape {
         
         // Three-point line (simplified arc)
         path.addArc(
-            center: CGPoint(x: rect.midX, y: rect.maxY),
-            radius: rect.width * 0.35,
+            center: CGPoint(x: rect.midX, y: rect.maxY-40),
+            radius: rect.width * 0.4,
             startAngle: .degrees(180),
             endAngle: .degrees(0),
             clockwise: false
@@ -293,9 +293,14 @@ struct BasketballCourt: Shape {
         // Hoop position
         path.addEllipse(in: CGRect(
             x: rect.midX - 5,
-            y: rect.maxY - 5,
+            y: rect.maxY - 25,
             width: 10,
             height: 10
+        ))
+        
+        path.addLine(to: CGPoint(
+            x: rect.midX,
+            y: rect.maxY - 25
         ))
         
         return path

@@ -66,17 +66,17 @@ struct QuestionView: View {
                             .fixedSize(horizontal: false, vertical: true)
                         
                         // Media (if any)
-                        if currentQuestion.mediaType != .none, let mediaUrl = currentQuestion.mediaUrl {
+                        if currentQuestion.mediaType != .none, let mediaUrl = currentQuestion.mediaUrl, !mediaUrl.isEmpty {
                             if currentQuestion.mediaType == .image {
-                                AsyncImage(url: URL(string: mediaUrl)) { image in
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                } placeholder: {
-                                    ProgressView()
-                                }
-                                .frame(maxHeight: 200)
-                                .cornerRadius(10)
+                                RemoteImageView(
+                                    imageURL: mediaUrl,
+                                    maxHeight: 200,
+                                    cornerRadius: 10,
+                                    contentMode: .fit
+                                )
+                            } else if currentQuestion.mediaType == .video {
+                                EmbeddedVideoPlayerView(videoURL: mediaUrl)
+                                    .frame(maxHeight: 250)
                             }
                         }
                         

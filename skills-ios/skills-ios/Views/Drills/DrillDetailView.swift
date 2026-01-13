@@ -16,19 +16,34 @@ struct DrillDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // Header Image
-                Rectangle()
-                    .fill(LinearGradient(
-                        gradient: Gradient(colors: [.orange, .purple]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
-                    .frame(height: 200)
-                    .overlay(
-                        Image(systemName: "figure.basketball")
-                            .font(.system(size: 60))
-                            .foregroundColor(.white)
+                // Video or Header Image
+                if let videoUrl = drill.videoUrl, !videoUrl.isEmpty {
+                    VideoPlayerView(videoURL: videoUrl)
+                        .frame(height: 250)
+                        .clipped()
+                } else if let thumbnailUrl = drill.thumbnailUrl, !thumbnailUrl.isEmpty {
+                    RemoteImageView(
+                        imageURL: thumbnailUrl,
+                        maxHeight: 200,
+                        cornerRadius: 0,
+                        contentMode: .fill
                     )
+                    .clipped()
+                } else {
+                    // Fallback placeholder
+                    Rectangle()
+                        .fill(LinearGradient(
+                            gradient: Gradient(colors: [.brandOrange, .purple]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .frame(height: 200)
+                        .overlay(
+                            Image(systemName: "figure.basketball")
+                                .font(.system(size: 60))
+                                .foregroundColor(.white)
+                        )
+                }
                 
                 VStack(alignment: .leading, spacing: 15) {
                     // Title
