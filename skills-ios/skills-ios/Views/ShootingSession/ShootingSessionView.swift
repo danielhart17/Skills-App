@@ -624,7 +624,7 @@ struct SessionSummaryView: View {
     }
 }
 
-struct StatRow: View {
+private struct StatRow: View {
     let label: String
     let value: String
     

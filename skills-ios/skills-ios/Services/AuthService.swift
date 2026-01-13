@@ -63,7 +63,7 @@ class AuthService: ObservableObject {
     }
     
     func isTrainer() -> Bool {
-        currentUser?.role == .trainer || currentUser?.role == .admin
+        currentUser?.role == .trainer  // Only trainers, not admins
     }
     
     func isUser() -> Bool {
