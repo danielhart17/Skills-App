@@ -18,6 +18,7 @@ struct User: Codable, Identifiable {
     var longestStreak: Int
     var avatarUrl: String?
     var trainerId: UUID?
+    var entryExamCompleted: Bool
     let createdAt: Date
     let updatedAt: Date
     
@@ -32,6 +33,7 @@ struct User: Codable, Identifiable {
         case longestStreak = "longest_streak"
         case avatarUrl = "avatar_url"
         case trainerId = "trainer_id"
+        case entryExamCompleted = "entry_exam_completed"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }

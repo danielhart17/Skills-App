@@ -367,6 +367,103 @@ class APIService {
         // Return unique lesson IDs only (remove duplicates)
         return Array(Set(attempts.map { $0.lessonId }))
     }
+    
+    // MARK: - Entry Exam
+    
+    func fetchExamQuestions() async throws -> [ExamQuestion] {
+        return try await supabase.select(
+            from: "exam_questions",
+            columns: "*",
+            filter: "is_active=eq.true",
+            order: "difficulty.asc,order_index.asc"
+        )
+    }
+    
+    func hasCompletedEntryExam() async throws -> Bool {
+        guard let userId = AuthService.shared.currentUser?.id else {
+            throw APIError.notAuthenticated
+        }
+        
+        struct ExamCheck: Decodable {
+            let id: UUID
+        }
+        
+        let results: [ExamCheck] = try await supabase.select(
+            from: "entry_exam_results",
+            columns: "id",
+            filter: "user_id=eq.\(userId.uuidString)"
+        )
+        
+        return !results.isEmpty
+    }
+    
+    func submitEntryExamResult(
+        beginnerCorrect: Int,
+        intermediateCorrect: Int,
+        advancedCorrect: Int,
+        totalCorrect: Int,
+        percentage: Int,
+        startingXP: Int,
+        startingLevel: Int,
+        timeSpent: Int
+    ) async throws {
+        guard let userId = AuthService.shared.currentUser?.id else {
+            throw APIError.notAuthenticated
+        }
+        
+        struct ExamResultData: Encodable {
+            let user_id: String
+            let beginner_correct: Int
+            let beginner_total: Int
+            let intermediate_correct: Int
+            let intermediate_total: Int
+            let advanced_correct: Int
+            let advanced_total: Int
+            let total_correct: Int
+            let total_questions: Int
+            let percentage: Int
+            let starting_level: Int
+            let starting_xp: Int
+            let time_spent: Int
+        }
+        
+        let result = ExamResultData(
+            user_id: userId.uuidString,
+            beginner_correct: beginnerCorrect,
+            beginner_total: 4,
+            intermediate_correct: intermediateCorrect,
+            intermediate_total: 4,
+            advanced_correct: advancedCorrect,
+            advanced_total: 4,
+            total_correct: totalCorrect,
+            total_questions: 12,
+            percentage: percentage,
+            starting_level: startingLevel,
+            starting_xp: startingXP,
+            time_spent: timeSpent
+        )
+        
+        try await supabase.insert(into: "entry_exam_results", values: result)
+        
+        // Update user profile with starting XP and level
+        struct ProfileUpdate: Encodable {
+            let total_xp: Int
+            let current_level: Int
+            let entry_exam_completed: Bool
+        }
+        
+        let profileUpdate = ProfileUpdate(
+            total_xp: startingXP,
+            current_level: startingLevel,
+            entry_exam_completed: true
+        )
+        
+        try await supabase.update(
+            table: "profiles",
+            id: userId.uuidString,
+            values: profileUpdate
+        )
+    }
 }
 
 enum APIError: LocalizedError {
