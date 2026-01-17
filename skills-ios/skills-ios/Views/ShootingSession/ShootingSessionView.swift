@@ -153,11 +153,11 @@ struct ShootingSessionView: View {
                             }
                         }
                         .frame(width: geometry.size.width, height: geometry.size.width)
-                        .contentShape(Rectangle())
-                        .gesture(
-                            DragGesture(minimumDistance: 0)
-                                .onEnded { value in
-                                    if isSessionActive {
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onEnded { value in
+                                if isSessionActive {
                                         handleCourtTap(at: value.location, in: geometry.size)
                                     }
                                 }
@@ -404,84 +404,141 @@ struct ShootingSessionView: View {
     }
 }
 
-// Helper to create court zones matching the reference screenshot
+// Helper to create court zones matching the web app exactly
 // Court orientation: Hoop at TOP (Y=0), Half-court at BOTTOM (Y=100)
 func createCourtZones() -> [CourtZone] {
     return [
+        // Corner 3-pointers (Gray)
         CourtZone(
             id: "left-corner",
             name: "Left Corner",
-            path: createPath("M 0 0 L 0 40 L 12 40 L 12 0 Z"),
+            path: createPath("M 0 5 L 0 40 L 10.5 35 Q 7.5 30 8 5 Z"),
             color: .gray
         ),
         CourtZone(
-            id: "left-wing",
-            name: "Left Wing",
-            path: createPath("M 12 0 L 12 40 L 32 35 L 32 0 Z"),
+            id: "right-corner",
+            name: "Right Corner",
+            path: createPath("M 92 5 Q 92.5 30 89.5 35 L 100 40 L 100 5 Z"),
+            color: .gray
+        ),
+        
+        // Mid-range wings (Blue/Red)
+        CourtZone(
+            id: "left-mid",
+            name: "Left Mid",
+            path: createPath("M 8 5 Q 7.5 30 10.5 35 L 25 28 L 25 5 Z"),
             color: .blue
         ),
         CourtZone(
+            id: "right-mid",
+            name: "Right Mid",
+            path: createPath("M 75 5 L 75 28 L 89.5 35 Q 92.5 30 92 5 Z"),
+            color: .red
+        ),
+        
+        // Inside paint areas
+        CourtZone(
+            id: "left-inside",
+            name: "Left Inside",
+            path: createPath("M 25 5 L 40 5 Q 39 21 43 24 L 30 36 Q 25 31 25 27 L 25 5 Z"),
+            color: .blue
+        ),
+        CourtZone(
+            id: "inside",
+            name: "Inside",
+            path: createPath("M 43 24 Q 50 29.5 57 24 L 70 36 Q 67.5 39 63 41 Q 50 44.5 37 41 Q 32.5 39 30 36 L 43 24 Z"),
+            color: .red
+        ),
+        CourtZone(
+            id: "right-inside",
+            name: "Right Inside",
+            path: createPath("M 75 5 L 60 5 Q 61 21 57 24 L 70 36 Q 75 31 75 27 L 75 5 Z"),
+            color: .red
+        ),
+        
+        // Restricted area (under the basket)
+        CourtZone(
             id: "restricted",
             name: "Restricted Area",
-            path: createPath("M 32 0 L 32 35 L 68 35 L 68 0 Z"),
+            path: createRestrictedAreaPath(),
+            color: .red
+        ),
+        
+        // Free throw and key areas
+        CourtZone(
+            id: "free-throw",
+            name: "Free Throw",
+            path: createPath("M 37 41 L 30 55 Q 50 64 70 55 L 63 41 Q 50 45 37 41 Z"),
+            color: .red
+        ),
+        CourtZone(
+            id: "top-key",
+            name: "Top of Key",
+            path: createPath("M 30 55 L 20 100 L 80 100 L 70 55 Q 50 64 30 55 Z"),
+            color: .red
+        ),
+        
+        // Elbow areas
+        CourtZone(
+            id: "left-elbow",
+            name: "Left Elbow",
+            path: createPath("M 10.5 35 L 25 28 Q 27 35 37 41 L 30 55 Q 18 50 10.5 35 Z"),
+            color: .red
+        ),
+        CourtZone(
+            id: "right-elbow",
+            name: "Right Elbow",
+            path: createPath("M 89.5 35 L 75 28 Q 73 35 63 41 L 70 55 Q 82 50 89.5 35 Z"),
+            color: .red
+        ),
+        
+        // Wing 3-pointers
+        CourtZone(
+            id: "left-wing",
+            name: "Left Wing",
+            path: createPath("M 10.5 35 L 0 40 L 0 100 L 20 100 L 30 55 Q 18 50 10.5 35 Z"),
             color: .red
         ),
         CourtZone(
             id: "right-wing",
             name: "Right Wing",
-            path: createPath("M 68 0 L 68 35 L 88 40 L 88 0 Z"),
-            color: .red
-        ),
-        CourtZone(
-            id: "right-corner",
-            name: "Right Corner",
-            path: createPath("M 88 0 L 88 40 L 100 40 L 100 0 Z"),
-            color: .gray
-        ),
-        CourtZone(
-            id: "top-key",
-            name: "Top of Key",
-            path: createPath("M 32 35 L 32 55 L 68 55 L 68 35 Z"),
-            color: .red
-        ),
-        CourtZone(
-            id: "free-throw",
-            name: "Free Throw",
-            path: createPath("M 40 55 L 40 65 L 60 65 L 60 55 Z"),
-            color: .red
-        ),
-        CourtZone(
-            id: "left-mid",
-            name: "Left Mid",
-            path: createPath("M 12 40 L 12 100 L 32 100 L 32 55 L 32 35 Z"),
-            color: .red
-        ),
-        CourtZone(
-            id: "right-mid",
-            name: "Right Mid",
-            path: createPath("M 68 35 L 68 55 L 68 100 L 88 100 L 88 40 Z"),
-            color: .red
-        ),
-        CourtZone(
-            id: "left-baseline",
-            name: "Left Baseline",
-            path: createPath("M 32 55 L 32 100 L 40 100 L 40 65 Z"),
-            color: .red
-        ),
-        CourtZone(
-            id: "right-baseline",
-            name: "Right Baseline",
-            path: createPath("M 60 65 L 60 100 L 68 100 L 68 55 Z"),
+            path: createPath("M 89.5 35 L 100 40 L 100 100 L 80 100 L 70 55 Q 82 50 89.5 35 Z"),
             color: .red
         ),
     ]
 }
 
+// Special function to create the restricted area with the curved bottom
+func createRestrictedAreaPath() -> Path {
+    var path = Path()
+    
+    // Start at top-left of restricted area
+    path.move(to: CGPoint(x: 40, y: 5))
+    path.addLine(to: CGPoint(x: 40, y: 17))
+    
+    // Add arc for the curved bottom (semi-circle)
+        path.addArc(
+        center: CGPoint(x: 50, y: 17),
+        radius: 10,
+            startAngle: .degrees(180),
+            endAngle: .degrees(0),
+            clockwise: true
+        )
+        
+    path.addLine(to: CGPoint(x: 60, y: 5))
+    // path.addLine(to: CGPoint(x: 40, y: 5))
+    path.closeSubpath()
+    
+    return path
+}
+
 // Helper to parse SVG-like path string into SwiftUI Path
+// Supports M (move), L (line), Q (quadratic bezier), A (arc), Z (close)
 func createPath(_ pathString: String) -> Path {
     var path = Path()
     let commands = pathString.split(separator: " ")
     var currentPoint = CGPoint.zero
+    var startPoint = CGPoint.zero
     
     var i = 0
     while i < commands.count {
@@ -493,6 +550,7 @@ func createPath(_ pathString: String) -> Path {
                 let x = Double(commands[i + 1]) ?? 0
                 let y = Double(commands[i + 2]) ?? 0
                 currentPoint = CGPoint(x: x, y: y)
+                startPoint = currentPoint
                 path.move(to: currentPoint)
                 i += 3
             } else {
@@ -510,6 +568,62 @@ func createPath(_ pathString: String) -> Path {
                 i += 1
             }
             
+        case "Q": // Quadratic bezier curve
+            if i + 4 < commands.count {
+                let cpX = Double(commands[i + 1]) ?? 0
+                let cpY = Double(commands[i + 2]) ?? 0
+                let endX = Double(commands[i + 3]) ?? 0
+                let endY = Double(commands[i + 4]) ?? 0
+                let controlPoint = CGPoint(x: cpX, y: cpY)
+                currentPoint = CGPoint(x: endX, y: endY)
+                path.addQuadCurve(to: currentPoint, control: controlPoint)
+                i += 5
+            } else {
+                i += 1
+            }
+            
+        case "A": // Arc (simplified - SVG arc to SwiftUI arc approximation)
+            // SVG Arc: A rx ry x-axis-rotation large-arc-flag sweep-flag x y
+            if i + 7 < commands.count {
+                let rx = Double(commands[i + 1]) ?? 0
+                let ry = Double(commands[i + 2]) ?? 0
+                // Skip x-axis-rotation (commands[i + 3])
+                let largeArcFlag = Int(commands[i + 4]) ?? 0
+                let sweepFlag = Int(commands[i + 5]) ?? 0
+                let endX = Double(commands[i + 6]) ?? 0
+                let endY = Double(commands[i + 7]) ?? 0
+                
+                // Calculate arc center and angles
+                let endPoint = CGPoint(x: endX, y: endY)
+                
+                // For the restricted area arc, we use an approximation
+                // The arc goes from currentPoint to endPoint with the given radius
+                let midX = (currentPoint.x + endPoint.x) / 2
+                let midY = currentPoint.y + rx * 2 // Approximate center below start
+                
+                // Use a simple arc that approximates the SVG arc
+                let centerX = midX
+                let centerY = currentPoint.y + (rx * 1.5) // Adjust for visual match
+                let radius = rx * 3 // Scale radius to match visual
+                
+                // Calculate start and end angles
+                let startAngle = Angle(degrees: -180)
+                let endAngle = Angle(degrees: 0)
+                
+        path.addArc(
+                    center: CGPoint(x: centerX, y: centerY),
+                    radius: radius,
+                    startAngle: startAngle,
+                    endAngle: endAngle,
+                    clockwise: sweepFlag == 0
+                )
+                
+                currentPoint = endPoint
+                i += 8
+            } else {
+                i += 1
+            }
+            
         case "Z": // Close path
             path.closeSubpath()
             i += 1
@@ -518,9 +632,9 @@ func createPath(_ pathString: String) -> Path {
             i += 1
         }
     }
-    
-    return path
-}
+        
+        return path
+    }
 
 struct ZoneStat {
     var made: Int
