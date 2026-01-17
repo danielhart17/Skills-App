@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { EntryExam } from "@/api/entities";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -42,6 +43,7 @@ const DIFFICULTY_CONFIG = {
 
 export default function EntryExamPage() {
   const navigate = useNavigate();
+  const { refreshProfile } = useAuth();
   
   const [phase, setPhase] = useState("intro"); // intro, exam, results
   const [questions, setQuestions] = useState([]);
@@ -357,7 +359,10 @@ export default function EntryExamPage() {
             </div>
 
             <Button 
-              onClick={() => navigate("/")}
+              onClick={async () => {
+                await refreshProfile();
+                navigate("/");
+              }}
               className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white py-6 text-lg"
             >
               Start Learning

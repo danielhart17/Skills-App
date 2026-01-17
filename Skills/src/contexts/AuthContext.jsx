@@ -196,6 +196,14 @@ export const AuthProvider = ({ children }) => {
     if (error) throw error;
   };
 
+  // Refresh profile data (useful after completing entry exam, etc.)
+  const refreshProfile = async () => {
+    if (user?.id) {
+      return await fetchProfile(user.id, true);
+    }
+    return null;
+  };
+
   const value = {
     user,
     profile,
@@ -208,6 +216,7 @@ export const AuthProvider = ({ children }) => {
     signIn,
     signUp,
     signOut,
+    refreshProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
