@@ -460,8 +460,8 @@ class APIService {
         
         try await supabase.update(
             table: "profiles",
-            id: userId.uuidString,
-            values: profileUpdate
+            values: profileUpdate,
+            filter: "id=eq.\(userId.uuidString)"
         )
     }
 }

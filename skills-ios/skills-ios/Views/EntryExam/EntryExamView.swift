@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct EntryExamView: View {
     @StateObject private var viewModel = EntryExamViewModel()
@@ -23,7 +24,7 @@ struct EntryExamView: View {
             
             switch viewModel.phase {
             case .loading:
-                LoadingView()
+                ExamLoadingView()
                 
             case .intro:
                 ExamIntroView(onStart: viewModel.startExam)
@@ -201,7 +202,7 @@ struct ExamResultData {
 
 // MARK: - Loading View
 
-private struct LoadingView: View {
+private struct ExamLoadingView: View {
     var body: some View {
         VStack {
             Image(systemName: "basketball.fill")
@@ -404,7 +405,7 @@ private struct ExamQuestionView: View {
                         
                         // Options
                         VStack(spacing: 12) {
-                            AnswerOption(
+                            ExamAnswerOption(
                                 letter: "A",
                                 text: question.optionA,
                                 isSelected: viewModel.selectedAnswer == "A",
@@ -412,7 +413,7 @@ private struct ExamQuestionView: View {
                                 hasAnswered: viewModel.hasAnswered,
                                 onTap: { viewModel.selectAnswer("A") }
                             )
-                            AnswerOption(
+                            ExamAnswerOption(
                                 letter: "B",
                                 text: question.optionB,
                                 isSelected: viewModel.selectedAnswer == "B",
@@ -420,7 +421,7 @@ private struct ExamQuestionView: View {
                                 hasAnswered: viewModel.hasAnswered,
                                 onTap: { viewModel.selectAnswer("B") }
                             )
-                            AnswerOption(
+                            ExamAnswerOption(
                                 letter: "C",
                                 text: question.optionC,
                                 isSelected: viewModel.selectedAnswer == "C",
@@ -428,7 +429,7 @@ private struct ExamQuestionView: View {
                                 hasAnswered: viewModel.hasAnswered,
                                 onTap: { viewModel.selectAnswer("C") }
                             )
-                            AnswerOption(
+                            ExamAnswerOption(
                                 letter: "D",
                                 text: question.optionD,
                                 isSelected: viewModel.selectedAnswer == "D",
@@ -525,7 +526,7 @@ private struct DifficultyBadge: View {
     }
 }
 
-private struct AnswerOption: View {
+private struct ExamAnswerOption: View {
     let letter: String
     let text: String
     let isSelected: Bool
