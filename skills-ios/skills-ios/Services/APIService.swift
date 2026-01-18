@@ -81,6 +81,7 @@ class APIService {
         )
         
         try await supabase.insert(into: "user_lesson_attempts", values: attempt)
+        // XP is automatically added via database trigger when passed=true
     }
     
     // MARK: - Challenges
@@ -483,3 +484,28 @@ enum APIError: LocalizedError {
     }
 }
 
+// MARK: - Profile Update Extension
+
+extension APIService {
+    func updateProfile(userId: UUID, fullName: String, favoritePosition: String?, avatarUrl: String?) async throws {
+        struct ProfileUpdate: Encodable {
+            let full_name: String
+            let favorite_position: String?
+            let avatar_url: String?
+            let updated_at: String
+        }
+        
+        let update = ProfileUpdate(
+            full_name: fullName,
+            favorite_position: favoritePosition,
+            avatar_url: avatarUrl,
+            updated_at: ISO8601DateFormatter().string(from: Date())
+        )
+        
+        try await supabase.update(
+            table: "profiles",
+            values: update,
+            filter: "id=eq.\(userId.uuidString)"
+        )
+    }
+}

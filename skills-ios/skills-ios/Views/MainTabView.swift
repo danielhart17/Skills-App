@@ -67,10 +67,12 @@ struct MainTabView: View {
                         Label("Dashboard", systemImage: "chart.bar.fill")
                     }
                 
-                ProfileView()
-                    .tabItem {
-                        Label("Profile", systemImage: "person.circle.fill")
-                    }
+                NavigationView {
+                    ProfileView()
+                }
+                .tabItem {
+                    Label("Profile", systemImage: "person.circle.fill")
+                }
             }
             // Regular users see all standard tabs
             else {

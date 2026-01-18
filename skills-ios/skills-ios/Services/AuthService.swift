@@ -58,6 +58,10 @@ class AuthService: ObservableObject {
         isAuthenticated = false
     }
     
+    func refreshUser() async throws {
+        currentUser = try await supabase.getCurrentUser()
+    }
+    
     func isAdmin() -> Bool {
         currentUser?.role == .admin
     }

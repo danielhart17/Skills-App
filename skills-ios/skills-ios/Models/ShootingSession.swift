@@ -13,11 +13,17 @@ struct ShootingSession: Codable, Identifiable {
     var date: Date
     var totalShots: Int
     var madeShots: Int
-    var missedShots: Int
+    var missedShots: Int?
     var shootingPercentage: Decimal
-    var durationSeconds: Int
+    var durationSeconds: Int?
     var shots: [Shot]?
-    let createdAt: Date
+    var zoneStats: [String: ZoneStat]?
+    let createdAt: Date?
+    
+    // Computed property to get missed shots (calculated if not stored)
+    var calculatedMissedShots: Int {
+        missedShots ?? (totalShots - madeShots)
+    }
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -29,8 +35,14 @@ struct ShootingSession: Codable, Identifiable {
         case shootingPercentage = "shooting_percentage"
         case durationSeconds = "duration_seconds"
         case shots
+        case zoneStats = "zone_stats"
         case createdAt = "created_at"
     }
+}
+
+struct ZoneStat: Codable {
+    var made: Int
+    var attempts: Int
 }
 
 struct Shot: Codable, Identifiable {

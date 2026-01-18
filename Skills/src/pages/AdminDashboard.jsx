@@ -857,15 +857,15 @@ export default function AdminDashboard() {
                   {difficultyQuestions.map((question, index) => (
                     <Card key={question.id}>
                       <CardHeader className="pb-2">
-                        <div className="flex justify-between items-start">
+                  <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
                               <Badge variant="outline">Q{index + 1}</Badge>
                               <span className="text-sm font-medium">
                                 {question.question_text}
                               </span>
-                            </div>
-                            <div className="flex gap-2">
+                    </div>
+                    <div className="flex gap-2">
                               {question.media_type && question.media_type !== "none" && (
                                 <Badge variant="secondary" className="text-xs">
                                   {question.media_type}
@@ -886,25 +886,25 @@ export default function AdminDashboard() {
                             <ExamQuestionDialog
                               question={question}
                               onSave={(data) => handleSaveExamQuestion(data, true)}
-                              trigger={
-                                <Button variant="outline" size="sm">
-                                  <Edit className="w-4 h-4" />
-                                </Button>
-                              }
-                            />
-                            <Button
-                              variant="destructive"
-                              size="sm"
+                        trigger={
+                          <Button variant="outline" size="sm">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        }
+                      />
+                      <Button
+                        variant="destructive"
+                        size="sm"
                               onClick={() =>
                                 handleDeleteExamQuestion(question.id)
                               }
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div
                             className={
@@ -914,7 +914,7 @@ export default function AdminDashboard() {
                             }
                           >
                             A: {question.option_a}
-                          </div>
+                    </div>
                           <div
                             className={
                               question.correct_answer === "B"
@@ -923,7 +923,7 @@ export default function AdminDashboard() {
                             }
                           >
                             B: {question.option_b}
-                          </div>
+                    </div>
                           <div
                             className={
                               question.correct_answer === "C"
@@ -932,7 +932,7 @@ export default function AdminDashboard() {
                             }
                           >
                             C: {question.option_c}
-                          </div>
+                  </div>
                           <div
                             className={
                               question.correct_answer === "D"
@@ -948,14 +948,14 @@ export default function AdminDashboard() {
                             <strong>Explanation:</strong> {question.explanation}
                           </div>
                         )}
-                      </CardContent>
-                    </Card>
-                  ))}
+                </CardContent>
+              </Card>
+            ))}
 
                   {difficultyQuestions.length === 0 && (
                     <div className="text-center py-4 text-muted-foreground bg-muted/50 rounded-lg">
                       No {difficulty} questions yet. Add some!
-                    </div>
+          </div>
                   )}
                 </div>
               </div>
@@ -1465,24 +1465,24 @@ function QuestionDialog({ question, lessonId: _lessonId, onSave, trigger }) {
             />
           </div>
 
-          <div>
-            <Label htmlFor="media_type">Media Type</Label>
-            <Select
-              value={formData.media_type}
-              onValueChange={(value) =>
-                setFormData({ ...formData, media_type: value })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                <SelectItem value="image">Image</SelectItem>
-                <SelectItem value="video">Video</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            <div>
+              <Label htmlFor="media_type">Media Type</Label>
+              <Select
+                value={formData.media_type}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, media_type: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="image">Image</SelectItem>
+                  <SelectItem value="video">Video</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
           {formData.media_type === "image" && (
             <ImageUpload
@@ -1495,22 +1495,22 @@ function QuestionDialog({ question, lessonId: _lessonId, onSave, trigger }) {
           )}
 
           {formData.media_type === "video" && (
-            <div>
+              <div>
               <Label htmlFor="media_url">Video URL</Label>
-              <Input
-                id="media_url"
-                type="url"
-                value={formData.media_url}
-                onChange={(e) =>
-                  setFormData({ ...formData, media_url: e.target.value })
-                }
+                <Input
+                  id="media_url"
+                  type="url"
+                  value={formData.media_url}
+                  onChange={(e) =>
+                    setFormData({ ...formData, media_url: e.target.value })
+                  }
                 placeholder="https://www.youtube.com/watch?v=... or https://..."
-              />
+                />
               <p className="text-xs text-gray-500 mt-1">
                 Paste a YouTube URL or direct video link
               </p>
-            </div>
-          )}
+              </div>
+            )}
 
           <div className="space-y-3">
             <Label>Answer Options *</Label>
@@ -2240,7 +2240,7 @@ function ChapterDialog({ chapter, onSave, trigger, lessons }) {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
+          <div>
               <Label htmlFor="chapter-mode">Mode</Label>
               <Select
                 value={formData.mode}
@@ -2257,7 +2257,7 @@ function ChapterDialog({ chapter, onSave, trigger, lessons }) {
                     <div className="flex items-center gap-2">
                       <Brain className="w-4 h-4" />
                       IQ Mode
-                    </div>
+          </div>
                   </SelectItem>
                   <SelectItem value="oncourt">
                     <div className="flex items-center gap-2">
@@ -2269,21 +2269,21 @@ function ChapterDialog({ chapter, onSave, trigger, lessons }) {
               </Select>
             </div>
 
-            <div>
+          <div>
               <Label htmlFor="chapter-order">Order Index</Label>
               <Input
                 id="chapter-order"
                 type="number"
                 value={formData.order_index}
-                onChange={(e) =>
+              onChange={(e) =>
                   setFormData({
                     ...formData,
                     order_index: parseInt(e.target.value) || 1,
                   })
-                }
+              }
                 min="1"
-              />
-            </div>
+            />
+          </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -2350,7 +2350,7 @@ function ChapterDialog({ chapter, onSave, trigger, lessons }) {
 
                 {/* Selected Lessons (Draggable) */}
                 {selectedLessons.length > 0 && (
-                  <div>
+          <div>
                     <p className="text-sm font-medium mb-2">
                       Selected Lessons ({selectedLessons.length}):
                     </p>
@@ -2381,7 +2381,7 @@ function ChapterDialog({ chapter, onSave, trigger, lessons }) {
                                 <p className="text-xs text-muted-foreground">
                                   {lesson.xp_reward} XP
                                 </p>
-                              </div>
+          </div>
                             </div>
                             <Button
                               type="button"
@@ -2544,25 +2544,25 @@ function ExamQuestionDialog({ question, onSave, trigger }) {
 
           <div>
             <Label htmlFor="media_type">Media Type</Label>
-            <Select
+              <Select
               value={formData.media_type || "none"}
-              onValueChange={(value) =>
+                onValueChange={(value) =>
                 setFormData({
                   ...formData,
                   media_type: value === "none" ? null : value,
                 })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
                 <SelectItem value="none">None</SelectItem>
                 <SelectItem value="image">Image</SelectItem>
                 <SelectItem value="video">Video</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+                </SelectContent>
+              </Select>
+            </div>
 
           {formData.media_type === "image" && (
             <ImageUpload
@@ -2583,7 +2583,7 @@ function ExamQuestionDialog({ question, onSave, trigger }) {
                 }
                 placeholder="https://..."
               />
-            </div>
+          </div>
           )}
 
           <div className="grid grid-cols-2 gap-4">
@@ -2619,18 +2619,18 @@ function ExamQuestionDialog({ question, onSave, trigger }) {
                 }
                 required
               />
-            </div>
-            <div>
+          </div>
+          <div>
               <Label htmlFor="option_d">Option D *</Label>
-              <Input
+            <Input
                 id="option_d"
                 value={formData.option_d}
                 onChange={(e) =>
                   setFormData({ ...formData, option_d: e.target.value })
                 }
                 required
-              />
-            </div>
+            />
+          </div>
           </div>
 
           <div>

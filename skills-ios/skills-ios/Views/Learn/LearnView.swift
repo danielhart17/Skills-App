@@ -84,7 +84,12 @@ struct ChaptersListView: View {
             }
         }
         .onAppear {
-            loadData()
+            if lessons.isEmpty {
+                loadData()
+            } else {
+                // Refresh completed lessons when returning to this view
+                refreshCompletedLessons()
+            }
         }
     }
     
@@ -97,6 +102,16 @@ struct ChaptersListView: View {
                 print("Error loading lessons: \(error)")
             }
             isLoading = false
+        }
+    }
+    
+    private func refreshCompletedLessons() {
+        Task {
+            do {
+                completedLessonIds = try await APIService.shared.fetchCompletedLessons()
+            } catch {
+                print("Error refreshing completed lessons: \(error)")
+            }
         }
     }
 }
@@ -217,41 +232,12 @@ struct ChapterPathView: View {
                     .frame(height: 10)
                     
                     // Lesson path
-                    ZStack {
-                        // Draw base gray curved path line
-                        PathLineShape(lessonCount: lessons.count)
-                            .stroke(Color.gray.opacity(0.5), lineWidth: 6)
-                            .frame(height: CGFloat(lessons.count * 180))
-                        
-                        // Draw blue overlay for completed segments
-                        ForEach(0..<lessons.count, id: \.self) { index in
-                            if completedLessonIds.contains(lessons[index].id) {
-                                // Draw segment from this completed lesson to the next
-                                PathSegmentShape(
-                                    fromIndex: index,
-                                    toIndex: min(index + 1, lessons.count - 1),
-                                    lessonCount: lessons.count,
-                                    getNodeOffset: getNodeOffset
-                                )
-                                .stroke(Color.blue, lineWidth: 6)
-                                .frame(height: CGFloat(lessons.count * 180))
-                            }
-                        }
-                        
-                        // Lesson nodes
-                        VStack(spacing: 140) {
-                            ForEach(Array(lessons.enumerated()), id: \.element.id) { index, lesson in
-                                LessonNode(
-                                    lesson: lesson,
-                                    index: index,
-                                    isCompleted: completedLessonIds.contains(lesson.id),
-                                    isLocked: !isLessonUnlocked(lesson: lesson, index: index)
-                                )
-                                .offset(x: getNodeOffset(index: index))
-                            }
-                        }
-                        .padding(.vertical, 40)
-                    }
+                    LessonPathStack(
+                        lessons: lessons,
+                        completedLessonIds: completedLessonIds,
+                        isLessonUnlocked: isLessonUnlocked,
+                        getNodeOffset: getNodeOffset
+                    )
                 }
             }
         }
@@ -272,6 +258,22 @@ struct ChapterPathView: View {
                 .padding(.vertical, 6)
                 .background(Color.blue)
                 .cornerRadius(20)
+            }
+        }
+        .onAppear {
+            refreshCompletedLessons()
+        }
+    }
+    
+    private func refreshCompletedLessons() {
+        Task {
+            do {
+                let completed = try await APIService.shared.fetchCompletedLessons()
+                await MainActor.run {
+                    completedLessonIds = completed
+                }
+            } catch {
+                print("Error refreshing completed lessons: \(error)")
             }
         }
     }
@@ -303,6 +305,73 @@ struct ChapterPathView: View {
         case 3: return baseOffset / 2
         default: return 0
         }
+    }
+}
+
+// MARK: - Lesson Path Stack
+
+private struct LessonPathStack: View {
+    let lessons: [Lesson]
+    let completedLessonIds: [UUID]
+    let isLessonUnlocked: (Lesson, Int) -> Bool
+    let getNodeOffset: (Int) -> CGFloat
+    
+    private let nodeSpacing: CGFloat = 140
+    private let verticalPadding: CGFloat = 40
+    private let nodeHeight: CGFloat = 80
+    
+    // Calculate exact content height to match VStack
+    private var contentHeight: CGFloat {
+        let nodesHeight = CGFloat(lessons.count) * nodeHeight
+        let spacingHeight = CGFloat(max(lessons.count - 1, 0)) * nodeSpacing
+        let paddingHeight = verticalPadding * 2
+        return nodesHeight + spacingHeight + paddingHeight
+    }
+    
+    var body: some View {
+        ZStack {
+            // Draw base gray curved path line (only if more than 1 lesson)
+            if lessons.count > 1 {
+                PathLineShape(
+                    lessonCount: lessons.count,
+                    nodeSpacing: nodeSpacing,
+                    verticalPadding: verticalPadding,
+                    nodeHeight: nodeHeight
+                )
+                .stroke(Color.gray.opacity(0.5), lineWidth: 6)
+            }
+            
+            // Draw blue overlay for completed segments
+            ForEach(0..<lessons.count, id: \.self) { index in
+                if completedLessonIds.contains(lessons[index].id) && index < lessons.count - 1 {
+                    PathSegmentShape(
+                        fromIndex: index,
+                        toIndex: index + 1,
+                        lessonCount: lessons.count,
+                        getNodeOffset: getNodeOffset,
+                        nodeSpacing: nodeSpacing,
+                        verticalPadding: verticalPadding,
+                        nodeHeight: nodeHeight
+                    )
+                    .stroke(Color.blue, lineWidth: 6)
+                }
+            }
+            
+            // Lesson nodes
+            VStack(spacing: nodeSpacing) {
+                ForEach(Array(lessons.enumerated()), id: \.element.id) { index, lesson in
+                    LessonNode(
+                        lesson: lesson,
+                        index: index,
+                        isCompleted: completedLessonIds.contains(lesson.id),
+                        isLocked: !isLessonUnlocked(lesson, index)
+                    )
+                    .offset(x: getNodeOffset(index))
+                }
+            }
+            .padding(.vertical, verticalPadding)
+        }
+        .frame(height: contentHeight)
     }
 }
 
@@ -364,65 +433,70 @@ private struct LessonNode: View {
 
 private struct PathLineShape: Shape {
     let lessonCount: Int
+    let nodeSpacing: CGFloat
+    let verticalPadding: CGFloat
+    let nodeHeight: CGFloat
     
     func path(in rect: CGRect) -> Path {
         var path = Path()
         
-        let segmentHeight = rect.height / CGFloat(max(lessonCount - 1, 1))
+        guard lessonCount > 1 else { return path }
+        
         let centerX = rect.width / 2
         let amplitude: CGFloat = 80
         
+        // First node center Y position (padding + half of first node)
+        let firstNodeY = verticalPadding + (nodeHeight / 2)
+        
         // Start at first node position
-        path.move(to: CGPoint(x: centerX, y: 0))
+        let firstX = centerX + getOffset(for: 0, amplitude: amplitude)
+        path.move(to: CGPoint(x: firstX, y: firstNodeY))
         
         for i in 1..<lessonCount {
-            let y = CGFloat(i) * segmentHeight
-            let previousY = CGFloat(i - 1) * segmentHeight
+            // Each subsequent node is nodeHeight + nodeSpacing away
+            let currentY = firstNodeY + CGFloat(i) * (nodeHeight + nodeSpacing) - (nodeHeight / 2) * CGFloat(i) + (nodeHeight / 2) * CGFloat(i - 1)
+            // Simplified: node centers are spaced by (nodeSpacing + nodeHeight) but VStack spacing is between nodes
+            // Actually VStack spacing is the gap between nodes, so center-to-center = nodeHeight + nodeSpacing... no wait
+            // VStack spacing is the space BETWEEN items, so center-to-center = nodeHeight/2 + spacing + nodeHeight/2 = nodeHeight + spacing
+            // But our nodes are 80 tall with spacing 140, so center-to-center = 80/2 + 140 + 80/2 = 40 + 140 + 40 = 220? 
+            let nodeY = verticalPadding + (nodeHeight / 2) + CGFloat(i) * (nodeHeight + nodeSpacing)
+            let previousY = verticalPadding + (nodeHeight / 2) + CGFloat(i - 1) * (nodeHeight + nodeSpacing)
             
-            // Get current and previous X positions
-            let previousPosition = (i - 1) % 4
-            let currentPosition = i % 4
+            let previousX = centerX + getOffset(for: i - 1, amplitude: amplitude)
+            let currentX = centerX + getOffset(for: i, amplitude: amplitude)
             
-            var previousX: CGFloat
-            switch previousPosition {
-            case 1: previousX = centerX + amplitude
-            case 2: previousX = centerX - amplitude
-            case 3: previousX = centerX + amplitude / 2
-            default: previousX = centerX
-            }
+            let segmentHeight = nodeY - previousY
             
-            var currentX: CGFloat
-            switch currentPosition {
-            case 1: currentX = centerX + amplitude
-            case 2: currentX = centerX - amplitude
-            case 3: currentX = centerX + amplitude / 2
-            default: currentX = centerX
-            }
-            
-            // Create S-curve with more pronounced bending
-            let midY = (previousY + y) / 2
-            
-            // Control points create the S-shape
-            // First control point closer to the starting point
+            // Control points for S-curve - push control points further for more pronounced curve
             let control1 = CGPoint(
                 x: previousX,
-                y: previousY + segmentHeight * 0.9
+                y: previousY + segmentHeight * 0.75
             )
             
-            // Second control point closer to the ending point
             let control2 = CGPoint(
                 x: currentX,
-                y: y - segmentHeight * 0.9
+                y: nodeY - segmentHeight * 0.75
             )
             
             path.addCurve(
-                to: CGPoint(x: currentX, y: y),
+                to: CGPoint(x: currentX, y: nodeY),
                 control1: control1,
                 control2: control2
             )
         }
         
         return path
+    }
+    
+    private func getOffset(for index: Int, amplitude: CGFloat) -> CGFloat {
+        let position = index % 4
+        switch position {
+        case 0: return 0
+        case 1: return amplitude
+        case 2: return -amplitude
+        case 3: return amplitude / 2
+        default: return 0
+        }
     }
 }
 
@@ -433,40 +507,42 @@ private struct PathSegmentShape: Shape {
     let toIndex: Int
     let lessonCount: Int
     let getNodeOffset: (Int) -> CGFloat
+    let nodeSpacing: CGFloat
+    let verticalPadding: CGFloat
+    let nodeHeight: CGFloat
     
     func path(in rect: CGRect) -> Path {
         var path = Path()
         
-        // Only draw if there's a next lesson
-        if fromIndex >= toIndex {
-            return path
-        }
+        guard fromIndex < toIndex, lessonCount > 1 else { return path }
         
-        let segmentHeight = rect.height / CGFloat(max(lessonCount - 1, 1))
         let centerX = rect.width / 2
         
-        // Calculate positions
-        let startY = CGFloat(fromIndex) * segmentHeight
-        let endY = CGFloat(toIndex) * segmentHeight
-        let startX = centerX + getNodeOffset(fromIndex)
-        let endX = centerX + getNodeOffset(toIndex)
+        // Calculate node center positions
+        // Node i center: verticalPadding + nodeHeight/2 + i * (nodeHeight + nodeSpacing)
+        let fromY = verticalPadding + (nodeHeight / 2) + CGFloat(fromIndex) * (nodeHeight + nodeSpacing)
+        let toY = verticalPadding + (nodeHeight / 2) + CGFloat(toIndex) * (nodeHeight + nodeSpacing)
+        let fromX = centerX + getNodeOffset(fromIndex)
+        let toX = centerX + getNodeOffset(toIndex)
+        
+        let segmentHeight = toY - fromY
         
         // Start at the from position
-        path.move(to: CGPoint(x: startX, y: startY))
+        path.move(to: CGPoint(x: fromX, y: fromY))
         
-        // Create S-curve to match the main path
+        // Control points for S-curve - push control points further for more pronounced curve
         let control1 = CGPoint(
-            x: startX,
-            y: startY + segmentHeight * 0.9
+            x: fromX,
+            y: fromY + segmentHeight * 0.75
         )
         
         let control2 = CGPoint(
-            x: endX,
-            y: endY - segmentHeight * 0.9
+            x: toX,
+            y: toY - segmentHeight * 0.75
         )
         
         path.addCurve(
-            to: CGPoint(x: endX, y: endY),
+            to: CGPoint(x: toX, y: toY),
             control1: control1,
             control2: control2
         )
