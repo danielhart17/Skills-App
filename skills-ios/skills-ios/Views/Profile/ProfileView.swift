@@ -398,22 +398,38 @@ struct ProfileView: View {
     
     // MARK: - Computed Properties
     
+    // XP thresholds matching database: calculate_level_from_xp()
+    // Level 1: 0-99, Level 2: 100-249, Level 3: 250-449, Level 4: 450-699, Level 5: 700-999, Level 6+: 1000+
+    private func xpRequiredForLevel(_ level: Int) -> Int {
+        switch level {
+        case 1: return 0
+        case 2: return 100
+        case 3: return 250
+        case 4: return 450
+        case 5: return 700
+        default: return 1000 + (level - 6) * 300
+        }
+    }
+    
     private var currentLevelXP: Int {
-        ((authService.currentUser?.currentLevel ?? 1) - 1) * 100
+        let level = authService.currentUser?.currentLevel ?? 1
+        return xpRequiredForLevel(level)
     }
     
     private var nextLevelXP: Int {
-        (authService.currentUser?.currentLevel ?? 1) * 100
+        let level = authService.currentUser?.currentLevel ?? 1
+        return xpRequiredForLevel(level + 1)
     }
     
     private var xpToNextLevel: Int {
-        nextLevelXP - (authService.currentUser?.totalXp ?? 0)
+        max(0, nextLevelXP - (authService.currentUser?.totalXp ?? 0))
     }
     
     private var levelProgress: Double {
         let current = authService.currentUser?.totalXp ?? 0
         let currentLevelStart = currentLevelXP
         let nextLevel = nextLevelXP
+        guard nextLevel > currentLevelStart else { return 1.0 }
         let progress = Double(current - currentLevelStart) / Double(nextLevel - currentLevelStart)
         return min(max(progress, 0), 1)
     }
