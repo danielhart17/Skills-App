@@ -246,6 +246,34 @@ class SupabaseClient {
         }
     }
     
+    func upsert<T: Encodable>(into table: String, values: T, onConflict: String) async throws {
+        let url = URL(string: "\(baseURL)/rest/v1/\(table)?on_conflict=\(onConflict)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("return=minimal,resolution=merge-duplicates", forHTTPHeaderField: "Prefer")
+        if let token = accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        request.httpBody = try encoder.encode(values)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
+            if let httpResponse = response as? HTTPURLResponse {
+                print("Upsert failed with status: \(httpResponse.statusCode)")
+                if let responseString = String(data: data, encoding: .utf8) {
+                    print("Response: \(responseString)")
+                }
+            }
+            throw SupabaseError.upsertFailed
+        }
+    }
+    
     func rpc<T: Decodable>(function: String, params: [String: Any]? = nil) async throws -> T {
         let url = URL(string: "\(baseURL)/rest/v1/rpc/\(function)")!
         var request = URLRequest(url: url)
@@ -269,6 +297,31 @@ class SupabaseClient {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(T.self, from: data)
+    }
+    
+    // MARK: - Storage Operations
+    
+    func uploadFile(bucket: String, path: String, data: Data) async throws {
+        let url = URL(string: "\(baseURL)/storage/v1/object/\(bucket)/\(path)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        if let token = accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = data
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw SupabaseError.uploadFailed
+        }
+    }
+    
+    func getPublicUrl(bucket: String, path: String) -> String {
+        return "\(baseURL)/storage/v1/object/public/\(bucket)/\(path)"
     }
 }
 
@@ -311,7 +364,9 @@ enum SupabaseError: LocalizedError {
     case insertFailed
     case updateFailed
     case deleteFailed
+    case upsertFailed
     case rpcFailed
+    case uploadFailed
     
     var errorDescription: String? {
         switch self {
@@ -331,8 +386,12 @@ enum SupabaseError: LocalizedError {
             return "Failed to update data."
         case .deleteFailed:
             return "Failed to delete data."
+        case .upsertFailed:
+            return "Failed to upsert data."
         case .rpcFailed:
             return "RPC call failed."
+        case .uploadFailed:
+            return "Failed to upload file."
         }
     }
 }

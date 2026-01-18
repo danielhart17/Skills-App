@@ -11,6 +11,7 @@ struct LessonDetailView: View {
     let lesson: Lesson
     @State private var questions: [Question] = []
     @State private var isLoading = true
+    @State private var shouldDismiss = false
     @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
@@ -98,7 +99,14 @@ struct LessonDetailView: View {
                     
                     // Start Button
                     if !questions.isEmpty {
-                        NavigationLink(destination: QuestionView(lesson: lesson, questions: questions)) {
+                        NavigationLink(destination: QuestionView(
+                            lesson: lesson,
+                            questions: questions,
+                            onLessonComplete: {
+                                // Dismiss this view when lesson is completed
+                                shouldDismiss = true
+                            }
+                        )) {
                             HStack {
                                 Text("Start Lesson")
                                     .fontWeight(.semibold)
@@ -129,6 +137,11 @@ struct LessonDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             loadQuestions()
+        }
+        .onChange(of: shouldDismiss) { newValue in
+            if newValue {
+                presentationMode.wrappedValue.dismiss()
+            }
         }
     }
     

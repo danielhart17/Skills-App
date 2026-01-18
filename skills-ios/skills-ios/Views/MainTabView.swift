@@ -67,33 +67,35 @@ struct MainTabView: View {
                         Label("Dashboard", systemImage: "chart.bar.fill")
                     }
                 
-                ProfileView()
-                    .tabItem {
-                        Label("Profile", systemImage: "person.circle.fill")
-                    }
+                NavigationView {
+                    ProfileView()
+                }
+                .tabItem {
+                    Label("Profile", systemImage: "person.circle.fill")
+                }
             }
             // Regular users see all standard tabs
             else {
-                LearnView()
-                    .tabItem {
-                        Label("Learn", systemImage: "book.fill")
-                    }
-                
-                ChallengesView()
-                    .tabItem {
-                        Label("Challenges", systemImage: "target")
-                    }
-                
-                TrainersView()
-                    .tabItem {
-                        Label("Trainers", systemImage: "person.3.fill")
-                    }
-                
-                EventsView()
-                    .tabItem {
-                        Label("Events", systemImage: "calendar")
-                    }
-            }
+            LearnView()
+                .tabItem {
+                    Label("Learn", systemImage: "book.fill")
+                }
+            
+            ChallengesView()
+                .tabItem {
+                    Label("Challenges", systemImage: "target")
+                }
+            
+            TrainersView()
+                .tabItem {
+                    Label("Trainers", systemImage: "person.3.fill")
+                }
+            
+            EventsView()
+                .tabItem {
+                    Label("Events", systemImage: "calendar")
+                }
+        }
         }
         .accentColor(.brandOrange)
     }

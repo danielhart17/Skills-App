@@ -6,174 +6,416 @@
 //
 
 import SwiftUI
+import PhotosUI
 
 struct ProfileView: View {
     @StateObject private var authService = AuthService.shared
     @State private var sessions: [ShootingSession] = []
     @State private var bookings: [Booking] = []
     @State private var isLoading = true
+    @State private var showEditSheet = false
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Profile Header
+        ScrollView {
+            VStack(spacing: 20) {
+                // Profile Header Card
+                ZStack(alignment: .topTrailing) {
                     VStack(spacing: 15) {
                         // Avatar
                         ZStack {
-                            Circle()
-                                .fill(Color.orange.opacity(0.2))
+                            if let avatarUrl = authService.currentUser?.avatarUrl,
+                               let url = URL(string: avatarUrl) {
+                                AsyncImage(url: url) { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Circle()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [Color.purple, Color.pink],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            )
+                                        )
+                                }
                                 .frame(width: 100, height: 100)
-                            
-                            Image(systemName: "person.fill")
-                                .foregroundColor(.orange)
-                                .font(.system(size: 50))
+                                .clipShape(Circle())
+                            } else {
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.purple, Color.pink],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 100, height: 100)
+                                
+                                Text(authService.currentUser?.fullName?.prefix(1).uppercased() ?? "P")
+                                    .font(.system(size: 40, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
                         }
+                        .frame(width: 100, height: 100)
                         
                         // Name
                         Text(authService.currentUser?.fullName ?? "Player")
                             .font(.title)
                             .fontWeight(.bold)
+                            .foregroundColor(.white)
                         
                         // Email
                         Text(authService.currentUser?.email ?? "")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        
-                        // Level Badge
-                        HStack(spacing: 5) {
+                            .foregroundColor(.white.opacity(0.8))
+                    
+                    // Stats Row
+                    HStack(spacing: 30) {
+                        ProfileHeaderStat(
+                            value: "\(authService.currentUser?.currentLevel ?? 1)",
+                            label: "Level"
+                        )
+                        ProfileHeaderStat(
+                            value: "\(authService.currentUser?.totalXp ?? 0)",
+                            label: "Total XP"
+                        )
+                        ProfileHeaderStat(
+                            value: "\(authService.currentUser?.currentStreak ?? 0)",
+                            label: "Day Streak"
+                        )
+                        ProfileHeaderStat(
+                            value: "\(authService.currentUser?.badges?.count ?? 0)",
+                            label: "Badges"
+                        )
+                        }
+                        .padding(.top, 10)
+                    }
+                    .padding(25)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.purple, Color.pink.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .cornerRadius(20)
+                    
+                    // Edit Button
+                    Button(action: { showEditSheet = true }) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(10)
+                            .background(Color.white.opacity(0.2))
+                            .clipShape(Circle())
+                    }
+                    .padding(12)
+                }
+                .padding(.horizontal)
+                
+                // Level Progress & Activity Streak Row
+                HStack(spacing: 15) {
+                    // Level Progress
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
                             Image(systemName: "star.fill")
                                 .foregroundColor(.yellow)
-                            Text("Level \(authService.currentUser?.currentLevel ?? 1)")
+                            Text("Level Progress")
                                 .font(.headline)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color.yellow.opacity(0.2))
-                        .cornerRadius(20)
+                        
+                        Text("Level \(authService.currentUser?.currentLevel ?? 1)")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                        
+                        // Progress Bar
+                        GeometryReader { geometry in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(Color.gray.opacity(0.3))
+                                    .frame(height: 8)
+                                
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [.orange, .red],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: geometry.size.width * levelProgress, height: 8)
+                            }
+                        }
+                        .frame(height: 8)
+                        
+                        HStack {
+                            Text("\(currentLevelXP) XP")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("\(nextLevelXP) XP")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Text("\(xpToNextLevel) XP to next level")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                     .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(15)
                     
-                    // Stats Grid
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
-                        ProfileStatCard(
-                            title: "Total XP",
-                            value: "\(authService.currentUser?.totalXp ?? 0)",
-                            icon: "bolt.fill",
-                            color: .yellow
-                        )
+                    // Activity Streak
+                    VStack(spacing: 12) {
+                        HStack {
+                            Image(systemName: "flame.fill")
+                                .foregroundColor(.orange)
+                            Text("Activity Streak")
+                                .font(.headline)
+                        }
                         
-                        ProfileStatCard(
-                            title: "Current Streak",
-                            value: "\(authService.currentUser?.currentStreak ?? 0) days",
-                            icon: "flame.fill",
-                            color: .red
-                        )
+                        Text("\(authService.currentUser?.currentStreak ?? 0)")
+                            .font(.system(size: 40, weight: .bold))
+                            .foregroundColor(.orange)
                         
-                        ProfileStatCard(
-                            title: "Best Streak",
-                            value: "\(authService.currentUser?.longestStreak ?? 0) days",
-                            icon: "trophy.fill",
-                            color: .purple
-                        )
+                        Text("Days in a row")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                         
-                        ProfileStatCard(
-                            title: "Sessions",
-                            value: "\(sessions.count)",
-                            icon: "basketball.fill",
-                            color: .orange
-                        )
+                        Spacer()
+                        
+                        HStack {
+                            Text("Best streak:")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text("\(authService.currentUser?.longestStreak ?? 0) days")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(15)
+                }
+                .padding(.horizontal)
+                
+                // Shooting Stats & Performance Row
+                HStack(spacing: 15) {
+                    // Shooting Stats
+                    VStack(spacing: 12) {
+                        HStack {
+                            Image(systemName: "target")
+                                .foregroundColor(.red)
+                            Text("Shooting Stats")
+                                .font(.headline)
+                        }
+                        
+                        HStack(spacing: 20) {
+                            VStack {
+                                Text("\(averagePercentage)%")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.red)
+                                Text("Avg Accuracy")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            VStack {
+                                Text("\(totalShots)")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.blue)
+                                Text("Total Shots")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        Text("\(sessions.count) shooting sessions completed")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(15)
+                    
+                    // Performance
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Image(systemName: "chart.line.uptrend.xyaxis")
+                                .foregroundColor(.green)
+                            Text("Performance")
+                                .font(.headline)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Lessons Completed")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text("\(authService.currentUser?.completedLessons?.count ?? 0)")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            HStack {
+                                Text("Favorite Position")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text(authService.currentUser?.favoritePosition ?? "Not set")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(Color.gray.opacity(0.2))
+                                    .cornerRadius(4)
+                            }
+                            
+                            HStack {
+                                Text("Last Active")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text(formatLastActive())
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(15)
+                }
+                .padding(.horizontal)
+                
+                // Achievements & Badges
+                VStack(alignment: .leading, spacing: 15) {
+                    HStack {
+                        Image(systemName: "trophy.fill")
+                            .foregroundColor(.yellow)
+                        Text("Achievements & Badges")
+                            .font(.headline)
                     }
                     .padding(.horizontal)
                     
-                    // Shooting Stats
-                    if !sessions.isEmpty {
-                        VStack(alignment: .leading, spacing: 15) {
-                            Text("Shooting Stats")
-                                .font(.headline)
-                                .padding(.horizontal)
-                            
-                            VStack(spacing: 10) {
-                                StatRow(
-                                    label: "Total Shots",
-                                    value: "\(totalShots)"
-                                )
-                                
-                                StatRow(
-                                    label: "Made Shots",
-                                    value: "\(madeShots)"
-                                )
-                                
-                                StatRow(
-                                    label: "Shooting %",
-                                    value: "\(averagePercentage)%"
-                                )
-                            }
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(10)
-                            .padding(.horizontal)
-                        }
-                    }
-                    
-                    // Recent Sessions
-                    if !sessions.isEmpty {
-                        VStack(alignment: .leading, spacing: 15) {
-                            Text("Recent Sessions")
-                                .font(.headline)
-                                .padding(.horizontal)
-                            
-                            ForEach(sessions.prefix(5)) { session in
-                                SessionRow(session: session)
-                                    .padding(.horizontal)
+                    if let badges = authService.currentUser?.badges, !badges.isEmpty {
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
+                            ForEach(badges, id: \.self) { badge in
+                                BadgeCard(badgeId: badge)
                             }
                         }
-                    }
-                    
-                    // Sign Out Button
-                    Button(action: signOut) {
-                        HStack {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                            Text("Sign Out")
-                                .fontWeight(.semibold)
+                        .padding(.horizontal)
+                    } else {
+                        VStack(spacing: 15) {
+                            Image(systemName: "medal")
+                                .font(.system(size: 50))
+                                .foregroundColor(.gray.opacity(0.5))
+                            
+                            Text("No Badges Yet")
+                                .font(.headline)
+                                .foregroundColor(.orange)
+                            
+                            Text("Complete lessons and challenges to earn your first badge!")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.red)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
+                        .padding(30)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(15)
+                        .padding(.horizontal)
                     }
-                    .padding()
                 }
-                .padding(.vertical)
-            }
-            .navigationTitle("Profile")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: handleSignOut) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                            Text("Sign Out")
+                
+                // Recent Sessions
+                if !sessions.isEmpty {
+                    VStack(alignment: .leading, spacing: 15) {
+                        HStack {
+                            Image(systemName: "chart.bar.fill")
+                                .foregroundColor(.purple)
+                            Text("Recent Shooting Sessions")
+                                .font(.headline)
                         }
-                        .foregroundColor(.red)
+                        .padding(.horizontal)
+                        
+                        ForEach(sessions.prefix(5)) { session in
+                            SessionRow(session: session)
+                                .padding(.horizontal)
+                        }
                     }
                 }
+                
+                // Sign Out Button
+                Button(action: signOut) {
+                    HStack {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                        Text("Sign Out")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.red)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                }
+                .padding()
             }
-            .onAppear {
-                loadData()
+            .padding(.vertical)
+        }
+        .background(Color.appBackground)
+        .navigationTitle("Profile")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: handleSignOut) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                        Text("Sign Out")
+                    }
+                    .foregroundColor(.red)
+                }
             }
+        }
+        .onAppear {
+            loadData()
+        }
+        .sheet(isPresented: $showEditSheet) {
+            EditProfileSheet(authService: authService)
         }
     }
     
-    private func handleSignOut() {
-        Task {
-            do {
-                try await AuthService.shared.signOut()
-            } catch {
-                print("Error signing out: \(error)")
-            }
-        }
+    // MARK: - Computed Properties
+    
+    private var currentLevelXP: Int {
+        ((authService.currentUser?.currentLevel ?? 1) - 1) * 100
+    }
+    
+    private var nextLevelXP: Int {
+        (authService.currentUser?.currentLevel ?? 1) * 100
+    }
+    
+    private var xpToNextLevel: Int {
+        nextLevelXP - (authService.currentUser?.totalXp ?? 0)
+    }
+    
+    private var levelProgress: Double {
+        let current = authService.currentUser?.totalXp ?? 0
+        let currentLevelStart = currentLevelXP
+        let nextLevel = nextLevelXP
+        let progress = Double(current - currentLevelStart) / Double(nextLevel - currentLevelStart)
+        return min(max(progress, 0), 1)
     }
     
     private var totalShots: Int {
@@ -187,6 +429,31 @@ struct ProfileView: View {
     private var averagePercentage: Int {
         guard totalShots > 0 else { return 0 }
         return Int((Double(madeShots) / Double(totalShots)) * 100)
+    }
+    
+    // MARK: - Functions
+    
+    private func formatLastActive() -> String {
+        if let dateString = authService.currentUser?.lastActivityDate {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            if let date = formatter.date(from: dateString) {
+                let displayFormatter = DateFormatter()
+                displayFormatter.dateFormat = "MMM d, yyyy"
+                return displayFormatter.string(from: date)
+            }
+        }
+        return "Today"
+    }
+    
+    private func handleSignOut() {
+        Task {
+            do {
+                try await AuthService.shared.signOut()
+            } catch {
+                print("Error signing out: \(error)")
+            }
+        }
     }
     
     private func loadData() {
@@ -205,9 +472,24 @@ struct ProfileView: View {
             try? await authService.signOut()
         }
     }
+}
+
+// MARK: - Supporting Views
+
+struct ProfileHeaderStat: View {
+    let value: String
+    let label: String
     
-    private func formatPercentage(_ decimal: Decimal) -> String {
-        return String(format: "%.0f", NSDecimalNumber(decimal: decimal).doubleValue)
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.8))
+        }
     }
 }
 
@@ -238,6 +520,59 @@ struct ProfileStatCard: View {
     }
 }
 
+struct BadgeCard: View {
+    let badgeId: String
+    
+    private var badgeEmoji: String {
+        switch badgeId {
+        case "first_lesson": return "🎓"
+        case "streak_7": return "🔥"
+        case "streak_30": return "🏆"
+        case "sharpshooter": return "🎯"
+        case "consistent": return "📈"
+        case "dedicated": return "💪"
+        default: return "🏅"
+        }
+    }
+    
+    private var badgeName: String {
+        switch badgeId {
+        case "first_lesson": return "First Lesson"
+        case "streak_7": return "7-Day Streak"
+        case "streak_30": return "30-Day Streak"
+        case "sharpshooter": return "Sharpshooter"
+        case "consistent": return "Consistent"
+        case "dedicated": return "Dedicated"
+        default: return "Achievement"
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(badgeEmoji)
+                .font(.system(size: 30))
+            Text(badgeName)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(
+            LinearGradient(
+                colors: [Color.yellow.opacity(0.2), Color.orange.opacity(0.2)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.yellow.opacity(0.5), lineWidth: 1)
+        )
+    }
+}
+
 private struct StatRow: View {
     let label: String
     let value: String
@@ -263,26 +598,41 @@ private struct SessionRow: View {
     
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Shooting Session")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+            HStack(spacing: 8) {
+                Image(systemName: "calendar")
+                    .foregroundColor(.secondary)
                 
                 Text(session.date, style: .date)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
             }
             
             Spacer()
             
-            VStack(alignment: .trailing, spacing: 5) {
-                Text("\(session.madeShots)/\(session.totalShots)")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+            HStack(spacing: 12) {
+                Text("\(session.madeShots)/\(session.totalShots) shots")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 
                 Text("\(formatPercentage(session.shootingPercentage))%")
                     .font(.caption)
-                    .foregroundColor(.orange)
+                    .fontWeight(.bold)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        NSDecimalNumber(decimal: session.shootingPercentage).doubleValue >= 50
+                            ? Color.green.opacity(0.2)
+                            : Color.red.opacity(0.2)
+                    )
+                    .foregroundColor(
+                        NSDecimalNumber(decimal: session.shootingPercentage).doubleValue >= 50
+                            ? .green
+                            : .red
+                    )
+                    .cornerRadius(6)
+                
+                Image(systemName: "eye")
+                    .foregroundColor(.secondary)
             }
         }
         .padding()
@@ -291,7 +641,218 @@ private struct SessionRow: View {
     }
 }
 
-#Preview {
-    ProfileView()
+// MARK: - Edit Profile Sheet
+
+struct EditProfileSheet: View {
+    @ObservedObject var authService: AuthService
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var fullName: String = ""
+    @State private var favoritePosition: String = "Not set"
+    @State private var avatarUrl: String = ""
+    @State private var isSaving = false
+    @State private var showImagePicker = false
+    @State private var selectedImage: UIImage?
+    
+    let positions = ["Point Guard", "Shooting Guard", "Small Forward", "Power Forward", "Center", "Guard", "Forward", "Not set"]
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                // Avatar Section
+                Section {
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 12) {
+                            ZStack {
+                                if let image = selectedImage {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 100, height: 100)
+                                        .clipShape(Circle())
+                                } else if let urlString = authService.currentUser?.avatarUrl,
+                                          !urlString.isEmpty,
+                                          let url = URL(string: urlString) {
+                                    AsyncImage(url: url) { image in
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                    } placeholder: {
+                                        Circle()
+                                            .fill(Color.purple.opacity(0.3))
+                                    }
+                                    .frame(width: 100, height: 100)
+                                    .clipShape(Circle())
+                                } else {
+                                    Circle()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [Color.purple, Color.pink],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            )
+                                        )
+                                        .frame(width: 100, height: 100)
+                                    
+                                    Text(fullName.prefix(1).uppercased())
+                                        .font(.system(size: 40, weight: .bold))
+                                        .foregroundColor(.white)
+                                }
+                            }
+                            
+                            Button(action: { showImagePicker = true }) {
+                                Label("Change Photo", systemImage: "camera")
+                                    .font(.subheadline)
+                            }
+                        }
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                }
+                
+                // Profile Info
+                Section(header: Text("Profile Information")) {
+                    TextField("Full Name", text: $fullName)
+                    
+                    Picker("Favorite Position", selection: $favoritePosition) {
+                        ForEach(positions, id: \.self) { position in
+                            Text(position).tag(position)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Edit Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        saveProfile()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(isSaving)
+                }
+            }
+            .onAppear {
+                fullName = authService.currentUser?.fullName ?? ""
+                favoritePosition = authService.currentUser?.favoritePosition ?? "Not set"
+                avatarUrl = authService.currentUser?.avatarUrl ?? ""
+            }
+            .sheet(isPresented: $showImagePicker) {
+                ImagePicker(image: $selectedImage)
+            }
+            .onChange(of: selectedImage) { newImage in
+                if newImage != nil {
+                    uploadImage()
+                }
+            }
+        }
+    }
+    
+    private func uploadImage() {
+        guard let image = selectedImage,
+              let imageData = image.jpegData(compressionQuality: 0.7) else { return }
+        
+        Task {
+            do {
+                guard let userId = authService.currentUser?.id else { return }
+                let fileName = "avatars/\(userId.uuidString)-\(Date().timeIntervalSince1970).jpg"
+                
+                try await SupabaseClient.shared.uploadFile(
+                    bucket: "assets",
+                    path: fileName,
+                    data: imageData
+                )
+                
+                let publicUrl = SupabaseClient.shared.getPublicUrl(bucket: "assets", path: fileName)
+                
+                await MainActor.run {
+                    avatarUrl = publicUrl
+                }
+            } catch {
+                print("Error uploading image: \(error)")
+            }
+        }
+    }
+    
+    private func saveProfile() {
+        isSaving = true
+        
+        Task {
+            do {
+                guard let userId = authService.currentUser?.id else { return }
+                
+                try await APIService.shared.updateProfile(
+                    userId: userId,
+                    fullName: fullName,
+                    favoritePosition: favoritePosition == "Not set" ? nil : favoritePosition,
+                    avatarUrl: avatarUrl.isEmpty ? nil : avatarUrl
+                )
+                
+                // Refresh user data
+                try await authService.refreshUser()
+                
+                await MainActor.run {
+                    isSaving = false
+                    dismiss()
+                }
+            } catch {
+                print("Error saving profile: \(error)")
+                await MainActor.run {
+                    isSaving = false
+                }
+            }
+        }
+    }
 }
 
+// MARK: - Image Picker
+
+struct ImagePicker: UIViewControllerRepresentable {
+    @Binding var image: UIImage?
+    @Environment(\.dismiss) private var dismiss
+    
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .photoLibrary
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: ImagePicker
+        
+        init(_ parent: ImagePicker) {
+            self.parent = parent
+        }
+        
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.image = image
+            }
+            parent.dismiss()
+        }
+        
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
+    }
+}
+
+#Preview {
+    NavigationView {
+        ProfileView()
+    }
+}

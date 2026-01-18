@@ -10,6 +10,7 @@ import SwiftUI
 struct QuestionView: View {
     let lesson: Lesson
     let questions: [Question]
+    var onLessonComplete: (() -> Void)? = nil
     
     @State private var currentQuestionIndex = 0
     @State private var selectedAnswer: String?
@@ -17,6 +18,7 @@ struct QuestionView: View {
     @State private var correctAnswers = 0
     @State private var showResults = false
     @State private var isSubmitting = false
+    @State private var shouldNavigateBack = false
     @Environment(\.presentationMode) var presentationMode
     
     private var currentQuestion: Question {
@@ -49,7 +51,7 @@ struct QuestionView: View {
                     totalQuestions: questions.count,
                     correctAnswers: correctAnswers,
                     onRetry: resetQuiz,
-                    onExit: { presentationMode.wrappedValue.dismiss() }
+                    onExit: handleBackToLessons
                 )
             } else {
                 ScrollView {
@@ -231,6 +233,13 @@ struct QuestionView: View {
         isAnswered = false
         correctAnswers = 0
         showResults = false
+    }
+    
+    private func handleBackToLessons() {
+        // Call the completion handler if provided
+        onLessonComplete?()
+        // Dismiss this view
+        presentationMode.wrappedValue.dismiss()
     }
 }
 

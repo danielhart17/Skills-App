@@ -2,11 +2,14 @@ import { useState, useEffect } from "react";
 import { User } from "@/api/entities";
 import { ShootingSession } from "@/api/entities";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/api/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +17,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   User as UserIcon,
   Star,
@@ -26,8 +36,13 @@ import {
   BarChart3,
   Clock,
   Eye,
+  Edit,
+  Upload,
+  Loader2,
+  Camera,
 } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 // Court zones configuration (matches ShootingSession.jsx exactly)
 const COURT_ZONES = [
@@ -141,13 +156,34 @@ const getZoneLabelPosition = (zoneId) => {
 // Helper function to get court zones
 const getCourtZones = () => COURT_ZONES;
 
+const POSITIONS = [
+  "Point Guard",
+  "Shooting Guard", 
+  "Small Forward",
+  "Power Forward",
+  "Center",
+  "Guard",
+  "Forward",
+  "Not set",
+];
+
 export default function Profile() {
-  const { isTrainer } = useAuth();
+  const { isTrainer, refreshProfile } = useAuth();
   const [user, setUser] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState(null);
   const [showSessionDialog, setShowSessionDialog] = useState(false);
+  
+  // Edit profile state
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editForm, setEditForm] = useState({
+    full_name: "",
+    favorite_position: "",
+    avatar_url: "",
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     loadProfileData();
@@ -234,6 +270,91 @@ export default function Profile() {
     return `${minutes}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const openEditDialog = () => {
+    setEditForm({
+      full_name: user?.full_name || "",
+      favorite_position: user?.favorite_position || "Not set",
+      avatar_url: user?.avatar_url || "",
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be less than 5MB");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `avatars/${user.id}-${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("assets")
+        .upload(fileName, file, { cacheControl: "3600", upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("assets")
+        .getPublicUrl(fileName);
+
+      setEditForm(prev => ({ ...prev, avatar_url: publicUrl }));
+      toast.success("Image uploaded successfully!");
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast.error("Failed to upload image");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          full_name: editForm.full_name,
+          favorite_position: editForm.favorite_position === "Not set" ? null : editForm.favorite_position,
+          avatar_url: editForm.avatar_url || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      // Refresh user data
+      setUser(prev => ({
+        ...prev,
+        full_name: editForm.full_name,
+        favorite_position: editForm.favorite_position === "Not set" ? null : editForm.favorite_position,
+        avatar_url: editForm.avatar_url,
+      }));
+      
+      if (refreshProfile) {
+        await refreshProfile();
+      }
+
+      toast.success("Profile updated successfully!");
+      setShowEditDialog(false);
+    } catch (error) {
+      console.error("Save error:", error);
+      toast.error("Failed to save profile");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-6 lg:p-8">
@@ -268,11 +389,19 @@ export default function Profile() {
         </div>
 
         {/* Profile Overview */}
-        <Card className="border-0 shadow-xl bg-gradient-to-r from-purple-500 to-pink-600 text-white">
+        <Card className="border-0 shadow-xl bg-gradient-to-r from-purple-500 to-pink-600 text-white relative">
+          <Button
+            onClick={openEditDialog}
+            variant="ghost"
+            size="icon"
+            className="absolute top-4 right-4 bg-white/20 hover:bg-white/30 text-white"
+          >
+            <Edit className="w-4 h-4" />
+          </Button>
           <CardContent className="p-8">
             <div className="flex flex-col md:flex-row items-center gap-6">
               <Avatar className="w-24 h-24 border-4 border-white shadow-lg">
-                <AvatarImage src="" />
+                <AvatarImage src={user?.avatar_url || ""} />
                 <AvatarFallback className="bg-white text-purple-600 font-bold text-2xl">
                   {user?.full_name
                     ?.split(" ")
@@ -746,6 +875,112 @@ export default function Profile() {
           >
             Close
           </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5 text-purple-500" />
+              Edit Profile
+            </DialogTitle>
+            <DialogDescription>
+              Update your profile information and photo
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Avatar Upload */}
+            <div className="flex flex-col items-center gap-4">
+              <div className="relative">
+                <Avatar className="w-24 h-24 border-4 border-purple-200">
+                  <AvatarImage src={editForm.avatar_url || ""} />
+                  <AvatarFallback className="bg-purple-100 text-purple-600 font-bold text-2xl">
+                    {editForm.full_name
+                      ?.split(" ")
+                      .map((n) => n[0])
+                      .join("") || "P"}
+                  </AvatarFallback>
+                </Avatar>
+                <label
+                  htmlFor="avatar-upload"
+                  className="absolute bottom-0 right-0 w-8 h-8 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  {isUploading ? (
+                    <Loader2 className="w-4 h-4 text-white animate-spin" />
+                  ) : (
+                    <Camera className="w-4 h-4 text-white" />
+                  )}
+                </label>
+                <input
+                  id="avatar-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarUpload}
+                  className="hidden"
+                  disabled={isUploading}
+                />
+              </div>
+              <p className="text-sm text-gray-500">Click the camera to upload a photo</p>
+            </div>
+
+            {/* Full Name */}
+            <div className="space-y-2">
+              <Label htmlFor="full_name">Full Name</Label>
+              <Input
+                id="full_name"
+                value={editForm.full_name}
+                onChange={(e) => setEditForm(prev => ({ ...prev, full_name: e.target.value }))}
+                placeholder="Enter your name"
+              />
+            </div>
+
+            {/* Favorite Position */}
+            <div className="space-y-2">
+              <Label htmlFor="favorite_position">Favorite Position</Label>
+              <Select
+                value={editForm.favorite_position}
+                onValueChange={(value) => setEditForm(prev => ({ ...prev, favorite_position: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a position" />
+                </SelectTrigger>
+                <SelectContent>
+                  {POSITIONS.map((position) => (
+                    <SelectItem key={position} value={position}>
+                      {position}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowEditDialog(false)}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveProfile}
+              disabled={isSaving}
+              className="flex-1 bg-gradient-to-r from-purple-500 to-pink-600"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

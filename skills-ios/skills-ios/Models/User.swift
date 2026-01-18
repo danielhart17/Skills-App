@@ -19,6 +19,10 @@ struct User: Codable, Identifiable {
     var avatarUrl: String?
     var trainerId: UUID?
     var entryExamCompleted: Bool
+    var completedLessons: [UUID]?
+    var lastActivityDate: String?
+    var favoritePosition: String?
+    var badges: [String]?
     let createdAt: Date
     let updatedAt: Date
     
@@ -34,6 +38,10 @@ struct User: Codable, Identifiable {
         case avatarUrl = "avatar_url"
         case trainerId = "trainer_id"
         case entryExamCompleted = "entry_exam_completed"
+        case completedLessons = "completed_lessons"
+        case lastActivityDate = "last_activity_date"
+        case favoritePosition = "favorite_position"
+        case badges
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }

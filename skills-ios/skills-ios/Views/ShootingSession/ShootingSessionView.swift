@@ -636,10 +636,7 @@ func createPath(_ pathString: String) -> Path {
         return path
     }
 
-struct ZoneStat {
-    var made: Int
-    var attempts: Int
-}
+// ZoneStat is defined in ShootingSession.swift model
 
 struct SessionSummaryView: View {
     let totalShots: Int
