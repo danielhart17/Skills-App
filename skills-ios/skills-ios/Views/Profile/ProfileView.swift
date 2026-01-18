@@ -653,6 +653,8 @@ struct EditProfileSheet: View {
     @State private var isSaving = false
     @State private var showImagePicker = false
     @State private var selectedImage: UIImage?
+    @State private var showError = false
+    @State private var errorMessage = ""
     
     let positions = ["Point Guard", "Shooting Guard", "Small Forward", "Power Forward", "Center", "Guard", "Forward", "Not set"]
     
@@ -752,6 +754,11 @@ struct EditProfileSheet: View {
                     uploadImage()
                 }
             }
+            .alert("Error", isPresented: $showError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(errorMessage)
+            }
         }
     }
     
@@ -777,6 +784,10 @@ struct EditProfileSheet: View {
                 }
             } catch {
                 print("Error uploading image: \(error)")
+                await MainActor.run {
+                    errorMessage = "Failed to upload image. Please try again."
+                    showError = true
+                }
             }
         }
     }
@@ -806,6 +817,8 @@ struct EditProfileSheet: View {
                 print("Error saving profile: \(error)")
                 await MainActor.run {
                     isSaving = false
+                    errorMessage = "Failed to save profile. Please try again."
+                    showError = true
                 }
             }
         }

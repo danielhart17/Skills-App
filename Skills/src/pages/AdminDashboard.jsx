@@ -2140,11 +2140,11 @@ function ChapterDialog({ chapter, onSave, trigger, lessons }) {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState(
     chapter || {
-    title: "",
-    description: "",
+      title: "",
+      description: "",
       mode: "iq",
       order_index: 1,
-    is_active: true,
+      is_active: true,
     }
   );
   const [selectedLessons, setSelectedLessons] = useState(
