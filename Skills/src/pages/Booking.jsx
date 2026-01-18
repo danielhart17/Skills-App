@@ -175,39 +175,79 @@ export default function BookingPage() {
   };
 
   const generateTimeSlots = () => {
-    if (!selectedService) return [];
+    if (!selectedService || !trainer) return [];
+    
+    // Get day of week for selected date
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const selectedDayName = dayNames[selectedDate.getDay()];
+    
+    // Check trainer's availability schedule
+    const availability = trainer.availability_schedule;
+    const daySchedule = availability?.[selectedDayName];
+    
+    // If trainer has no availability for this day, return empty
+    if (!daySchedule?.enabled) {
+      return [];
+    }
+    
+    // Check if this date is blocked
+    const dateString = selectedDate.toISOString().split("T")[0];
+    if (trainer.blocked_dates?.includes(dateString)) {
+      return [];
+    }
+    
+    // Parse start and end times from trainer's schedule (or use defaults)
+    const [startHour, startMinute] = (daySchedule.start || "09:00").split(":").map(Number);
+    const [endHour, endMinute] = (daySchedule.end || "17:00").split(":").map(Number);
+    
+    // Get buffer and notice settings (with defaults)
+    const bufferMinutes = trainer.session_buffer_minutes || 15;
+    const noticeHours = trainer.min_booking_notice_hours || 24;
+    
     const slots = [];
-    for (let hour = 9; hour < 17; hour++) {
-      // Fix: Changed the loop condition from `minute = 60` to `minute < 60`
-      for (let minute = 0; minute < 60; minute += 30) {
+    
+    // Calculate minimum booking time based on notice requirement
+    const now = new Date();
+    const minBookingTime = add(now, { hours: noticeHours });
+    
+    // Generate slots based on trainer's schedule
+    for (let hour = startHour; hour < endHour || (hour === endHour && 0 < endMinute); hour++) {
+      for (let minute = (hour === startHour ? startMinute : 0); minute < 60; minute += 30) {
+        // Don't go past end time
+        if (hour > endHour || (hour === endHour && minute >= endMinute)) {
+          break;
+        }
+        
         const slotTime = setMinutes(setHours(selectedDate, hour), minute);
+        const slotEndTime = add(slotTime, { minutes: selectedService.duration_minutes });
+        
+        // Check if slot end time goes past trainer's end time
+        const trainerEndTime = setMinutes(setHours(selectedDate, endHour), endMinute);
+        if (slotEndTime > trainerEndTime) {
+          continue; // Skip this slot as the session would end after trainer's available hours
+        }
 
         const isBooked = bookedTimes.some((bookedTime) => {
-          // Check for overlap, considering the service duration
-          const bookedEndTime = add(bookedTime, {
-            minutes: selectedService.duration_minutes,
-          }); // Use selectedService.duration_minutes for consistency
-          const slotEndTime = add(slotTime, {
-            minutes: selectedService.duration_minutes,
+          // Check for overlap, considering the service duration and buffer
+          const bookedEndTimeWithBuffer = add(bookedTime, {
+            minutes: selectedService.duration_minutes + bufferMinutes,
+          });
+          const slotEndTimeWithBuffer = add(slotTime, {
+            minutes: selectedService.duration_minutes + bufferMinutes,
           });
 
-          // A slot is booked if its start time is within an existing booking, or if an existing booking's start time is within the slot, or if they overlap.
-          // More robust overlap check:
-          return slotTime < bookedEndTime && bookedTime < slotEndTime;
+          // A slot is booked if it overlaps with an existing booking (including buffer)
+          return slotTime < bookedEndTimeWithBuffer && bookedTime < slotEndTimeWithBuffer;
         });
 
-        // Ensure the slot is in the future
-        // Round current time to nearest minute for comparison accuracy if needed, or simply compare dates
-        const now = new Date();
-        const thirtyMinutesFromNow = add(now, { minutes: 30 }); // Allow booking at least 30 minutes in advance
-
-        if (slotTime > thirtyMinutesFromNow && !isBooked) {
-          // Ensure future time and not booked
+        // Ensure the slot meets the minimum booking notice requirement
+        if (slotTime > minBookingTime && !isBooked) {
           slots.push(slotTime);
         }
       }
     }
-    // Sort slots to ensure they are in chronological order, although the loop generally ensures this.
+    
+    // Sort slots to ensure they are in chronological order
     slots.sort((a, b) => a.getTime() - b.getTime());
     return slots;
   };
@@ -366,36 +406,89 @@ export default function BookingPage() {
                     mode="single"
                     selected={selectedDate}
                     onSelect={setSelectedDate}
-                    disabled={(date) => date < new Date().setHours(0, 0, 0, 0)}
+                    disabled={(date) => {
+                      // Disable past dates
+                      if (date < new Date().setHours(0, 0, 0, 0)) return true;
+                      
+                      // Check if date is blocked
+                      const dateString = date.toISOString().split("T")[0];
+                      if (trainer?.blocked_dates?.includes(dateString)) return true;
+                      
+                      return false;
+                    }}
+                    modifiers={{
+                      unavailable: (date) => {
+                        const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+                        const dayName = dayNames[date.getDay()];
+                        const daySchedule = trainer?.availability_schedule?.[dayName];
+                        return !daySchedule?.enabled;
+                      },
+                    }}
+                    modifiersClassNames={{
+                      unavailable: "text-gray-400 line-through",
+                    }}
                     className="rounded-md border"
                   />
-                  {generateTimeSlots().length > 0 ? (
-                    <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-2">
-                      {" "}
-                      {/* Added max-height and overflow for scrollable times */}
-                      {generateTimeSlots().map((time) => (
-                        <Button
-                          key={time.toString()}
-                          variant={
-                            selectedTime?.getTime() === time.getTime()
-                              ? "default"
-                              : "outline"
-                          }
-                          onClick={() => {
-                            setSelectedTime(time);
-                            setStep(3);
-                          }}
-                        >
-                          {format(time, "h:mm a")}
-                        </Button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500">
-                      No available slots for this date and service. Please
-                      choose another date or service.
-                    </p>
-                  )}
+                  {(() => {
+                    // Check if day is blocked or unavailable
+                    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+                    const selectedDayName = dayNames[selectedDate.getDay()];
+                    const daySchedule = trainer?.availability_schedule?.[selectedDayName];
+                    const dateString = selectedDate.toISOString().split("T")[0];
+                    const isBlocked = trainer?.blocked_dates?.includes(dateString);
+                    
+                    if (isBlocked) {
+                      return (
+                        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-center">
+                          <p className="text-red-700 font-medium">Date Blocked</p>
+                          <p className="text-red-600 text-sm">
+                            This trainer has marked this date as unavailable.
+                          </p>
+                        </div>
+                      );
+                    }
+                    
+                    if (!daySchedule?.enabled) {
+                      return (
+                        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
+                          <p className="text-yellow-700 font-medium">Day Unavailable</p>
+                          <p className="text-yellow-600 text-sm">
+                            This trainer doesn't offer sessions on {selectedDayName.charAt(0).toUpperCase() + selectedDayName.slice(1)}s.
+                          </p>
+                        </div>
+                      );
+                    }
+                    
+                    const slots = generateTimeSlots();
+                    if (slots.length > 0) {
+                      return (
+                        <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-2">
+                          {slots.map((time) => (
+                            <Button
+                              key={time.toString()}
+                              variant={
+                                selectedTime?.getTime() === time.getTime()
+                                  ? "default"
+                                  : "outline"
+                              }
+                              onClick={() => {
+                                setSelectedTime(time);
+                                setStep(3);
+                              }}
+                            >
+                              {format(time, "h:mm a")}
+                            </Button>
+                          ))}
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <p className="text-gray-500">
+                        No available slots for this date. All times may be booked or too close to the current time.
+                      </p>
+                    );
+                  })()}
                 </div>
               )}
             </BookingStep>

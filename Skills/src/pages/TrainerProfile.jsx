@@ -18,8 +18,23 @@ import {
   BookOpen,
   MessageSquare,
   Sparkles,
+  Images,
+  Video,
+  X,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { format } from "date-fns";
+
+// Helper to extract YouTube video ID
+const getYouTubeId = (url) => {
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const match = url.match(regExp);
+  return match && match[2].length === 11 ? match[2] : null;
+};
 
 const StarRating = ({ rating, count }) => (
   <div className="flex items-center gap-2">
@@ -196,11 +211,24 @@ export default function TrainerProfile() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ul className="list-disc list-inside space-y-2 text-gray-300">
-                  {trainer.certifications?.map((cert, i) => (
-                    <li key={i}>{cert}</li>
-                  ))}
-                </ul>
+                {trainer.certifications && trainer.certifications.length > 0 ? (
+                  <div className="space-y-3">
+                    {trainer.certifications.map((cert, i) => (
+                      <div key={i} className="p-3 bg-gray-800/50 rounded-lg">
+                        <div className="font-medium text-white">
+                          {typeof cert === "string" ? cert : cert.name}
+                        </div>
+                        {typeof cert === "object" && (
+                          <div className="text-sm text-gray-400 mt-1">
+                            {cert.issuer} {cert.year && `• ${cert.year}`}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm">No certifications listed</p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -277,6 +305,93 @@ export default function TrainerProfile() {
                 ))}
               </CardContent>
             </Card>
+
+            {/* Gallery Section */}
+            {trainer.gallery && trainer.gallery.length > 0 && (
+              <Card className="border-0 shadow-xl bg-card">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-white">
+                    <Images className="w-5 h-5 text-pink-400" />
+                    Training Gallery
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-2">
+                    {trainer.gallery.slice(0, 6).map((item, index) => (
+                      <Dialog key={index}>
+                        <DialogTrigger asChild>
+                          <div className="aspect-square relative rounded-lg overflow-hidden cursor-pointer group">
+                            {item.type === "image" ? (
+                              <img
+                                src={item.url}
+                                alt={item.caption || "Gallery image"}
+                                className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gray-800 flex items-center justify-center relative">
+                                {item.thumbnail ? (
+                                  <img
+                                    src={item.thumbnail}
+                                    alt={item.caption || "Video thumbnail"}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <Video className="w-8 h-8 text-gray-500" />
+                                )}
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
+                                    <Play className="w-5 h-5 text-white ml-0.5" />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-4xl p-0 bg-transparent border-0">
+                          <div className="relative">
+                            {item.type === "image" ? (
+                              <img
+                                src={item.url}
+                                alt={item.caption || "Gallery image"}
+                                className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
+                              />
+                            ) : (
+                              <div className="aspect-video w-full">
+                                {item.url.includes("youtube") || item.url.includes("youtu.be") ? (
+                                  <iframe
+                                    src={`https://www.youtube.com/embed/${getYouTubeId(item.url)}`}
+                                    title={item.caption || "Video"}
+                                    className="w-full h-full rounded-lg"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                  />
+                                ) : (
+                                  <video
+                                    src={item.url}
+                                    controls
+                                    className="w-full h-full rounded-lg"
+                                  />
+                                )}
+                              </div>
+                            )}
+                            {item.caption && (
+                              <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent rounded-b-lg">
+                                <p className="text-white text-sm">{item.caption}</p>
+                              </div>
+                            )}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    ))}
+                  </div>
+                  {trainer.gallery.length > 6 && (
+                    <p className="text-center text-sm text-gray-400 mt-3">
+                      +{trainer.gallery.length - 6} more items
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {events.length > 0 && (
               <Card className="border-0 shadow-xl bg-card">

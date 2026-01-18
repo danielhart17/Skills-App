@@ -43,7 +43,6 @@ import {
   CalendarCheck,
   Search,
   HelpCircle,
-  Target,
   Brain,
   Dumbbell,
   X,
@@ -64,12 +63,12 @@ export default function AdminDashboard() {
   const [questions, setQuestions] = useState([]);
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [showQuestionsDialog, setShowQuestionsDialog] = useState(false);
-  const [drills, setDrills] = useState([]);
   const [questionCounts, setQuestionCounts] = useState({});
   const [eventRegistrations, setEventRegistrations] = useState({});
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showRegistrationsDialog, setShowRegistrationsDialog] = useState(false);
   const [chapters, setChapters] = useState([]);
+  const [examQuestions, setExamQuestions] = useState([]);
 
   // Redirect if not admin
   useEffect(() => {
@@ -165,13 +164,14 @@ export default function AdminDashboard() {
           .order("created_at", { ascending: false });
         if (error) throw error;
         setProfiles(data || []);
-      } else if (activeTab === "drills") {
+      } else if (activeTab === "exam") {
         const { data, error } = await supabase
-          .from("drills")
+          .from("exam_questions")
           .select("*")
-          .order("created_at", { ascending: false });
+          .order("difficulty")
+          .order("order_index");
         if (error) throw error;
-        setDrills(data || []);
+        setExamQuestions(data || []);
       }
     } catch (error) {
       console.error("Error loading data:", error);
@@ -382,6 +382,48 @@ export default function AdminDashboard() {
     }
   };
 
+  // Entry Exam Question Handlers
+  const handleSaveExamQuestion = async (questionData, isEdit = false) => {
+    try {
+      if (isEdit) {
+        const { error } = await supabase
+          .from("exam_questions")
+          .update(questionData)
+          .eq("id", questionData.id);
+        if (error) throw error;
+        toast.success("Exam question updated");
+      } else {
+        const { error } = await supabase
+          .from("exam_questions")
+          .insert(questionData);
+        if (error) throw error;
+        toast.success("Exam question created");
+      }
+      loadData();
+    } catch (error) {
+      console.error("Error saving exam question:", error);
+      toast.error("Failed to save exam question");
+    }
+  };
+
+  const handleDeleteExamQuestion = async (questionId) => {
+    if (!confirm("Are you sure you want to delete this exam question?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("exam_questions")
+        .delete()
+        .eq("id", questionId);
+
+      if (error) throw error;
+      toast.success("Exam question deleted");
+      loadData();
+    } catch (error) {
+      console.error("Error deleting exam question:", error);
+      toast.error("Failed to delete exam question");
+    }
+  };
+
   const recalculateAllChapterXP = async () => {
     try {
       toast.info("Recalculating XP for all chapters...");
@@ -552,9 +594,9 @@ export default function AdminDashboard() {
             <BookOpen className="w-4 h-4 mr-2" />
             Lessons
           </TabsTrigger>
-          <TabsTrigger value="drills">
-            <Target className="w-4 h-4 mr-2" />
-            Drills
+          <TabsTrigger value="exam">
+            <Brain className="w-4 h-4 mr-2" />
+            Entry Exam
           </TabsTrigger>
           <TabsTrigger value="challenges">
             <Trophy className="w-4 h-4 mr-2" />
@@ -759,80 +801,166 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
 
-        {/* Drills Tab */}
-        <TabsContent value="drills" className="space-y-4">
+        {/* Entry Exam Tab */}
+        <TabsContent value="exam" className="space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-semibold">Drills ({drills.length})</h2>
-            <DrillDialog
-              onSave={(data) => handleSave("drills", data)}
+            <div>
+              <h2 className="text-2xl font-semibold">
+                Entry Exam Questions ({examQuestions.length})
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Manage questions for the entry assessment (4 beginner, 4 intermediate, 4 advanced)
+              </p>
+            </div>
+            <ExamQuestionDialog
+              onSave={(data) => handleSaveExamQuestion(data)}
               trigger={
                 <Button>
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Drill
+                  Add Question
                 </Button>
               }
             />
           </div>
 
-          <div className="grid gap-4">
-            {drills.map((drill) => (
-              <Card key={drill.id}>
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle>{drill.title}</CardTitle>
-                      <CardDescription>{drill.description}</CardDescription>
+          {/* Group by difficulty */}
+          {["beginner", "intermediate", "advanced"].map((difficulty) => {
+            const difficultyQuestions = examQuestions.filter(
+              (q) => q.difficulty === difficulty
+            );
+            const difficultyColors = {
+              beginner: "bg-green-500",
+              intermediate: "bg-yellow-500",
+              advanced: "bg-red-500",
+            };
+            const difficultyXP = {
+              beginner: 10,
+              intermediate: 25,
+              advanced: 50,
+            };
+
+            return (
+              <div key={difficulty} className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-3 h-3 rounded-full ${difficultyColors[difficulty]}`}
+                  />
+                  <h3 className="text-lg font-semibold capitalize">
+                    {difficulty} ({difficultyQuestions.length}/4)
+                  </h3>
+                  <Badge variant="outline" className="text-xs">
+                    {difficultyXP[difficulty]} XP each
+                  </Badge>
+                </div>
+
+                <div className="grid gap-3 pl-6">
+                  {difficultyQuestions.map((question, index) => (
+                    <Card key={question.id}>
+                      <CardHeader className="pb-2">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Badge variant="outline">Q{index + 1}</Badge>
+                              <span className="text-sm font-medium">
+                                {question.question_text}
+                              </span>
+                            </div>
+                            <div className="flex gap-2">
+                              {question.media_type && question.media_type !== "none" && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {question.media_type}
+                                </Badge>
+                              )}
+                              <Badge
+                                className={`text-xs ${
+                                  question.is_active
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-gray-100 text-gray-800"
+                                }`}
+                              >
+                                {question.is_active ? "Active" : "Inactive"}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <ExamQuestionDialog
+                              question={question}
+                              onSave={(data) => handleSaveExamQuestion(data, true)}
+                              trigger={
+                                <Button variant="outline" size="sm">
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                              }
+                            />
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() =>
+                                handleDeleteExamQuestion(question.id)
+                              }
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div
+                            className={
+                              question.correct_answer === "A"
+                                ? "text-green-600 font-medium"
+                                : ""
+                            }
+                          >
+                            A: {question.option_a}
+                          </div>
+                          <div
+                            className={
+                              question.correct_answer === "B"
+                                ? "text-green-600 font-medium"
+                                : ""
+                            }
+                          >
+                            B: {question.option_b}
+                          </div>
+                          <div
+                            className={
+                              question.correct_answer === "C"
+                                ? "text-green-600 font-medium"
+                                : ""
+                            }
+                          >
+                            C: {question.option_c}
+                          </div>
+                          <div
+                            className={
+                              question.correct_answer === "D"
+                                ? "text-green-600 font-medium"
+                                : ""
+                            }
+                          >
+                            D: {question.option_d}
+                          </div>
+                        </div>
+                        {question.explanation && (
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            <strong>Explanation:</strong> {question.explanation}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+
+                  {difficultyQuestions.length === 0 && (
+                    <div className="text-center py-4 text-muted-foreground bg-muted/50 rounded-lg">
+                      No {difficulty} questions yet. Add some!
                     </div>
-                    <div className="flex gap-2">
-                      <DrillDialog
-                        drill={drill}
-                        onSave={(data) => handleSave("drills", data, true)}
-                        trigger={
-                          <Button variant="outline" size="sm">
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        }
-                      />
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDelete("drills", drill.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex gap-2 flex-wrap">
-                      <Badge>{drill.category}</Badge>
-                      <Badge variant="outline">{drill.difficulty}</Badge>
-                      <Badge variant="secondary">
-                        {drill.duration_minutes} min
-                      </Badge>
-                      <Badge variant="secondary">
-                        {drill.players_needed} player
-                        {drill.players_needed > 1 ? "s" : ""}
-                      </Badge>
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      <p>
-                        <strong>Purpose:</strong> {drill.purpose}
-                      </p>
-                      <p>
-                        <strong>Focus:</strong> {drill.focus}
-                      </p>
-                      <p>
-                        <strong>Equipment:</strong>{" "}
-                        {drill.equipment_needed?.join(", ") || "None"}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </TabsContent>
 
         {/* Challenges Tab */}
@@ -2007,284 +2135,6 @@ function EventDialog({ event, onSave, trigger }) {
   );
 }
 
-// Drill Dialog Component
-function DrillDialog({ drill, onSave, trigger }) {
-  const [open, setOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    purpose: "",
-    setup: "",
-    instructions: "",
-    focus: "",
-    category: "shooting",
-    difficulty: "beginner",
-    duration_minutes: 15,
-    equipment_needed: [],
-    players_needed: 1,
-    space_required: "Half court",
-    is_active: true,
-  });
-
-  useEffect(() => {
-    if (drill) {
-      setFormData({
-        title: drill.title || "",
-        description: drill.description || "",
-        purpose: drill.purpose || "",
-        setup: drill.setup || "",
-        instructions: drill.instructions || "",
-        focus: drill.focus || "",
-        category: drill.category || "shooting",
-        difficulty: drill.difficulty || "beginner",
-        duration_minutes: drill.duration_minutes || 15,
-        equipment_needed: drill.equipment_needed || [],
-        players_needed: drill.players_needed || 1,
-        space_required: drill.space_required || "Half court",
-        is_active: drill.is_active !== false,
-      });
-    } else {
-      setFormData({
-        title: "",
-        description: "",
-        purpose: "",
-        setup: "",
-        instructions: "",
-        focus: "",
-        category: "shooting",
-        difficulty: "beginner",
-        duration_minutes: 15,
-        equipment_needed: [],
-        players_needed: 1,
-        space_required: "Half court",
-        is_active: true,
-      });
-    }
-  }, [drill, open]);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSave({ ...formData, id: drill?.id });
-    setOpen(false);
-  };
-
-  const handleEquipmentChange = (e) => {
-    const value = e.target.value;
-    const equipment = value
-      .split(",")
-      .map((item) => item.trim())
-      .filter((item) => item);
-    setFormData({ ...formData, equipment_needed: equipment });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{drill ? "Edit Drill" : "Create New Drill"}</DialogTitle>
-          <DialogDescription>
-            {drill ? "Update the drill details" : "Add a new basketball drill"}
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="drill-title">Title</Label>
-            <Input
-              id="drill-title"
-              value={formData.title}
-              onChange={(e) =>
-                setFormData({ ...formData, title: e.target.value })
-              }
-              required
-            />
-          </div>
-          <div>
-            <Label htmlFor="drill-description">Description</Label>
-            <Textarea
-              id="drill-description"
-              value={formData.description}
-              onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
-              }
-              rows={2}
-            />
-          </div>
-          <div>
-            <Label htmlFor="drill-purpose">Purpose</Label>
-            <Textarea
-              id="drill-purpose"
-              value={formData.purpose}
-              onChange={(e) =>
-                setFormData({ ...formData, purpose: e.target.value })
-              }
-              rows={2}
-              required
-            />
-          </div>
-          <div>
-            <Label htmlFor="drill-setup">Setup</Label>
-            <Textarea
-              id="drill-setup"
-              value={formData.setup}
-              onChange={(e) =>
-                setFormData({ ...formData, setup: e.target.value })
-              }
-              rows={2}
-              required
-            />
-          </div>
-          <div>
-            <Label htmlFor="drill-instructions">Instructions</Label>
-            <Textarea
-              id="drill-instructions"
-              value={formData.instructions}
-              onChange={(e) =>
-                setFormData({ ...formData, instructions: e.target.value })
-              }
-              rows={4}
-              required
-            />
-          </div>
-          <div>
-            <Label htmlFor="drill-focus">Focus</Label>
-            <Textarea
-              id="drill-focus"
-              value={formData.focus}
-              onChange={(e) =>
-                setFormData({ ...formData, focus: e.target.value })
-              }
-              rows={2}
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="drill-category">Category</Label>
-              <Select
-                value={formData.category}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, category: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="shooting">Shooting</SelectItem>
-                  <SelectItem value="dribbling">Dribbling</SelectItem>
-                  <SelectItem value="defense">Defense</SelectItem>
-                  <SelectItem value="passing">Passing</SelectItem>
-                  <SelectItem value="conditioning">Conditioning</SelectItem>
-                  <SelectItem value="footwork">Footwork</SelectItem>
-                  <SelectItem value="rebounding">Rebounding</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="drill-difficulty">Difficulty</Label>
-              <Select
-                value={formData.difficulty}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, difficulty: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="beginner">Beginner</SelectItem>
-                  <SelectItem value="intermediate">Intermediate</SelectItem>
-                  <SelectItem value="advanced">Advanced</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <Label htmlFor="drill-duration">Duration (min)</Label>
-              <Input
-                id="drill-duration"
-                type="number"
-                value={formData.duration_minutes}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    duration_minutes: parseInt(e.target.value),
-                  })
-                }
-                min="1"
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="drill-players">Players Needed</Label>
-              <Input
-                id="drill-players"
-                type="number"
-                value={formData.players_needed}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    players_needed: parseInt(e.target.value),
-                  })
-                }
-                min="1"
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="drill-space">Space Required</Label>
-              <Input
-                id="drill-space"
-                value={formData.space_required}
-                onChange={(e) =>
-                  setFormData({ ...formData, space_required: e.target.value })
-                }
-                required
-              />
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="drill-equipment">
-              Equipment Needed (comma-separated)
-            </Label>
-            <Input
-              id="drill-equipment"
-              value={formData.equipment_needed.join(", ")}
-              onChange={handleEquipmentChange}
-              placeholder="Basketball, Cones, etc."
-            />
-          </div>
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              id="drill-active"
-              checked={formData.is_active}
-              onChange={(e) =>
-                setFormData({ ...formData, is_active: e.target.checked })
-              }
-              className="rounded"
-            />
-            <Label htmlFor="drill-active">Active Drill</Label>
-          </div>
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit">{drill ? "Update" : "Create"} Drill</Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // Chapter Dialog Component
 function ChapterDialog({ chapter, onSave, trigger, lessons }) {
   const [open, setOpen] = useState(false);
@@ -2564,6 +2414,281 @@ function ChapterDialog({ chapter, onSave, trigger, lessons }) {
             </Button>
             <Button type="submit">
               {chapter ? "Update" : "Create"} Chapter
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Exam Question Dialog Component
+function ExamQuestionDialog({ question, onSave, trigger }) {
+  const [open, setOpen] = useState(false);
+  const [formData, setFormData] = useState(
+    question || {
+      question_text: "",
+      difficulty: "beginner",
+      media_type: null,
+      media_url: "",
+      option_a: "",
+      option_b: "",
+      option_c: "",
+      option_d: "",
+      correct_answer: "A",
+      explanation: "",
+      order_index: 0,
+      is_active: true,
+    }
+  );
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave(question ? { ...formData, id: question.id } : formData);
+    setOpen(false);
+    if (!question) {
+      setFormData({
+        question_text: "",
+        difficulty: "beginner",
+        media_type: null,
+        media_url: "",
+        option_a: "",
+        option_b: "",
+        option_c: "",
+        option_d: "",
+        correct_answer: "A",
+        explanation: "",
+        order_index: 0,
+        is_active: true,
+      });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            {question ? "Edit" : "Add"} Exam Question
+          </DialogTitle>
+          <DialogDescription>
+            Add a question for the entry assessment exam.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="difficulty">Difficulty *</Label>
+              <Select
+                value={formData.difficulty}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, difficulty: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="beginner">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-500" />
+                      Beginner (10 XP)
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="intermediate">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                      Intermediate (25 XP)
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="advanced">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                      Advanced (50 XP)
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="order_index">Order Index</Label>
+              <Input
+                id="order_index"
+                type="number"
+                value={formData.order_index}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    order_index: parseInt(e.target.value) || 0,
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="question_text">Question Text *</Label>
+            <Textarea
+              id="question_text"
+              value={formData.question_text}
+              onChange={(e) =>
+                setFormData({ ...formData, question_text: e.target.value })
+              }
+              required
+              rows={3}
+              placeholder="Enter the question..."
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="media_type">Media Type</Label>
+            <Select
+              value={formData.media_type || "none"}
+              onValueChange={(value) =>
+                setFormData({
+                  ...formData,
+                  media_type: value === "none" ? null : value,
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="image">Image</SelectItem>
+                <SelectItem value="video">Video</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {formData.media_type === "image" && (
+            <ImageUpload
+              value={formData.media_url}
+              onChange={(url) => setFormData({ ...formData, media_url: url })}
+            />
+          )}
+
+          {formData.media_type === "video" && (
+            <div>
+              <Label htmlFor="media_url">Video URL</Label>
+              <Input
+                id="media_url"
+                type="url"
+                value={formData.media_url}
+                onChange={(e) =>
+                  setFormData({ ...formData, media_url: e.target.value })
+                }
+                placeholder="https://..."
+              />
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="option_a">Option A *</Label>
+              <Input
+                id="option_a"
+                value={formData.option_a}
+                onChange={(e) =>
+                  setFormData({ ...formData, option_a: e.target.value })
+                }
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="option_b">Option B *</Label>
+              <Input
+                id="option_b"
+                value={formData.option_b}
+                onChange={(e) =>
+                  setFormData({ ...formData, option_b: e.target.value })
+                }
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="option_c">Option C *</Label>
+              <Input
+                id="option_c"
+                value={formData.option_c}
+                onChange={(e) =>
+                  setFormData({ ...formData, option_c: e.target.value })
+                }
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="option_d">Option D *</Label>
+              <Input
+                id="option_d"
+                value={formData.option_d}
+                onChange={(e) =>
+                  setFormData({ ...formData, option_d: e.target.value })
+                }
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="correct_answer">Correct Answer *</Label>
+            <Select
+              value={formData.correct_answer}
+              onValueChange={(value) =>
+                setFormData({ ...formData, correct_answer: value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="A">A</SelectItem>
+                <SelectItem value="B">B</SelectItem>
+                <SelectItem value="C">C</SelectItem>
+                <SelectItem value="D">D</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="explanation">Explanation (shown after answering)</Label>
+            <Textarea
+              id="explanation"
+              value={formData.explanation || ""}
+              onChange={(e) =>
+                setFormData({ ...formData, explanation: e.target.value })
+              }
+              rows={2}
+              placeholder="Explain why this answer is correct..."
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="is_active"
+              checked={formData.is_active}
+              onChange={(e) =>
+                setFormData({ ...formData, is_active: e.target.checked })
+              }
+              className="rounded"
+            />
+            <Label htmlFor="is_active">Active (shown in exams)</Label>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit">
+              {question ? "Update" : "Create"} Question
             </Button>
           </div>
         </form>

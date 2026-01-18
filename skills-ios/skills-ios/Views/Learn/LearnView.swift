@@ -174,8 +174,19 @@ struct ChapterPathView: View {
     
     var body: some View {
         ZStack {
-            // Background
-            Color.appBackground.ignoresSafeArea()
+            // Background image properly contained
+            GeometryReader { geometry in
+                Image("learn-bg")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+            }
+            .ignoresSafeArea()
+            
+            // Dimming overlay
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
             
             ScrollView {
                 VStack(spacing: 0) {

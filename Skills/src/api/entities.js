@@ -17,3 +17,4 @@ export { Question } from "./supabaseEntities";
 export { UserLessonAttempt } from "./supabaseEntities";
 export { UserQuestionProgress } from "./supabaseEntities";
 export { UserProgress } from "./supabaseEntities";
+export { EntryExam } from "./supabaseEntities";

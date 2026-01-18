@@ -200,6 +200,9 @@ export const ShootingSession = {
       }
     });
 
+    // Order by date, newest first
+    queryBuilder = queryBuilder.order("date", { ascending: false });
+
     const { data, error } = await queryBuilder;
     if (error) throw error;
     return data || [];
@@ -1005,6 +1008,100 @@ export const DrillRating = {
 
     if (error) throw error;
     return true;
+  },
+};
+
+// =============================================
+// ENTRY EXAM ENTITY
+// =============================================
+export const EntryExam = {
+  async getQuestions() {
+    const { data, error } = await supabase
+      .from("exam_questions")
+      .select("*")
+      .eq("is_active", true)
+      .order("difficulty")
+      .order("order_index");
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  async getQuestionsByDifficulty(difficulty) {
+    const { data, error } = await supabase
+      .from("exam_questions")
+      .select("*")
+      .eq("is_active", true)
+      .eq("difficulty", difficulty)
+      .order("order_index");
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  async hasCompletedExam() {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("entry_exam_results")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    return !!data;
+  },
+
+  async getExamResult() {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("entry_exam_results")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async submitExamResult(resultData) {
+    const user = await getCurrentUser();
+    
+    // Calculate rewards using the scoring logic
+    const beginnerXP = resultData.beginner_correct * 10;
+    const intermediateXP = resultData.intermediate_correct * 25;
+    const advancedXP = resultData.advanced_correct * 50;
+    const totalXP = beginnerXP + intermediateXP + advancedXP;
+    
+    let startingLevel = 1;
+    if (totalXP <= 50) startingLevel = 1;
+    else if (totalXP <= 150) startingLevel = 2;
+    else if (totalXP <= 300) startingLevel = 3;
+    else startingLevel = 4;
+
+    const { data, error } = await supabase
+      .from("entry_exam_results")
+      .insert({
+        user_id: user.id,
+        ...resultData,
+        starting_level: startingLevel,
+        starting_xp: totalXP,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Update user profile with starting XP and level, and mark exam as completed
+    await supabase
+      .from("profiles")
+      .update({
+        total_xp: totalXP,
+        current_level: startingLevel,
+        entry_exam_completed: true,
+      })
+      .eq("id", user.id);
+
+    return data;
   },
 };
 

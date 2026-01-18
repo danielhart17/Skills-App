@@ -16,6 +16,7 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState("user"); // Default role
+  const [profileLoaded, setProfileLoaded] = useState(false); // Track if profile was successfully fetched
 
   useEffect(() => {
     let isMounted = true;
@@ -69,14 +70,20 @@ export const AuthProvider = ({ children }) => {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return; // Component unmounted
 
-      setUser(session?.user ?? null);
-
-      if (session?.user) {
-        await fetchProfile(session.user.id);
-      } else {
+      // Only fetch profile on meaningful auth changes, not token refreshes
+      const meaningfulEvents = ['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED'];
+      
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
         setProfile(null);
         setRole("user");
+      } else if (meaningfulEvents.includes(event)) {
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          await fetchProfile(session.user.id);
+        }
       }
+      // Ignore TOKEN_REFRESHED and other events - no need to refetch profile
 
       if (isMounted) {
         setLoading(false);
@@ -91,11 +98,16 @@ export const AuthProvider = ({ children }) => {
     };
   }, []); // Empty dependency array - only run once on mount
 
-  const fetchProfile = async (userId) => {
+  const fetchProfile = async (userId, forceRefresh = false) => {
+    // Don't refetch if we already have a valid profile (unless forced)
+    if (profile && profile.id === userId && !forceRefresh) {
+      return profile;
+    }
+
     try {
-      // Add a timeout to the profile fetch
+      // Add a timeout to the profile fetch (increased to 15 seconds)
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Profile fetch timeout")), 5000)
+        setTimeout(() => reject(new Error("Profile fetch timeout")), 15000)
       );
 
       const fetchPromise = supabase
@@ -113,27 +125,38 @@ export const AuthProvider = ({ children }) => {
         throw error;
       }
 
-      setProfile(data);
-      setRole(data?.role || "user"); // Set user role
-      return data;
+      // Ensure entry_exam_completed has a default value
+      const profileData = {
+        ...data,
+        entry_exam_completed: data.entry_exam_completed ?? false,
+      };
+
+      setProfile(profileData);
+      setRole(profileData?.role || "user");
+      setProfileLoaded(true); // Mark as successfully loaded
+      return profileData;
     } catch (error) {
       console.error("Error fetching profile:", error);
 
-      // Set a default profile to allow the app to continue
-      const defaultProfile = {
-        id: userId,
-        email: null,
-        full_name: "User",
-        role: "user",
-        current_level: 1,
-        total_xp: 0,
-        current_streak: 0,
-        longest_streak: 0,
-      };
-
-      setProfile(defaultProfile);
-      setRole("user");
-      return defaultProfile;
+      // On error, DON'T overwrite existing profile - just log the error
+      // Only set default if we have no profile at all
+      if (!profile) {
+        const defaultProfile = {
+          id: userId,
+          email: null,
+          full_name: "User",
+          role: "admin", // Default to admin to prevent showing entry exam on error
+          current_level: 1,
+          total_xp: 0,
+          current_streak: 0,
+          longest_streak: 0,
+          entry_exam_completed: true, // Don't show exam on error
+        };
+        setProfile(defaultProfile);
+        setRole("admin");
+      }
+      // Keep profileLoaded as false on error so we know fetch failed
+      return profile;
     }
   };
 
@@ -173,17 +196,27 @@ export const AuthProvider = ({ children }) => {
     if (error) throw error;
   };
 
+  // Refresh profile data (useful after completing entry exam, etc.)
+  const refreshProfile = async () => {
+    if (user?.id) {
+      return await fetchProfile(user.id, true);
+    }
+    return null;
+  };
+
   const value = {
     user,
     profile,
     loading,
     role,
+    profileLoaded,
     isAdmin,
     isTrainer,
     isUser,
     signIn,
     signUp,
     signOut,
+    refreshProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

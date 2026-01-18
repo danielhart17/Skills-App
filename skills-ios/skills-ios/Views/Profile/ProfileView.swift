@@ -238,7 +238,7 @@ struct ProfileStatCard: View {
     }
 }
 
-struct StatRow: View {
+private struct StatRow: View {
     let label: String
     let value: String
     
@@ -254,7 +254,7 @@ struct StatRow: View {
     }
 }
 
-struct SessionRow: View {
+private struct SessionRow: View {
     let session: ShootingSession
     
     private func formatPercentage(_ decimal: Decimal) -> String {

@@ -3,9 +3,11 @@ import Pages from "@/pages/index.jsx";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Auth from "@/pages/Auth";
+import EntryExam from "@/pages/EntryExam";
+import { BrowserRouter } from "react-router-dom";
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, loading, profile, profileLoaded } = useAuth();
 
   if (loading) {
     return (
@@ -22,6 +24,18 @@ function AppContent() {
     return <Auth />;
   }
 
+  // Check if user needs to complete entry exam (only for regular users)
+  // Only show if profile was successfully loaded (not on timeout/error)
+  // Admins and trainers skip the entry exam
+  if (
+    profileLoaded &&
+    profile &&
+    !profile.entry_exam_completed &&
+    profile.role === "user"
+  ) {
+    return <EntryExam />;
+  }
+
   return (
     <>
       <Pages />
@@ -32,9 +46,11 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 

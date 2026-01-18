@@ -10,6 +10,7 @@ import SwiftUI
 @main
 struct skills_iosApp: App {
     @StateObject private var authService = AuthService.shared
+    @State private var entryExamCompleted = false
     
     init() {
         // Apply dark theme globally
@@ -22,12 +23,25 @@ struct skills_iosApp: App {
                 if authService.isLoading {
                     LoadingView()
                 } else if authService.isAuthenticated {
-                    MainTabView()
+                    // Check if user needs to complete entry exam (only for regular users)
+                    if let user = authService.currentUser,
+                       user.role == .user,
+                       !user.entryExamCompleted,
+                       !entryExamCompleted {
+                        EntryExamView(isExamCompleted: $entryExamCompleted)
+                    } else {
+                        MainTabView()
+                    }
                 } else {
                     AuthView()
                 }
             }
             .preferredColorScheme(.dark)
+            .onChange(of: authService.currentUser?.entryExamCompleted) { _, newValue in
+                if newValue == true {
+                    entryExamCompleted = true
+                }
+            }
         }
     }
     

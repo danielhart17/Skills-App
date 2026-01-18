@@ -30,12 +30,7 @@ import TrainerDashboard from "./TrainerDashboard";
 
 import Events from "./Events";
 
-import {
-  BrowserRouter as Router,
-  Route,
-  Routes,
-  Navigate,
-} from "react-router-dom";
+import { Route, Routes, Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
 // Role-based redirect component
@@ -108,9 +103,5 @@ function PagesContent() {
 }
 
 export default function Pages() {
-  return (
-    <Router>
-      <PagesContent />
-    </Router>
-  );
+  return <PagesContent />;
 }
