@@ -459,20 +459,6 @@ private struct PathLineShape: Shape {
             // Actually VStack spacing is the gap between nodes, so center-to-center = nodeHeight + nodeSpacing... no wait
             // VStack spacing is the space BETWEEN items, so center-to-center = nodeHeight/2 + spacing + nodeHeight/2 = nodeHeight + spacing
             // But our nodes are 80 tall with spacing 140, so center-to-center = 80/2 + 140 + 80/2 = 40 + 140 + 40 = 220? 
-            // No that's not right either. VStack spacing is just the gap, so:
-            // Node 0 center at: padding + nodeHeight/2
-            // Node 1 center at: padding + nodeHeight + spacing + nodeHeight/2 = padding + nodeHeight * 1.5 + spacing
-            // Actually: padding + nodeHeight/2 + (nodeHeight + spacing) = padding + nodeHeight/2 + nodeHeight + spacing
-            // Let me simplify: center of node i = verticalPadding + nodeHeight/2 + i * (nodeHeight + nodeSpacing)
-            // No wait, that's wrong too. Let me think again.
-            // VStack with spacing S: Item0, then S gap, then Item1, then S gap, then Item2...
-            // If items have height H:
-            // Item 0: y = 0 to H, center at H/2
-            // Item 1: y = H + S to 2H + S, center at H + S + H/2 = 1.5H + S
-            // Item 2: y = 2H + 2S to 3H + 2S, center at 2H + 2S + H/2 = 2.5H + 2S
-            // Item i: center at i*H + i*S + H/2 = (i + 0.5)*H + i*S = H/2 + i*(H + S)
-            // With padding P added to top:
-            // Item i center: P + H/2 + i*(H + S)
             let nodeY = verticalPadding + (nodeHeight / 2) + CGFloat(i) * (nodeHeight + nodeSpacing)
             let previousY = verticalPadding + (nodeHeight / 2) + CGFloat(i - 1) * (nodeHeight + nodeSpacing)
             
