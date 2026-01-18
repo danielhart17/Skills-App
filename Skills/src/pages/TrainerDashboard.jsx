@@ -21,7 +21,20 @@ import {
   Trash2,
   GraduationCap,
   Star,
+  Clock,
+  CalendarX,
+  Award,
+  CalendarPlus,
+  MapPin,
+  Users,
+  Image,
+  Video,
+  Images,
+  Play,
+  X,
+  Upload,
 } from "lucide-react";
+import { ImageUpload } from "@/components/ImageUpload";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -49,6 +62,7 @@ export default function TrainerDashboard() {
   const [challenges, setChallenges] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [events, setEvents] = useState([]);
   const [trainerProfile, setTrainerProfile] = useState(null);
   const [_loading, setLoading] = useState(true);
 
@@ -157,6 +171,45 @@ export default function TrainerDashboard() {
           // No trainer profile found
           setReviews([]);
         }
+      } else if (activeTab === "events") {
+        // Get trainer profile first
+        const { data: trainerData, error: trainerError } = await supabase
+          .from("trainers")
+          .select("*")
+          .eq("user_id", profile.id)
+          .single();
+
+        if (trainerError && trainerError.code !== "PGRST116") {
+          console.error("Error fetching trainer profile:", trainerError);
+          throw trainerError;
+        }
+
+        if (trainerData) {
+          setTrainerProfile(trainerData);
+          const { data, error } = await supabase
+            .from("training_events")
+            .select("*")
+            .eq("trainer_id", trainerData.id)
+            .order("date", { ascending: true });
+          if (error) {
+            console.error("Error fetching events:", error);
+            throw error;
+          }
+          setEvents(data || []);
+        } else {
+          setEvents([]);
+        }
+      } else if (activeTab === "gallery") {
+        const { data, error } = await supabase
+          .from("trainers")
+          .select("*")
+          .eq("user_id", profile.id)
+          .single();
+        if (error && error.code !== "PGRST116") {
+          console.error("Error fetching trainer profile:", error);
+          throw error;
+        }
+        setTrainerProfile(data);
       } else if (activeTab === "profile") {
         const { data, error } = await supabase
           .from("trainers")
@@ -249,6 +302,107 @@ export default function TrainerDashboard() {
     }
   };
 
+  const handleSaveEvent = async (data, isEdit = false) => {
+    try {
+      const saveData = {
+        ...data,
+        trainer_id: trainerProfile?.id || null,
+      };
+
+      if (isEdit) {
+        const { error } = await supabase
+          .from("training_events")
+          .update(saveData)
+          .eq("id", data.id);
+        if (error) throw error;
+        toast.success("Event updated successfully");
+      } else {
+        const { error } = await supabase.from("training_events").insert([saveData]);
+        if (error) throw error;
+        toast.success("Event created successfully");
+      }
+
+      loadData();
+    } catch (error) {
+      console.error("Error saving event:", error);
+      toast.error("Failed to save event");
+    }
+  };
+
+  const handleDeleteEvent = async (id) => {
+    if (!confirm("Are you sure you want to delete this event?")) return;
+
+    try {
+      const { error } = await supabase.from("training_events").delete().eq("id", id);
+
+      if (error) throw error;
+      toast.success("Event deleted successfully");
+      loadData();
+    } catch (error) {
+      console.error("Error deleting event:", error);
+      toast.error("Failed to delete event");
+    }
+  };
+
+  const handleAddGalleryItem = async (item) => {
+    try {
+      const currentGallery = trainerProfile?.gallery || [];
+      const newGallery = [...currentGallery, { ...item, created_at: new Date().toISOString() }];
+      
+      const { error } = await supabase
+        .from("trainers")
+        .update({ gallery: newGallery })
+        .eq("id", trainerProfile.id);
+
+      if (error) throw error;
+      toast.success("Media added to gallery");
+      loadData();
+    } catch (error) {
+      console.error("Error adding to gallery:", error);
+      toast.error("Failed to add media");
+    }
+  };
+
+  const handleDeleteGalleryItem = async (index) => {
+    if (!confirm("Are you sure you want to delete this item?")) return;
+
+    try {
+      const currentGallery = trainerProfile?.gallery || [];
+      const newGallery = currentGallery.filter((_, i) => i !== index);
+      
+      const { error } = await supabase
+        .from("trainers")
+        .update({ gallery: newGallery })
+        .eq("id", trainerProfile.id);
+
+      if (error) throw error;
+      toast.success("Item removed from gallery");
+      loadData();
+    } catch (error) {
+      console.error("Error removing from gallery:", error);
+      toast.error("Failed to remove item");
+    }
+  };
+
+  const handleUpdateGalleryCaption = async (index, caption) => {
+    try {
+      const currentGallery = [...(trainerProfile?.gallery || [])];
+      currentGallery[index] = { ...currentGallery[index], caption };
+      
+      const { error } = await supabase
+        .from("trainers")
+        .update({ gallery: currentGallery })
+        .eq("id", trainerProfile.id);
+
+      if (error) throw error;
+      toast.success("Caption updated");
+      loadData();
+    } catch (error) {
+      console.error("Error updating caption:", error);
+      toast.error("Failed to update caption");
+    }
+  };
+
   if (!isTrainer()) return null;
 
   if (!profile) {
@@ -281,22 +435,30 @@ export default function TrainerDashboard() {
         onValueChange={setActiveTab}
         className="space-y-6"
       >
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="challenges">
             <Trophy className="w-4 h-4 mr-2" />
-            My Challenges
+            Challenges
+          </TabsTrigger>
+          <TabsTrigger value="events">
+            <CalendarPlus className="w-4 h-4 mr-2" />
+            Events
           </TabsTrigger>
           <TabsTrigger value="bookings">
             <Calendar className="w-4 h-4 mr-2" />
-            My Bookings
+            Bookings
           </TabsTrigger>
           <TabsTrigger value="reviews">
             <Star className="w-4 h-4 mr-2" />
-            My Reviews
+            Reviews
+          </TabsTrigger>
+          <TabsTrigger value="gallery">
+            <Images className="w-4 h-4 mr-2" />
+            Gallery
           </TabsTrigger>
           <TabsTrigger value="profile">
             <User className="w-4 h-4 mr-2" />
-            Trainer Profile
+            Profile
           </TabsTrigger>
         </TabsList>
 
@@ -369,6 +531,113 @@ export default function TrainerDashboard() {
                         {challenge.xp_reward} XP
                       </Badge>
                       {challenge.is_featured && <Badge>Featured</Badge>}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Events Tab */}
+        <TabsContent value="events" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-semibold">
+              My Events ({events.length})
+            </h2>
+            {trainerProfile && (
+              <EventDialog
+                onSave={(data) => handleSaveEvent(data)}
+                trigger={
+                  <Button>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Event
+                  </Button>
+                }
+              />
+            )}
+          </div>
+
+          {!trainerProfile ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <User className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground mb-4">
+                  Set up your trainer profile to create events
+                </p>
+                <Button onClick={() => setActiveTab("profile")}>
+                  Create Trainer Profile
+                </Button>
+              </CardContent>
+            </Card>
+          ) : events.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <CalendarPlus className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">
+                  No events yet. Create your first training event!
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {events.map((event) => (
+                <Card key={event.id}>
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle>{event.title}</CardTitle>
+                        <CardDescription>{event.description}</CardDescription>
+                      </div>
+                      <div className="flex gap-2">
+                        <EventDialog
+                          event={event}
+                          onSave={(data) => handleSaveEvent(data, true)}
+                          trigger={
+                            <Button variant="outline" size="sm">
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          }
+                        />
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteEvent(event.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex gap-4 text-sm">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-4 h-4 text-muted-foreground" />
+                          <span>{new Date(event.date).toLocaleDateString()}</span>
+                        </div>
+                        {event.location && (
+                          <div className="flex items-center gap-1">
+                            <MapPin className="w-4 h-4 text-muted-foreground" />
+                            <span>{event.location}</span>
+                          </div>
+                        )}
+                        {event.max_participants && (
+                          <div className="flex items-center gap-1">
+                            <Users className="w-4 h-4 text-muted-foreground" />
+                            <span>{event.current_participants || 0}/{event.max_participants}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        <Badge>{event.event_type || "Training"}</Badge>
+                        {event.price && (
+                          <Badge variant="secondary">${event.price}</Badge>
+                        )}
+                        {event.duration_minutes && (
+                          <Badge variant="outline">{event.duration_minutes} min</Badge>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -553,6 +822,110 @@ export default function TrainerDashboard() {
           )}
         </TabsContent>
 
+        {/* Gallery Tab */}
+        <TabsContent value="gallery" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-semibold">
+              My Gallery ({trainerProfile?.gallery?.length || 0})
+            </h2>
+          </div>
+
+          {!trainerProfile ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <User className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground mb-4">
+                  Set up your trainer profile to add gallery items
+                </p>
+                <Button onClick={() => setActiveTab("profile")}>
+                  Create Trainer Profile
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              {/* Upload Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Upload className="w-5 h-5" />
+                    Add Media
+                  </CardTitle>
+                  <CardDescription>
+                    Upload photos and videos to showcase your training sessions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <GalleryUploader onAdd={handleAddGalleryItem} />
+                </CardContent>
+              </Card>
+
+              {/* Gallery Grid */}
+              {trainerProfile?.gallery?.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {trainerProfile.gallery.map((item, index) => (
+                    <Card key={index} className="overflow-hidden group relative">
+                      <div className="aspect-square relative">
+                        {item.type === "image" ? (
+                          <img
+                            src={item.url}
+                            alt={item.caption || "Gallery image"}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gray-800 flex items-center justify-center relative">
+                            {item.thumbnail ? (
+                              <img
+                                src={item.thumbnail}
+                                alt={item.caption || "Video thumbnail"}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <Video className="w-12 h-12 text-gray-400" />
+                            )}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
+                                <Play className="w-6 h-6 text-white ml-1" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Delete button overlay */}
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => handleDeleteGalleryItem(index)}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <CardContent className="p-3">
+                        <p className="text-sm text-muted-foreground truncate">
+                          {item.caption || "No caption"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {item.created_at && new Date(item.created_at).toLocaleDateString()}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <Images className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground">
+                      No media in your gallery yet. Add photos and videos above!
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+        </TabsContent>
+
         {/* Profile Tab */}
         <TabsContent value="profile" className="space-y-4">
           <h2 className="text-2xl font-semibold">Trainer Profile</h2>
@@ -569,18 +942,44 @@ export default function TrainerDashboard() {
 // Challenge Dialog Component
 function ChallengeDialog({ challenge, onSave, trigger }) {
   const [open, setOpen] = useState(false);
-  const [formData, setFormData] = useState(
-    challenge || {
-      title: "",
-      description: "",
-      category: "shooting",
-      difficulty: "beginner",
-      duration_minutes: 20,
-      xp_reward: 100,
-      equipment_needed: [],
-      is_featured: false,
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    category: "shooting",
+    difficulty: "beginner",
+    duration_minutes: 20,
+    xp_reward: 100,
+    equipment_needed: [],
+    is_featured: false,
+    media_type: "",
+    media_url: "",
+    thumbnail_url: "",
+  });
+
+  useEffect(() => {
+    if (challenge) {
+      setFormData({
+        ...challenge,
+        media_type: challenge.media_type || "",
+        media_url: challenge.media_url || "",
+        thumbnail_url: challenge.thumbnail_url || "",
+      });
+    } else {
+      setFormData({
+        title: "",
+        description: "",
+        category: "shooting",
+        difficulty: "beginner",
+        duration_minutes: 20,
+        xp_reward: 100,
+        equipment_needed: [],
+        is_featured: false,
+        media_type: "",
+        media_url: "",
+        thumbnail_url: "",
+      });
     }
-  );
+  }, [challenge, open]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -696,6 +1095,117 @@ function ChallengeDialog({ challenge, onSave, trigger }) {
               />
             </div>
           </div>
+
+          {/* Media Section */}
+          <div className="border-t pt-4 mt-4">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Image className="w-4 h-4" />
+              Media (Optional)
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="media_type">Media Type</Label>
+                <Select
+                  value={formData.media_type || "none"}
+                  onValueChange={(value) =>
+                    setFormData({ 
+                      ...formData, 
+                      media_type: value === "none" ? "" : value,
+                      media_url: value === "none" ? "" : formData.media_url,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select media type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Media</SelectItem>
+                    <SelectItem value="image">Image</SelectItem>
+                    <SelectItem value="video">Video</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {formData.media_type === "image" && (
+                <div className="space-y-2">
+                  <Label htmlFor="media_url">Image URL</Label>
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <Input
+                        id="media_url"
+                        value={formData.media_url}
+                        onChange={(e) =>
+                          setFormData({ ...formData, media_url: e.target.value })
+                        }
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <ImageUpload
+                      onUploadComplete={(url) =>
+                        setFormData({ ...formData, media_url: url })
+                      }
+                    />
+                  </div>
+                  {formData.media_url && (
+                    <div className="mt-2 rounded-lg overflow-hidden border">
+                      <img
+                        src={formData.media_url}
+                        alt="Preview"
+                        className="w-full h-40 object-cover"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {formData.media_type === "video" && (
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="media_url">Video URL (YouTube or direct link)</Label>
+                    <Input
+                      id="media_url"
+                      value={formData.media_url}
+                      onChange={(e) =>
+                        setFormData({ ...formData, media_url: e.target.value })
+                      }
+                      placeholder="https://youtube.com/watch?v=... or direct video URL"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="thumbnail_url">Thumbnail Image URL (Optional)</Label>
+                    <div className="flex gap-2 items-end">
+                      <div className="flex-1">
+                        <Input
+                          id="thumbnail_url"
+                          value={formData.thumbnail_url}
+                          onChange={(e) =>
+                            setFormData({ ...formData, thumbnail_url: e.target.value })
+                          }
+                          placeholder="https://..."
+                        />
+                      </div>
+                      <ImageUpload
+                        onUploadComplete={(url) =>
+                          setFormData({ ...formData, thumbnail_url: url })
+                        }
+                      />
+                    </div>
+                    {formData.thumbnail_url && (
+                      <div className="mt-2 rounded-lg overflow-hidden border">
+                        <img
+                          src={formData.thumbnail_url}
+                          alt="Thumbnail Preview"
+                          className="w-full h-32 object-cover"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="flex justify-end gap-2 pt-4">
             <Button
               type="button"
@@ -714,18 +1224,386 @@ function ChallengeDialog({ challenge, onSave, trigger }) {
   );
 }
 
+// Default availability schedule
+const DEFAULT_AVAILABILITY = {
+  monday: { start: "09:00", end: "17:00", enabled: true },
+  tuesday: { start: "09:00", end: "17:00", enabled: true },
+  wednesday: { start: "09:00", end: "17:00", enabled: true },
+  thursday: { start: "09:00", end: "17:00", enabled: true },
+  friday: { start: "09:00", end: "17:00", enabled: true },
+  saturday: { start: "10:00", end: "14:00", enabled: false },
+  sunday: { start: "10:00", end: "14:00", enabled: false },
+};
+
+const DAYS_OF_WEEK = [
+  { key: "monday", label: "Monday" },
+  { key: "tuesday", label: "Tuesday" },
+  { key: "wednesday", label: "Wednesday" },
+  { key: "thursday", label: "Thursday" },
+  { key: "friday", label: "Friday" },
+  { key: "saturday", label: "Saturday" },
+  { key: "sunday", label: "Sunday" },
+];
+
+// Event Dialog Component
+function EventDialog({ event, onSave, trigger }) {
+  const [open, setOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    date: "",
+    time: "09:00",
+    location: "",
+    event_type: "training",
+    max_participants: 20,
+    price: 0,
+    duration_minutes: 60,
+  });
+
+  useEffect(() => {
+    if (event) {
+      const eventDate = event.date ? new Date(event.date) : new Date();
+      setFormData({
+        ...event,
+        date: eventDate.toISOString().split("T")[0],
+        time: eventDate.toTimeString().slice(0, 5),
+        event_type: event.event_type || "training",
+        max_participants: event.max_participants || 20,
+        price: event.price || 0,
+        duration_minutes: event.duration_minutes || 60,
+      });
+    } else {
+      setFormData({
+        title: "",
+        description: "",
+        date: "",
+        time: "09:00",
+        location: "",
+        event_type: "training",
+        max_participants: 20,
+        price: 0,
+        duration_minutes: 60,
+      });
+    }
+  }, [event, open]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    // Combine date and time into a single datetime
+    const datetime = new Date(`${formData.date}T${formData.time}`);
+    const submitData = {
+      ...formData,
+      date: datetime.toISOString(),
+      id: event?.id,
+    };
+    delete submitData.time; // Remove the separate time field
+    onSave(submitData);
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            {event ? "Edit Event" : "Create New Event"}
+          </DialogTitle>
+          <DialogDescription>
+            {event
+              ? "Update your event details"
+              : "Create a new training event"}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="event-title">Title</Label>
+            <Input
+              id="event-title"
+              value={formData.title}
+              onChange={(e) =>
+                setFormData({ ...formData, title: e.target.value })
+              }
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="event-description">Description</Label>
+            <Textarea
+              id="event-description"
+              value={formData.description}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
+              rows={3}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="event-date">Date</Label>
+              <Input
+                id="event-date"
+                type="date"
+                value={formData.date}
+                onChange={(e) =>
+                  setFormData({ ...formData, date: e.target.value })
+                }
+                min={new Date().toISOString().split("T")[0]}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="event-time">Time</Label>
+              <Input
+                id="event-time"
+                type="time"
+                value={formData.time}
+                onChange={(e) =>
+                  setFormData({ ...formData, time: e.target.value })
+                }
+                required
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="event-location">Location</Label>
+            <Input
+              id="event-location"
+              value={formData.location}
+              onChange={(e) =>
+                setFormData({ ...formData, location: e.target.value })
+              }
+              placeholder="e.g., Downtown Sports Center"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="event-type">Event Type</Label>
+              <Select
+                value={formData.event_type}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, event_type: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="training">Training Camp</SelectItem>
+                  <SelectItem value="workshop">Workshop</SelectItem>
+                  <SelectItem value="clinic">Skills Clinic</SelectItem>
+                  <SelectItem value="tournament">Tournament</SelectItem>
+                  <SelectItem value="seminar">Seminar</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="event-duration">Duration (min)</Label>
+              <Input
+                id="event-duration"
+                type="number"
+                value={formData.duration_minutes}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    duration_minutes: parseInt(e.target.value),
+                  })
+                }
+                min="15"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="event-max">Max Participants</Label>
+              <Input
+                id="event-max"
+                type="number"
+                value={formData.max_participants}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    max_participants: parseInt(e.target.value),
+                  })
+                }
+                min="1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="event-price">Price ($)</Label>
+              <Input
+                id="event-price"
+                type="number"
+                value={formData.price}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    price: parseFloat(e.target.value),
+                  })
+                }
+                min="0"
+                step="0.01"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit">
+              {event ? "Update" : "Create"} Event
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Gallery Uploader Component
+function GalleryUploader({ onAdd }) {
+  const [mediaType, setMediaType] = useState("image");
+  const [url, setUrl] = useState("");
+  const [thumbnail, setThumbnail] = useState("");
+  const [caption, setCaption] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+
+  const handleAdd = () => {
+    if (!url.trim()) {
+      toast.error("Please enter a URL or upload media");
+      return;
+    }
+
+    const item = {
+      type: mediaType,
+      url: url.trim(),
+      caption: caption.trim(),
+    };
+
+    if (mediaType === "video" && thumbnail.trim()) {
+      item.thumbnail = thumbnail.trim();
+    }
+
+    onAdd(item);
+    setUrl("");
+    setThumbnail("");
+    setCaption("");
+    setIsAdding(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-4 items-center">
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={mediaType === "image" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setMediaType("image")}
+          >
+            <Image className="w-4 h-4 mr-2" />
+            Photo
+          </Button>
+          <Button
+            type="button"
+            variant={mediaType === "video" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setMediaType("video")}
+          >
+            <Video className="w-4 h-4 mr-2" />
+            Video
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4">
+        {mediaType === "image" ? (
+          <ImageUpload
+            value={url}
+            onChange={setUrl}
+            label="Image"
+          />
+        ) : (
+          <>
+            <div>
+              <Label htmlFor="gallery-video-url">Video URL (YouTube or direct link)</Label>
+              <Input
+                id="gallery-video-url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://youtube.com/watch?v=... or direct video URL"
+              />
+            </div>
+            <ImageUpload
+              value={thumbnail}
+              onChange={setThumbnail}
+              label="Thumbnail Image (Optional)"
+            />
+          </>
+        )}
+
+        <div>
+          <Label htmlFor="gallery-caption">Caption (Optional)</Label>
+          <Input
+            id="gallery-caption"
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            placeholder="Describe this photo or video..."
+          />
+        </div>
+
+        {/* Preview */}
+        {url && (
+          <div className="border rounded-lg p-4 bg-muted/50">
+            <p className="text-sm text-muted-foreground mb-2">Preview:</p>
+            {mediaType === "image" ? (
+              <img
+                src={url}
+                alt="Preview"
+                className="max-h-40 rounded object-cover"
+                onError={(e) => (e.target.style.display = "none")}
+              />
+            ) : (
+              <div className="flex items-center gap-3 p-3 bg-gray-800 rounded">
+                <Play className="w-8 h-8 text-gray-400" />
+                <span className="text-sm text-gray-300 truncate">{url}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <Button onClick={handleAdd} disabled={!url.trim()}>
+          <Plus className="w-4 h-4 mr-2" />
+          Add to Gallery
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // Trainer Profile Form Component
 function TrainerProfileForm({ profile, onSave }) {
   const [formData, setFormData] = useState({
     name: "",
     bio: "",
     specializations: [],
+    certifications: [],
     years_experience: 0,
     location: "",
     hourly_rate: 0,
     verified: false,
+    availability_schedule: DEFAULT_AVAILABILITY,
+    blocked_dates: [],
+    session_buffer_minutes: 15,
+    min_booking_notice_hours: 24,
   });
   const [isEditing, setIsEditing] = useState(false);
+  const [newBlockedDate, setNewBlockedDate] = useState("");
+  const [newCertification, setNewCertification] = useState({ name: "", issuer: "", year: new Date().getFullYear() });
 
   // Update form data when profile changes
   useEffect(() => {
@@ -734,13 +1612,65 @@ function TrainerProfileForm({ profile, onSave }) {
         name: profile.name || "",
         bio: profile.bio || "",
         specializations: profile.specializations || [],
+        certifications: profile.certifications || [],
         years_experience: profile.years_experience || 0,
         location: profile.location || "",
         hourly_rate: profile.hourly_rate || 0,
         verified: profile.verified || false,
+        availability_schedule: profile.availability_schedule || DEFAULT_AVAILABILITY,
+        blocked_dates: profile.blocked_dates || [],
+        session_buffer_minutes: profile.session_buffer_minutes || 15,
+        min_booking_notice_hours: profile.min_booking_notice_hours || 24,
       });
     }
   }, [profile]);
+
+  const addCertification = () => {
+    if (newCertification.name.trim()) {
+      setFormData({
+        ...formData,
+        certifications: [...formData.certifications, { ...newCertification }],
+      });
+      setNewCertification({ name: "", issuer: "", year: new Date().getFullYear() });
+    }
+  };
+
+  const removeCertification = (index) => {
+    setFormData({
+      ...formData,
+      certifications: formData.certifications.filter((_, i) => i !== index),
+    });
+  };
+
+  const updateDayAvailability = (day, field, value) => {
+    setFormData({
+      ...formData,
+      availability_schedule: {
+        ...formData.availability_schedule,
+        [day]: {
+          ...formData.availability_schedule[day],
+          [field]: value,
+        },
+      },
+    });
+  };
+
+  const addBlockedDate = () => {
+    if (newBlockedDate && !formData.blocked_dates.includes(newBlockedDate)) {
+      setFormData({
+        ...formData,
+        blocked_dates: [...formData.blocked_dates, newBlockedDate].sort(),
+      });
+      setNewBlockedDate("");
+    }
+  };
+
+  const removeBlockedDate = (date) => {
+    setFormData({
+      ...formData,
+      blocked_dates: formData.blocked_dates.filter((d) => d !== date),
+    });
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -755,10 +1685,15 @@ function TrainerProfileForm({ profile, onSave }) {
         name: profile.name || "",
         bio: profile.bio || "",
         specializations: profile.specializations || [],
+        certifications: profile.certifications || [],
         years_experience: profile.years_experience || 0,
         location: profile.location || "",
         hourly_rate: profile.hourly_rate || 0,
         verified: profile.verified || false,
+        availability_schedule: profile.availability_schedule || DEFAULT_AVAILABILITY,
+        blocked_dates: profile.blocked_dates || [],
+        session_buffer_minutes: profile.session_buffer_minutes || 15,
+        min_booking_notice_hours: profile.min_booking_notice_hours || 24,
       });
     }
     setIsEditing(false);
@@ -904,7 +1839,227 @@ function TrainerProfileForm({ profile, onSave }) {
                 </p>
               </div>
             </div>
-            <div className="flex justify-end gap-2">
+
+            {/* Certifications Section */}
+            <div className="border-t pt-6 mt-6">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Award className="w-5 h-5" />
+                Certifications & Qualifications
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Add your coaching certifications, licenses, and qualifications.
+              </p>
+              
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-2">
+                  <Input
+                    placeholder="Certification name"
+                    value={newCertification.name}
+                    onChange={(e) =>
+                      setNewCertification({ ...newCertification, name: e.target.value })
+                    }
+                  />
+                  <Input
+                    placeholder="Issuing organization"
+                    value={newCertification.issuer}
+                    onChange={(e) =>
+                      setNewCertification({ ...newCertification, issuer: e.target.value })
+                    }
+                  />
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      placeholder="Year"
+                      value={newCertification.year}
+                      onChange={(e) =>
+                        setNewCertification({ ...newCertification, year: parseInt(e.target.value) })
+                      }
+                      min="1950"
+                      max={new Date().getFullYear()}
+                      className="w-24"
+                    />
+                    <Button type="button" variant="outline" onClick={addCertification}>
+                      Add
+                    </Button>
+                  </div>
+                </div>
+                
+                {formData.certifications.length > 0 && (
+                  <div className="space-y-2">
+                    {formData.certifications.map((cert, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                      >
+                        <div>
+                          <div className="font-medium">{cert.name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {cert.issuer} {cert.year && `• ${cert.year}`}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeCertification(index)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {formData.certifications.length === 0 && (
+                  <p className="text-sm text-muted-foreground italic">
+                    No certifications added yet
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Availability Schedule Section */}
+            <div className="border-t pt-6 mt-6">
+              <h3 className="text-lg font-semibold mb-4">Availability Schedule</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Set your weekly availability for booking sessions.
+              </p>
+              
+              <div className="space-y-3">
+                {DAYS_OF_WEEK.map(({ key, label }) => (
+                  <div key={key} className="flex items-center gap-4 p-3 border rounded-lg">
+                    <div className="flex items-center gap-2 w-32">
+                      <input
+                        type="checkbox"
+                        id={`day-${key}`}
+                        checked={formData.availability_schedule[key]?.enabled ?? false}
+                        onChange={(e) => updateDayAvailability(key, "enabled", e.target.checked)}
+                        className="rounded"
+                      />
+                      <Label htmlFor={`day-${key}`} className="font-medium cursor-pointer">
+                        {label}
+                      </Label>
+                    </div>
+                    
+                    {formData.availability_schedule[key]?.enabled && (
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input
+                          type="time"
+                          value={formData.availability_schedule[key]?.start || "09:00"}
+                          onChange={(e) => updateDayAvailability(key, "start", e.target.value)}
+                          className="w-32"
+                        />
+                        <span className="text-muted-foreground">to</span>
+                        <Input
+                          type="time"
+                          value={formData.availability_schedule[key]?.end || "17:00"}
+                          onChange={(e) => updateDayAvailability(key, "end", e.target.value)}
+                          className="w-32"
+                        />
+                      </div>
+                    )}
+                    
+                    {!formData.availability_schedule[key]?.enabled && (
+                      <span className="text-muted-foreground text-sm">Unavailable</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Booking Settings */}
+            <div className="border-t pt-6 mt-6">
+              <h3 className="text-lg font-semibold mb-4">Booking Settings</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="buffer">Buffer Between Sessions (minutes)</Label>
+                  <Input
+                    id="buffer"
+                    type="number"
+                    value={formData.session_buffer_minutes}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        session_buffer_minutes: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    min="0"
+                    max="60"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Time between sessions for breaks
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="notice">Minimum Booking Notice (hours)</Label>
+                  <Input
+                    id="notice"
+                    type="number"
+                    value={formData.min_booking_notice_hours}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        min_booking_notice_hours: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    min="0"
+                    max="168"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    How far in advance bookings must be made
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Blocked Dates */}
+            <div className="border-t pt-6 mt-6">
+              <h3 className="text-lg font-semibold mb-4">Blocked Dates</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Block specific dates when you're unavailable (vacation, holidays, etc.)
+              </p>
+              
+              <div className="flex gap-2 mb-4">
+                <Input
+                  type="date"
+                  value={newBlockedDate}
+                  onChange={(e) => setNewBlockedDate(e.target.value)}
+                  min={new Date().toISOString().split("T")[0]}
+                  className="w-48"
+                />
+                <Button type="button" variant="outline" onClick={addBlockedDate}>
+                  Add Date
+                </Button>
+              </div>
+              
+              {formData.blocked_dates.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {formData.blocked_dates.map((date) => (
+                    <Badge
+                      key={date}
+                      variant="secondary"
+                      className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
+                      onClick={() => removeBlockedDate(date)}
+                    >
+                      {new Date(date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}{" "}
+                      ×
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              
+              {formData.blocked_dates.length === 0 && (
+                <p className="text-sm text-muted-foreground">No blocked dates</p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-6 border-t mt-6">
               {isEditing && (
                 <Button type="button" variant="outline" onClick={handleCancel}>
                   Cancel
@@ -980,6 +2135,100 @@ function TrainerProfileForm({ profile, onSave }) {
                   </div>
                 </div>
               )}
+
+            {/* Certifications Display */}
+            {formData.certifications &&
+              formData.certifications.length > 0 && (
+                <div className="border-t pt-6 mt-6">
+                  <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                    <Award className="w-5 h-5" />
+                    Certifications & Qualifications
+                  </h3>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {formData.certifications.map((cert, index) => (
+                      <div
+                        key={index}
+                        className="p-3 bg-gray-800/50 border border-gray-700 rounded-lg"
+                      >
+                        <div className="font-medium text-white">{cert.name}</div>
+                        <div className="text-sm text-gray-400">
+                          {cert.issuer} {cert.year && `• ${cert.year}`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            {/* Availability Display */}
+            <div className="border-t pt-6 mt-6">
+              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                Availability Schedule
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {DAYS_OF_WEEK.map(({ key, label }) => {
+                  const daySchedule = formData.availability_schedule?.[key];
+                  return (
+                    <div
+                      key={key}
+                      className={`p-3 rounded-lg border ${
+                        daySchedule?.enabled
+                          ? "bg-green-900/30 border-green-700"
+                          : "bg-gray-800/50 border-gray-700"
+                      }`}
+                    >
+                      <div className={`font-medium text-sm ${
+                        daySchedule?.enabled ? "text-green-400" : "text-gray-400"
+                      }`}>
+                        {label}
+                      </div>
+                      {daySchedule?.enabled ? (
+                        <div className="text-xs text-green-300/80 mt-1">
+                          {daySchedule.start} - {daySchedule.end}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Unavailable
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+                  <div className="text-sm text-gray-400">Session Buffer</div>
+                  <div className="font-medium text-white">{formData.session_buffer_minutes || 15} minutes</div>
+                </div>
+                <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+                  <div className="text-sm text-gray-400">Booking Notice</div>
+                  <div className="font-medium text-white">{formData.min_booking_notice_hours || 24} hours</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Blocked Dates Display */}
+            {formData.blocked_dates && formData.blocked_dates.length > 0 && (
+              <div className="border-t pt-6 mt-6">
+                <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                  <CalendarX className="w-5 h-5" />
+                  Blocked Dates
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {formData.blocked_dates.map((date) => (
+                    <Badge key={date} variant="outline">
+                      {new Date(date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </CardContent>
