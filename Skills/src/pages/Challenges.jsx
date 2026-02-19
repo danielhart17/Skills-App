@@ -150,11 +150,11 @@ export default function Challenges() {
               <Trophy className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-3xl lg:text-4xl font-bold text-white">
-              Challenge Library
+              Workout Library
             </h1>
           </div>
           <p className="text-xl text-brand-lightGray max-w-2xl mx-auto">
-            Push your limits with specialized drills and shooting challenges
+            Push your limits with specialized drills and shooting workouts
           </p>
         </div>
 
@@ -162,7 +162,7 @@ export default function Challenges() {
         <div className="space-y-4">
           <h2 className="text-2xl font-bold text-white flex items-center gap-2">
             <Star className="w-6 h-6 text-yellow-400 fill-current" />
-            Featured Trainer Challenge
+            Featured Trainer Workout
           </h2>
 
           {featuredChallenge && featuredTrainer ? (
@@ -203,7 +203,7 @@ export default function Challenges() {
                     size="lg"
                     className="bg-white text-blue-600 hover:bg-gray-100 font-bold shadow-lg px-8 py-3"
                     onClick={() =>
-                      navigate(`/challenges/${featuredChallenge.id}`)
+                      navigate(`/workouts/${featuredChallenge.id}`)
                     }
                   >
                     {isChallengeCompleted(featuredChallenge.id) ? (
@@ -214,7 +214,7 @@ export default function Challenges() {
                     ) : (
                       <>
                         <Play className="w-5 h-5 mr-2" />
-                        Start Challenge
+                        Start Workout
                       </>
                     )}
                   </Button>
@@ -259,10 +259,10 @@ export default function Challenges() {
               <CardContent className="p-8 text-center">
                 <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                  No Featured Challenge This Week
+                  No Featured Workout This Week
                 </h3>
                 <p className="text-gray-500">
-                  Check back soon for a new trainer challenge!
+                  Check back soon for a new trainer workout!
                 </p>
               </CardContent>
             </Card>
@@ -351,7 +351,7 @@ export default function Challenges() {
           </div>
         </div>
 
-        {/* Challenges Grid */}
+        {/* Workouts Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredChallenges.map((challenge) => (
             <Card
@@ -417,7 +417,7 @@ export default function Challenges() {
 
                   <Button
                     className="w-full bg-brand-orange hover:opacity-90 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-                    onClick={() => navigate(`/challenges/${challenge.id}`)}
+                    onClick={() => navigate(`/workouts/${challenge.id}`)}
                   >
                     {isChallengeCompleted(challenge.id) ? (
                       <>
@@ -427,7 +427,7 @@ export default function Challenges() {
                     ) : (
                       <>
                         <Play className="w-4 h-4 mr-2" />
-                        Start Challenge
+                        Start Workout
                       </>
                     )}
                   </Button>
@@ -443,10 +443,10 @@ export default function Challenges() {
               <Trophy className="w-12 h-12 text-yellow-500" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              No Challenges Found
+              No Workouts Found
             </h3>
             <p className="text-gray-600 mb-6">
-              Try adjusting your filters or check back later for new challenges
+              Try adjusting your filters or check back later for new workouts
             </p>
             <Button
               onClick={() => {

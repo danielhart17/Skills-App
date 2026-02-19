@@ -78,8 +78,12 @@ function PagesContent() {
 
         <Route path="/lesson/:lessonId/questions" element={<QuestionPage />} />
 
-        <Route path="/Challenges" element={<Challenges />} />
+        <Route path="/Workouts" element={<Challenges />} />
+        <Route path="/workouts" element={<Challenges />} />
+        <Route path="/challenges" element={<Navigate to="/workouts" replace />} />
+        <Route path="/Challenges" element={<Navigate to="/workouts" replace />} />
 
+        <Route path="/workouts/:challengeId" element={<ChallengeDetail />} />
         <Route path="/challenges/:challengeId" element={<ChallengeDetail />} />
 
         <Route path="/ShootingSession" element={<ShootingSession />} />

@@ -624,7 +624,7 @@ export default function Profile() {
                   No Badges Yet
                 </h3>
                 <p className="text-gray-600 mb-4">
-                  Complete lessons and challenges to earn your first badge!
+                  Complete lessons and workouts to earn your first badge!
                 </p>
                 <Button className="bg-gradient-to-r from-yellow-500 to-orange-600">
                   Start Learning

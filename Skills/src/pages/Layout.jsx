@@ -33,8 +33,8 @@ const navigationItems = [
     description: "IQ & On Court Training",
   },
   {
-    title: "Challenges",
-    url: createPageUrl("Challenges"),
+    title: "Workouts",
+    url: createPageUrl("Workouts"),
     icon: Trophy,
     description: "Practice & Test Your Skills",
   },

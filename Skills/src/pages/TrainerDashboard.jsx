@@ -237,17 +237,17 @@ export default function TrainerDashboard() {
   }, [loadData, profile]);
 
   const handleDeleteChallenge = async (id) => {
-    if (!confirm("Are you sure you want to delete this challenge?")) return;
+    if (!confirm("Are you sure you want to delete this workout?")) return;
 
     try {
       const { error } = await supabase.from("challenges").delete().eq("id", id);
 
       if (error) throw error;
-      toast.success("Challenge deleted successfully");
+      toast.success("Workout deleted successfully");
       loadData();
     } catch (error) {
-      console.error("Error deleting:", error);
-      toast.error("Failed to delete challenge");
+      console.error("Error deleting workout:", error);
+      toast.error("Failed to delete workout");
     }
   };
 
@@ -265,17 +265,17 @@ export default function TrainerDashboard() {
           .update(saveData)
           .eq("id", data.id);
         if (error) throw error;
-        toast.success("Challenge updated successfully");
+        toast.success("Workout updated successfully");
       } else {
         const { error } = await supabase.from("challenges").insert([saveData]);
         if (error) throw error;
-        toast.success("Challenge created successfully");
+        toast.success("Workout created successfully");
       }
 
       loadData();
     } catch (error) {
-      console.error("Error saving challenge:", error);
-      toast.error("Failed to save challenge");
+      console.error("Error saving workout:", error);
+      toast.error("Failed to save workout");
     }
   };
 
@@ -426,7 +426,7 @@ export default function TrainerDashboard() {
           <h1 className="text-3xl font-bold">Trainer Dashboard</h1>
         </div>
         <p className="text-muted-foreground">
-          Manage your challenges, bookings, and profile
+          Manage your workouts, bookings, and profile
         </p>
       </div>
 
@@ -438,7 +438,7 @@ export default function TrainerDashboard() {
         <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="challenges">
             <Trophy className="w-4 h-4 mr-2" />
-            Challenges
+            Workouts
           </TabsTrigger>
           <TabsTrigger value="events">
             <CalendarPlus className="w-4 h-4 mr-2" />
@@ -462,18 +462,18 @@ export default function TrainerDashboard() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Challenges Tab */}
+        {/* Workouts Tab */}
         <TabsContent value="challenges" className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-semibold">
-              My Challenges ({challenges.length})
+              My Workouts ({challenges.length})
             </h2>
             <ChallengeDialog
               onSave={(data) => handleSaveChallenge(data)}
               trigger={
                 <Button>
                   <Plus className="w-4 h-4 mr-2" />
-                  Create Challenge
+                  Create Workout
                 </Button>
               }
             />
@@ -484,7 +484,7 @@ export default function TrainerDashboard() {
               <CardContent className="py-12 text-center">
                 <Trophy className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-muted-foreground">
-                  No challenges yet. Create your first challenge!
+                  No workouts yet. Create your first workout!
                 </p>
               </CardContent>
             </Card>
@@ -993,12 +993,12 @@ function ChallengeDialog({ challenge, onSave, trigger }) {
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {challenge ? "Edit Challenge" : "Create New Challenge"}
+            {challenge ? "Edit Workout" : "Create New Workout"}
           </DialogTitle>
           <DialogDescription>
             {challenge
-              ? "Update your challenge details"
-              : "Create a new challenge for your students"}
+              ? "Update your workout details"
+              : "Create a new workout for your students"}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -1215,7 +1215,7 @@ function ChallengeDialog({ challenge, onSave, trigger }) {
               Cancel
             </Button>
             <Button type="submit">
-              {challenge ? "Update" : "Create"} Challenge
+              {challenge ? "Update" : "Create"} Workout
             </Button>
           </div>
         </form>

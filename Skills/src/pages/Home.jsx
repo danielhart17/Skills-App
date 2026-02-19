@@ -112,10 +112,10 @@ export default function Home() {
                 Learn
               </Button>
             </Link>
-            <Link to="/challenges">
+            <Link to="/workouts">
               <Button className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-6 py-3 rounded-xl shadow-lg transition-all">
                 <Trophy className="w-5 h-5 mr-2" />
-                Challenges
+                Workouts
               </Button>
             </Link>
           </div>
@@ -249,7 +249,7 @@ export default function Home() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl text-white">
                 <Trophy className="w-6 h-6 text-yellow-500" />
-                Today&apos;s Challenge
+                Today&apos;s Workout
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -270,27 +270,27 @@ export default function Home() {
                         variant="outline"
                         className="border-gray-600 text-gray-300"
                       >
-                        {todayChallenge.category || "Challenge"}
+                        {todayChallenge.category || "Workout"}
                       </Badge>
                     </div>
                     <Button
                       className="bg-brand-orange hover:opacity-90 text-white"
                       onClick={() =>
-                        navigate(`/challenges/${todayChallenge.id}`)
+                        navigate(`/workouts/${todayChallenge.id}`)
                       }
                     >
-                      Accept Challenge
+                      Accept Workout
                     </Button>
                   </div>
                 </div>
               ) : (
                 <div className="text-center py-8">
                   <p className="text-gray-400 mb-4">
-                    No challenges available yet.
+                    No workouts available yet.
                   </p>
-                  <Link to={createPageUrl("Challenges")}>
+                  <Link to={createPageUrl("Workouts")}>
                     <Button className="bg-gradient-to-r from-yellow-500 to-orange-500">
-                      Explore Challenges
+                      Explore Workouts
                     </Button>
                   </Link>
                 </div>
