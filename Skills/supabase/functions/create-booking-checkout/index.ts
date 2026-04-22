@@ -191,9 +191,10 @@ serve(async (req) => {
     console.log("Created checkout session:", session.id, "for booking:", booking.id);
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         sessionId: session.id,
         bookingId: booking.id,
+        url: session.url,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

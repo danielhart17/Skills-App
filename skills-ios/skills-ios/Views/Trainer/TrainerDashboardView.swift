@@ -13,11 +13,24 @@ struct TrainerDashboardView: View {
     @State private var bookings: [Booking] = []
     @State private var challenges: [Challenge] = []
     @State private var isLoading = true
-    
+    @State private var trainer: Trainer? = nil
+    @State private var stripeOnboardingURL: URL? = nil
+    @State private var stripeError: String? = nil
+    @State private var isOnboarding = false
+
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Tab Selector
+                if let trainer = trainer {
+                    StripePaymentsCard(
+                        trainer: trainer,
+                        isLoading: isOnboarding,
+                        onSetupTap: startStripeOnboarding
+                    )
+                    .padding(.horizontal)
+                    .padding(.top)
+                }
+
                 Picker("", selection: $selectedTab) {
                     Text("Overview").tag(0)
                     Text("Bookings").tag(1)
@@ -25,15 +38,14 @@ struct TrainerDashboardView: View {
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .padding()
-                
-                // Content
+
                 TabView(selection: $selectedTab) {
                     TrainerOverviewView(bookings: bookings)
                         .tag(0)
-                    
+
                     TrainerBookingsView(bookings: bookings)
                         .tag(1)
-                    
+
                     TrainerChallengesView(challenges: challenges)
                         .tag(2)
                 }
@@ -53,14 +65,139 @@ struct TrainerDashboardView: View {
             .onAppear {
                 loadData()
             }
+            .sheet(isPresented: Binding(
+                get: { stripeOnboardingURL != nil },
+                set: { if !$0 { handleOnboardingDismissed() } }
+            )) {
+                if let url = stripeOnboardingURL {
+                    SafariView(url: url) {
+                        handleOnboardingDismissed()
+                    }
+                    .ignoresSafeArea()
+                }
+            }
+            .alert("Stripe Setup", isPresented: Binding(
+                get: { stripeError != nil },
+                set: { if !$0 { stripeError = nil } }
+            )) {
+                Button("OK") { stripeError = nil }
+            } message: {
+                Text(stripeError ?? "")
+            }
         }
     }
-    
+
     private func loadData() {
         Task {
-            // In a real app, fetch trainer-specific data
+            await refreshTrainer()
             isLoading = false
         }
+    }
+
+    private func refreshTrainer() async {
+        guard let trainerId = authService.currentUser?.trainerId else { return }
+        do {
+            trainer = try await APIService.shared.fetchTrainer(id: trainerId)
+        } catch {
+            print("Error fetching trainer: \(error)")
+        }
+    }
+
+    private func startStripeOnboarding() {
+        guard let trainerId = authService.currentUser?.trainerId else {
+            stripeError = "No trainer profile found for this account."
+            return
+        }
+
+        isOnboarding = true
+        Task {
+            do {
+                let response = try await StripeService.shared.createConnectAccount(trainerId: trainerId)
+                guard let url = URL(string: response.url) else {
+                    stripeError = "Stripe returned an invalid onboarding URL."
+                    isOnboarding = false
+                    return
+                }
+                stripeOnboardingURL = url
+                isOnboarding = false
+            } catch {
+                stripeError = "Could not start Stripe onboarding: \(error.localizedDescription)"
+                isOnboarding = false
+            }
+        }
+    }
+
+    private func handleOnboardingDismissed() {
+        stripeOnboardingURL = nil
+        Task { await refreshTrainer() }
+    }
+}
+
+struct StripePaymentsCard: View {
+    let trainer: Trainer
+    let isLoading: Bool
+    let onSetupTap: () -> Void
+
+    private var status: (title: String, subtitle: String, color: Color, ctaLabel: String) {
+        if trainer.canAcceptPayments {
+            return (
+                "Payments Active",
+                "You can accept bookings and receive payouts.",
+                .green,
+                "Manage Stripe Account"
+            )
+        }
+        if trainer.stripeAccountId?.isEmpty == false {
+            return (
+                "Finish Stripe Setup",
+                "Your Stripe account is created — complete onboarding to start accepting payments.",
+                .orange,
+                "Continue Setup"
+            )
+        }
+        return (
+            "Set Up Payments",
+            "Connect a Stripe account to accept bookings (15% platform fee).",
+            .blue,
+            "Set Up Stripe"
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: trainer.canAcceptPayments ? "checkmark.seal.fill" : "creditcard.fill")
+                    .foregroundColor(status.color)
+                    .font(.title3)
+                Text(status.title)
+                    .font(.headline)
+                Spacer()
+            }
+
+            Text(status.subtitle)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+            Button(action: onSetupTap) {
+                HStack {
+                    if isLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text(status.ctaLabel)
+                            .fontWeight(.semibold)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(status.color)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+            }
+            .disabled(isLoading)
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(15)
     }
 }
 
