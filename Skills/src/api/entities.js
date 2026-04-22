@@ -18,3 +18,8 @@ export { UserLessonAttempt } from "./supabaseEntities";
 export { UserQuestionProgress } from "./supabaseEntities";
 export { UserProgress } from "./supabaseEntities";
 export { EntryExam } from "./supabaseEntities";
+export { Drill } from "./supabaseEntities";
+export { DrillProgress } from "./supabaseEntities";
+export { WorkoutAssignment } from "./supabaseEntities";
+export { ParentChild } from "./supabaseEntities";
+export { PlayerGameStats } from "./supabaseEntities";

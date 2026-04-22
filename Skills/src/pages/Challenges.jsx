@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Challenge, ChallengeProgress } from "@/api/entities";
+import { Challenge, ChallengeProgress, WorkoutAssignment } from "@/api/entities";
 import { Trainer } from "@/api/entities";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,10 +19,15 @@ import {
   Filter,
   Crosshair,
   CheckCircle,
+  Users,
+  ArrowRight,
+  Dumbbell,
+  Zap,
 } from "lucide-react";
 
 export default function Challenges() {
   const navigate = useNavigate();
+  const { isAthlete } = useAuth();
   const [challenges, setChallenges] = useState([]);
   const [completedChallenges, setCompletedChallenges] = useState([]);
   const [featuredChallenge, setFeaturedChallenge] = useState(null);
@@ -28,10 +35,27 @@ export default function Challenges() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedDifficulty, setSelectedDifficulty] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
+  const [parentAssignments, setParentAssignments] = useState([]);
+
+  const loadAssignments = useCallback(async () => {
+    if (!isAthlete()) return;
+    try {
+      const assignments = await WorkoutAssignment.getAssignedToMe();
+      setParentAssignments(assignments.filter(a => a.status !== 'cancelled'));
+    } catch (error) {
+      console.error("Error loading assignments:", error);
+    }
+  }, [isAthlete]);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (isAthlete()) {
+      loadAssignments();
+    }
+  }, [isAthlete, loadAssignments]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -156,6 +180,23 @@ export default function Challenges() {
           <p className="text-xl text-brand-lightGray max-w-2xl mx-auto">
             Push your limits with specialized drills and shooting workouts
           </p>
+          <div className="flex items-center justify-center gap-4 flex-wrap">
+            <Button
+              onClick={() => navigate("/drill-library")}
+              className="bg-gradient-to-r from-yellow-500 to-orange-600 font-semibold"
+            >
+              <Dumbbell className="w-4 h-4 mr-2" />
+              Drill Library
+            </Button>
+            <Button
+              onClick={() => navigate("/ai-workout-builder")}
+              variant="outline"
+              className="border-orange-500 text-orange-400 hover:bg-orange-500/10 font-semibold"
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Build My Workout
+            </Button>
+          </div>
         </div>
 
         {/* Featured Challenge Section - Always show this section for testing */}
@@ -289,6 +330,76 @@ export default function Challenges() {
             </Button>
           </Link>
         </div>
+
+        {/* Parent-Assigned Workouts - For Athletes Only */}
+        {isAthlete() && parentAssignments.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+              <Users className="w-6 h-6 text-purple-400" />
+              Assigned by Parent
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {parentAssignments
+                .filter((a) => a.status !== "completed")
+                .slice(0, 3)
+                .map((assignment) => (
+                  <Card
+                    key={assignment.id}
+                    className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-indigo-600 text-white overflow-hidden hover:shadow-xl transition-all cursor-pointer"
+                    onClick={() =>
+                      navigate(`/workout-session/${assignment.id}`)
+                    }
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-3">
+                        <Badge className="bg-white/20 text-white">
+                          {assignment.status === "in_progress"
+                            ? "In Progress"
+                            : "New"}
+                        </Badge>
+                        <Badge className="bg-white/20 text-white">
+                          <Clock className="w-3 h-3 mr-1" />
+                          {assignment.challenge?.duration_minutes} min
+                        </Badge>
+                      </div>
+                      <h3 className="font-bold text-xl mb-2">
+                        {assignment.challenge?.title}
+                      </h3>
+                      <p className="text-purple-100 text-sm mb-4 line-clamp-2">
+                        {assignment.challenge?.description}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-purple-200">
+                          From {assignment.parent?.full_name}
+                        </span>
+                        <Button
+                          size="sm"
+                          className="bg-white text-purple-600 hover:bg-purple-50"
+                        >
+                          {assignment.status === "in_progress" ? (
+                            <>Continue</>
+                          ) : (
+                            <>
+                              Start <ArrowRight className="w-4 h-4 ml-1" />
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+            </div>
+            {parentAssignments.filter((a) => a.status !== "completed").length >
+              3 && (
+              <p className="text-center text-gray-400">
+                +
+                {parentAssignments.filter((a) => a.status !== "completed")
+                  .length - 3}{" "}
+                more assigned workouts
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">

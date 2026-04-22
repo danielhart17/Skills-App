@@ -163,7 +163,9 @@ export const AuthProvider = ({ children }) => {
   // Helper functions to check roles
   const isAdmin = () => role === "admin";
   const isTrainer = () => role === "trainer" || role === "admin";
-  const isUser = () => role === "user";
+  const isUser = () => role === "user" || role === "athlete";
+  const isParent = () => role === "parent";
+  const isAthlete = () => role === "user" || role === "athlete";
 
   // Auth functions
   const signIn = async (email, password) => {
@@ -176,13 +178,17 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
-  const signUp = async (email, password, fullName) => {
+  const signUp = async (email, password, fullName, selectedRole = "athlete") => {
+    // Map frontend role selection to database role
+    const dbRole = selectedRole === "parent" ? "parent" : "athlete";
+    
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName,
+          role: dbRole,
         },
       },
     });
@@ -213,6 +219,8 @@ export const AuthProvider = ({ children }) => {
     isAdmin,
     isTrainer,
     isUser,
+    isParent,
+    isAthlete,
     signIn,
     signUp,
     signOut,

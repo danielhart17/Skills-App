@@ -1869,6 +1869,7 @@ function ChallengeDialog({ challenge, onSave, trigger }) {
       xp_reward: 100,
       equipment_needed: [],
       is_featured: false,
+      youtube_url: "",
     }
   );
 
@@ -1997,6 +1998,21 @@ function ChallengeDialog({ challenge, onSave, trigger }) {
               className="rounded"
             />
             <Label htmlFor="featured">Featured Workout</Label>
+          </div>
+          <div>
+            <Label htmlFor="youtube_url">YouTube Video URL (optional)</Label>
+            <Input
+              id="youtube_url"
+              type="url"
+              value={formData.youtube_url || ""}
+              onChange={(e) =>
+                setFormData({ ...formData, youtube_url: e.target.value })
+              }
+              placeholder="https://www.youtube.com/watch?v=..."
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Athletes will see this video when they open the workout
+            </p>
           </div>
           <div className="flex justify-end gap-2 pt-4">
             <Button

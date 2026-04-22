@@ -13,6 +13,7 @@ import {
   GraduationCap,
   Target,
   Calendar,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,10 +62,40 @@ const navigationItems = [
 export default function Layout({ children }) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const { signOut, profile, role, isAdmin, isTrainer } = useAuth();
+  const { signOut, profile, role, isAdmin, isTrainer, isParent } = useAuth();
 
   // Build navigation items based on user role
   const getRoleSpecificNavItems = () => {
+    // For parents, show parent-specific navigation
+    if (isParent()) {
+      return [
+        {
+          title: "Parent Dashboard",
+          url: createPageUrl("ParentDashboard"),
+          icon: Users,
+          description: "Track Children",
+        },
+        {
+          title: "Learn",
+          url: createPageUrl("Learn"),
+          icon: Brain,
+          description: "IQ Training",
+        },
+        {
+          title: "Workouts",
+          url: createPageUrl("Workouts"),
+          icon: Trophy,
+          description: "Browse Workouts",
+        },
+        {
+          title: "Profile",
+          url: createPageUrl("Profile"),
+          icon: User,
+          description: "Your Account",
+        },
+      ];
+    }
+
     // For trainers, only show the Trainer Dashboard
     if (isTrainer() && !isAdmin()) {
       return [

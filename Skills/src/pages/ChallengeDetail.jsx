@@ -21,6 +21,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+function getYouTubeId(url) {
+  if (!url) return null;
+  const match = url.match(/(?:v=|youtu\.be\/)([^&?\s]+)/);
+  return match ? match[1] : null;
+}
+
+
 export default function ChallengeDetail() {
   const { challengeId } = useParams();
   const navigate = useNavigate();
@@ -291,8 +298,8 @@ export default function ChallengeDetail() {
             </Card>
           )}
 
-          {/* Instructions */}
-          {challenge.instructions && (
+       {/* Instructions */}
+       {challenge.instructions && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -300,7 +307,22 @@ export default function ChallengeDetail() {
                   Instructions
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {challenge.youtube_url && getYouTubeId(challenge.youtube_url) && (
+                  <div
+                    className="relative w-full rounded-xl overflow-hidden border border-gray-700"
+                    style={{ paddingBottom: "56.25%", height: 0 }}
+                  >
+                    <iframe
+                      src={`https://www.youtube.com/embed/${getYouTubeId(challenge.youtube_url)}?rel=0&modestbranding=1`}
+                      className="absolute top-0 left-0 w-full h-full"
+                      frameBorder="0"
+                      allowFullScreen
+                      loading="lazy"
+                      title={challenge.title}
+                    />
+                  </div>
+                )}
                 <div className="text-muted-foreground whitespace-pre-line">
                   {challenge.instructions}
                 </div>

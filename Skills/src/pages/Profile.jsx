@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { User } from "@/api/entities";
+import { useState, useEffect, useCallback } from "react";
+import { User, ParentChild } from "@/api/entities";
 import { ShootingSession } from "@/api/entities";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/api/supabaseClient";
@@ -40,6 +40,11 @@ import {
   Upload,
   Loader2,
   Camera,
+  Users,
+  Link2,
+  Copy,
+  RefreshCw,
+  UserX,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -168,7 +173,7 @@ const POSITIONS = [
 ];
 
 export default function Profile() {
-  const { isTrainer, refreshProfile } = useAuth();
+  const { isTrainer, isAthlete, refreshProfile } = useAuth();
   const [user, setUser] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -185,9 +190,42 @@ export default function Profile() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
+  // Parent linking state
+  const [inviteCode, setInviteCode] = useState(null);
+  const [inviteExpires, setInviteExpires] = useState(null);
+  const [linkedParents, setLinkedParents] = useState([]);
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [loadingParents, setLoadingParents] = useState(false);
+
+  const loadParentLinks = useCallback(async () => {
+    if (!isAthlete()) return;
+    setLoadingParents(true);
+    try {
+      const parents = await ParentChild.getMyParentLinks();
+      setLinkedParents(parents);
+      
+      const codes = await ParentChild.getMyInviteCodes();
+      if (codes.length > 0) {
+        const activeCode = codes[0];
+        setInviteCode(activeCode.code);
+        setInviteExpires(new Date(activeCode.expires_at));
+      }
+    } catch (error) {
+      console.error("Error loading parent links:", error);
+    } finally {
+      setLoadingParents(false);
+    }
+  }, [isAthlete]);
+
   useEffect(() => {
     loadProfileData();
   }, []);
+
+  useEffect(() => {
+    if (isAthlete()) {
+      loadParentLinks();
+    }
+  }, [isAthlete, loadParentLinks]);
 
   const loadProfileData = async () => {
     try {
@@ -354,6 +392,41 @@ export default function Profile() {
       setIsSaving(false);
     }
   };
+
+  const handleGenerateInviteCode = async () => {
+    setGeneratingCode(true);
+    try {
+      const result = await ParentChild.createInviteCode();
+      setInviteCode(result.code);
+      setInviteExpires(new Date(result.expires_at));
+      toast.success("Invite code generated!");
+    } catch (error) {
+      console.error("Error generating code:", error);
+      toast.error(error.message || "Failed to generate invite code");
+    } finally {
+      setGeneratingCode(false);
+    }
+  };
+
+  const handleCopyCode = () => {
+    if (inviteCode) {
+      navigator.clipboard.writeText(inviteCode);
+      toast.success("Code copied to clipboard!");
+    }
+  };
+
+  const handleRevokeParentLink = async (linkId) => {
+    try {
+      await ParentChild.revokeLink(linkId);
+      toast.success("Parent link removed");
+      loadParentLinks();
+    } catch (error) {
+      console.error("Error revoking link:", error);
+      toast.error("Failed to remove parent link");
+    }
+  };
+
+  const isCodeExpired = inviteExpires && new Date() > inviteExpires;
 
   if (isLoading) {
     return (
@@ -577,6 +650,121 @@ export default function Profile() {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* Parent Linking Section - For Athletes Only */}
+        {isAthlete() && (
+          <Card className="border-0 shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-blue-500" />
+                Parent/Guardian Link
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Linked Parents */}
+              {linkedParents.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase">
+                    Linked Parents
+                  </h3>
+                  {linkedParents.map((link) => (
+                    <div
+                      key={link.id}
+                      className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
+                          <Users className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {link.parent?.full_name || "Parent"}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {link.parent?.email}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRevokeParentLink(link.id)}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <UserX className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Generate Invite Code */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase">
+                  Link a New Parent
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Generate an invite code to share with your parent or guardian.
+                  They can use this code to link their account to yours.
+                </p>
+
+                {inviteCode && !isCodeExpired ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 p-4 bg-gray-100 rounded-lg text-center">
+                        <p className="text-3xl font-mono font-bold tracking-widest text-orange-600">
+                          {inviteCode}
+                        </p>
+                        <p className="text-sm text-gray-500 mt-2">
+                          Expires in{" "}
+                          {Math.max(
+                            0,
+                            Math.round((inviteExpires - new Date()) / 60000)
+                          )}{" "}
+                          minutes
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={handleCopyCode}
+                        title="Copy code"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={handleGenerateInviteCode}
+                      disabled={generatingCode}
+                      className="w-full"
+                    >
+                      {generatingCode ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      Generate New Code
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    onClick={handleGenerateInviteCode}
+                    disabled={generatingCode}
+                    className="w-full bg-gradient-to-r from-blue-500 to-purple-600"
+                  >
+                    {generatingCode ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <Link2 className="w-4 h-4 mr-2" />
+                    )}
+                    Generate Invite Code
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Achievements */}
