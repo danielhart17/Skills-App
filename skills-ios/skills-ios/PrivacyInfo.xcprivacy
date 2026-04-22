@@ -46,6 +46,8 @@
 		</dict>
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
+			<!-- NOTE: Apple's identifier uses lowercase 'or' — `PhotosorVideos`,
+			     not `PhotosOrVideos`. Looks like a typo, isn't. -->
 			<string>NSPrivacyCollectedDataTypePhotosorVideos</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<true/>

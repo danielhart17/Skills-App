@@ -70,10 +70,8 @@ struct TrainerDashboardView: View {
                 set: { if !$0 { handleOnboardingDismissed() } }
             )) {
                 if let url = stripeOnboardingURL {
-                    SafariView(url: url) {
-                        handleOnboardingDismissed()
-                    }
-                    .ignoresSafeArea()
+                    SafariView(url: url)
+                        .ignoresSafeArea()
                 }
             }
             .alert("Stripe Setup", isPresented: Binding(

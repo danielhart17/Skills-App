@@ -351,7 +351,8 @@ export default function BookingPage() {
         if (selectedService.price > 0 && !canProcessPayment) {
           toast.info("Booking created! The trainer will contact you about payment.");
         }
-        
+
+        setIsProcessingPayment(false);
         setStep(4); // Move to confirmation step
       }
     } catch (error) {

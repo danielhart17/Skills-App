@@ -13,6 +13,13 @@ const corsHeaders = {
 // Platform fee percentage (e.g., 0.15 = 15%)
 const PLATFORM_FEE_PERCENTAGE = 0.15;
 
+// Append booking_id to a URL that may already contain query params.
+function appendBookingId(rawUrl: string, bookingId: string): string {
+  const url = new URL(rawUrl);
+  url.searchParams.set("booking_id", bookingId);
+  return url.toString();
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -76,6 +83,31 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Authenticate the caller via JWT and confirm they match the userId
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ error: "Missing or invalid Authorization header" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+      );
+    }
+    const jwt = authHeader.slice("Bearer ".length);
+    const { data: { user: caller }, error: authError } = await supabase.auth.getUser(jwt);
+    if (authError || !caller) {
+      console.error("Auth error:", authError);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+      );
+    }
+    if (caller.id !== userId) {
+      console.error("Forbidden: userId mismatch", { caller: caller.id, userId });
+      return new Response(
+        JSON.stringify({ error: "Forbidden" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 }
+      );
+    }
+
     // Get trainer data including Stripe account
     const { data: trainer, error: trainerError } = await supabase
       .from("trainers")
@@ -91,6 +123,28 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 404,
         }
+      );
+    }
+
+    // Confirm the service belongs to this trainer (and grab authoritative price)
+    const { data: service, error: serviceError } = await supabase
+      .from("trainer_services")
+      .select("id, trainer_id, price, duration_minutes, name")
+      .eq("id", serviceId)
+      .single();
+
+    if (serviceError || !service) {
+      console.error("Service not found:", serviceError);
+      return new Response(
+        JSON.stringify({ error: "Service not found" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 }
+      );
+    }
+    if (service.trainer_id !== trainerId) {
+      console.error("Service does not belong to trainer", { serviceId, trainerId });
+      return new Response(
+        JSON.stringify({ error: "Service does not belong to trainer" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
       );
     }
 
@@ -166,8 +220,8 @@ serve(async (req) => {
         },
       ],
       mode: "payment",
-      success_url: `${successUrl}?booking_id=${booking.id}`,
-      cancel_url: `${cancelUrl}?booking_id=${booking.id}`,
+      success_url: appendBookingId(successUrl, booking.id),
+      cancel_url: appendBookingId(cancelUrl, booking.id),
       payment_intent_data: {
         application_fee_amount: platformFeeInCents,
         transfer_data: {

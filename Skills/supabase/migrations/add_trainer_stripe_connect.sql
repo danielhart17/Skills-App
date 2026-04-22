@@ -17,13 +17,14 @@ ADD COLUMN IF NOT EXISTS trainer_payout DECIMAL(10, 2);
 CREATE INDEX IF NOT EXISTS idx_trainers_stripe_account ON trainers(stripe_account_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_stripe_session ON bookings(stripe_session_id);
 
--- Add RLS policies for the new columns
--- Trainers can read their own stripe info
-CREATE POLICY IF NOT EXISTS "Trainers can view own stripe info"
-ON trainers FOR SELECT
-USING (user_id = auth.uid());
-
--- Trainers can update their own stripe info
-CREATE POLICY IF NOT EXISTS "Trainers can update own stripe info"
-ON trainers FOR UPDATE
-USING (user_id = auth.uid());
+-- IMPORTANT: We deliberately do NOT add a client-writable UPDATE policy here.
+-- The Stripe columns (stripe_account_id, stripe_charges_enabled,
+-- stripe_payouts_enabled, stripe_onboarding_complete) are server-managed —
+-- only the webhook + edge functions (service role) may write them. Granting
+-- trainers UPDATE would let them self-flip charges_enabled / payouts_enabled
+-- and route payments to arbitrary accounts.
+--
+-- If trainers need to edit other profile fields from the client, use a
+-- SECURITY DEFINER RPC that excludes the stripe_* columns.
+--
+-- SELECT is already covered by schema.sql ("Trainers are viewable by everyone").

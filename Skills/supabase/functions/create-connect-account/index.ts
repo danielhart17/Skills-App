@@ -65,6 +65,24 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Authenticate the caller via JWT
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ error: "Missing or invalid Authorization header" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+      );
+    }
+    const jwt = authHeader.slice("Bearer ".length);
+    const { data: { user: caller }, error: authError } = await supabase.auth.getUser(jwt);
+    if (authError || !caller) {
+      console.error("Auth error:", authError);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+      );
+    }
+
     // Get trainer data
     const { data: trainer, error: trainerError } = await supabase
       .from("trainers")
@@ -80,6 +98,15 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 404,
         }
+      );
+    }
+
+    // Caller must own this trainer record
+    if (trainer.user_id !== caller.id) {
+      console.error("Forbidden: caller does not own trainer", { caller: caller.id, trainer: trainerId });
+      return new Response(
+        JSON.stringify({ error: "Forbidden" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 }
       );
     }
 

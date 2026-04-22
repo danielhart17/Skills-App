@@ -208,10 +208,8 @@ struct BookingView: View {
             set: { if !$0 { handleCheckoutDismissed() } }
         )) {
             if let url = checkoutURL {
-                SafariView(url: url) {
-                    handleCheckoutDismissed()
-                }
-                .ignoresSafeArea()
+                SafariView(url: url)
+                    .ignoresSafeArea()
             }
         }
     }

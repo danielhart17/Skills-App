@@ -19,11 +19,19 @@ serve(async (req) => {
   try {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     const webhookSecret = Deno.env.get("STRIPE_CONNECT_WEBHOOK_SECRET");
-    
+
     if (!stripeKey) {
       console.error("STRIPE_SECRET_KEY not configured");
       return new Response(
         JSON.stringify({ error: "Stripe not configured" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+      );
+    }
+
+    if (!webhookSecret) {
+      console.error("STRIPE_CONNECT_WEBHOOK_SECRET not configured — refusing to process webhook");
+      return new Response(
+        JSON.stringify({ error: "Webhook secret not configured" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
       );
     }
@@ -39,23 +47,24 @@ serve(async (req) => {
     const body = await req.text();
     const signature = req.headers.get("stripe-signature");
 
-    let event: Stripe.Event;
+    if (!signature) {
+      console.error("Missing stripe-signature header");
+      return new Response(
+        JSON.stringify({ error: "Missing stripe-signature header" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
+    }
 
-    // Verify webhook signature if secret is configured
-    if (webhookSecret && signature) {
-      try {
-        event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-      } catch (err) {
-        console.error("Webhook signature verification failed:", err);
-        return new Response(
-          JSON.stringify({ error: "Invalid signature" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
-        );
-      }
-    } else {
-      // Parse without verification (for testing)
-      event = JSON.parse(body);
-      console.warn("Webhook signature not verified - for testing only");
+    // Verify webhook signature — required, no fallback.
+    let event: Stripe.Event;
+    try {
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
+    } catch (err) {
+      console.error("Webhook signature verification failed:", err);
+      return new Response(
+        JSON.stringify({ error: "Invalid signature" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
     }
 
     console.log("Received webhook event:", event.type);
