@@ -1,3 +1,5 @@
+import WorkoutLibrary from "./WorkoutLibrary";
+import AIWorkoutBuilder from "./AIWorkoutBuilder";
 import Layout from "./Layout.jsx";
 
 import Home from "./Home";
@@ -28,6 +30,10 @@ import AdminDashboard from "./AdminDashboard";
 
 import TrainerDashboard from "./TrainerDashboard";
 
+import ParentDashboard from "./ParentDashboard";
+
+import WorkoutSession from "./WorkoutSession";
+
 import Events from "./Events";
 
 import { Route, Routes, Navigate } from "react-router-dom";
@@ -35,7 +41,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 // Role-based redirect component
 function RoleBasedRedirect() {
-  const { isAdmin, isTrainer, loading, profile, user } = useAuth();
+  const { isAdmin, isTrainer, isParent, loading, profile, user } = useAuth();
 
   // Wait for auth to load before redirecting
   if (loading) {
@@ -56,6 +62,8 @@ function RoleBasedRedirect() {
     return <Navigate to="/AdminDashboard" replace />;
   } else if (isTrainer()) {
     return <Navigate to="/TrainerDashboard" replace />;
+  } else if (isParent()) {
+    return <Navigate to="/ParentDashboard" replace />;
   } else {
     return <Navigate to="/Home" replace />;
   }
@@ -78,8 +86,12 @@ function PagesContent() {
 
         <Route path="/lesson/:lessonId/questions" element={<QuestionPage />} />
 
-        <Route path="/Challenges" element={<Challenges />} />
+        <Route path="/Workouts" element={<Challenges />} />
+        <Route path="/workouts" element={<Challenges />} />
+        <Route path="/challenges" element={<Navigate to="/workouts" replace />} />
+        <Route path="/Challenges" element={<Navigate to="/workouts" replace />} />
 
+        <Route path="/workouts/:challengeId" element={<ChallengeDetail />} />
         <Route path="/challenges/:challengeId" element={<ChallengeDetail />} />
 
         <Route path="/ShootingSession" element={<ShootingSession />} />
@@ -96,7 +108,13 @@ function PagesContent() {
 
         <Route path="/TrainerDashboard" element={<TrainerDashboard />} />
 
+        <Route path="/ParentDashboard" element={<ParentDashboard />} />
+
+        <Route path="/workout-session/:assignmentId" element={<WorkoutSession />} />
+
         <Route path="/Events" element={<Events />} />
+        <Route path="/drill-library" element={<WorkoutLibrary />} />
+<Route path="/ai-workout-builder" element={<AIWorkoutBuilder />} />
       </Routes>
     </Layout>
   );

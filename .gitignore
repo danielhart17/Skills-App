@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Supabase CLI state (generated per-environment, should not be committed)
+**/supabase/.temp/
+
+# Editor state
+.vscode/
+.idea/

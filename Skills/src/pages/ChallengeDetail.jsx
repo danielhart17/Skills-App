@@ -21,6 +21,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+function getYouTubeId(url) {
+  if (!url) return null;
+  const match = url.match(/(?:v=|youtu\.be\/)([^&?\s]+)/);
+  return match ? match[1] : null;
+}
+
+
 export default function ChallengeDetail() {
   const { challengeId } = useParams();
   const navigate = useNavigate();
@@ -87,7 +94,7 @@ export default function ChallengeDetail() {
 
   const handleStartChallenge = () => {
     // For now, just mark as started - could add more complex tracking later
-    toast.success("Challenge started! Good luck!");
+    toast.success("Workout started! Good luck!");
   };
 
   const handleMarkComplete = async () => {
@@ -98,7 +105,7 @@ export default function ChallengeDetail() {
         completionForm.notes
       );
       setIsCompleted(true);
-      toast.success("Challenge marked as complete! Great job!");
+      toast.success("Workout marked as complete! Great job!");
     } catch (error) {
       console.error("Error marking challenge complete:", error);
       toast.error("Failed to mark challenge as complete");
@@ -181,10 +188,10 @@ export default function ChallengeDetail() {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Challenge not found</h1>
-          <Button onClick={() => navigate("/challenges")}>
+          <h1 className="text-2xl font-bold mb-4">Workout not found</h1>
+          <Button onClick={() => navigate("/workouts")}>
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Challenges
+            Back to Workouts
           </Button>
         </div>
       </div>
@@ -197,11 +204,11 @@ export default function ChallengeDetail() {
       <div className="mb-6">
         <Button
           variant="ghost"
-          onClick={() => navigate("/challenges")}
+          onClick={() => navigate("/workouts")}
           className="mb-4"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Challenges
+          Back to Workouts
         </Button>
 
         <div className="flex items-start justify-between">
@@ -291,8 +298,8 @@ export default function ChallengeDetail() {
             </Card>
           )}
 
-          {/* Instructions */}
-          {challenge.instructions && (
+       {/* Instructions */}
+       {challenge.instructions && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -300,7 +307,22 @@ export default function ChallengeDetail() {
                   Instructions
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {challenge.youtube_url && getYouTubeId(challenge.youtube_url) && (
+                  <div
+                    className="relative w-full rounded-xl overflow-hidden border border-gray-700"
+                    style={{ paddingBottom: "56.25%", height: 0 }}
+                  >
+                    <iframe
+                      src={`https://www.youtube.com/embed/${getYouTubeId(challenge.youtube_url)}?rel=0&modestbranding=1`}
+                      className="absolute top-0 left-0 w-full h-full"
+                      frameBorder="0"
+                      allowFullScreen
+                      loading="lazy"
+                      title={challenge.title}
+                    />
+                  </div>
+                )}
                 <div className="text-muted-foreground whitespace-pre-line">
                   {challenge.instructions}
                 </div>
@@ -336,7 +358,7 @@ export default function ChallengeDetail() {
                 <>
                   <Button onClick={handleStartChallenge} className="w-full">
                     <Play className="w-4 h-4 mr-2" />
-                    Start Challenge
+                    Start Workout
                   </Button>
 
                   <div className="space-y-3">
@@ -384,11 +406,11 @@ export default function ChallengeDetail() {
                 <div className="text-center">
                   <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-2" />
                   <p className="text-green-600 font-semibold">
-                    Challenge Completed!
+                    Workout Completed!
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
                     Great job! You spent {completionForm.timeSpent} minutes on
-                    this challenge.
+                    this workout.
                   </p>
                 </div>
               )}
@@ -460,7 +482,7 @@ export default function ChallengeDetail() {
                   onClick={() => setShowRatingForm(true)}
                   className="w-full"
                 >
-                  Rate This Challenge
+                  Rate This Workout
                 </Button>
               )}
 
@@ -498,7 +520,7 @@ export default function ChallengeDetail() {
                         setRatingForm({ ...ratingForm, review: e.target.value })
                       }
                       rows={3}
-                      placeholder="Share your experience with this challenge..."
+                      placeholder="Share your experience with this workout..."
                     />
                   </div>
                   <div className="flex gap-2">

@@ -11,13 +11,14 @@ import {
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2 } from "lucide-react";
+import { Loader2, User, Users } from "lucide-react";
 
 export default function Auth() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [selectedRole, setSelectedRole] = useState("athlete");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
@@ -32,11 +33,10 @@ export default function Auth() {
 
     try {
       if (isSignUp) {
-        await signUp(email, password, fullName);
+        await signUp(email, password, fullName, selectedRole);
         setMessage("Account created! Check your email to verify your account.");
       } else {
         await signIn(email, password);
-        // Will redirect automatically via AuthContext
       }
     } catch (err) {
       setError(err.message || "An error occurred");
@@ -66,17 +66,51 @@ export default function Auth() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {isSignUp && (
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name</Label>
-                <Input
-                  id="fullName"
-                  type="text"
-                  placeholder="John Doe"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label>I am a...</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRole("athlete")}
+                      className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${
+                        selectedRole === "athlete"
+                          ? "border-orange-500 bg-orange-50 text-orange-700"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <User className={`w-8 h-8 mb-2 ${selectedRole === "athlete" ? "text-orange-500" : "text-gray-400"}`} />
+                      <span className="font-semibold">Athlete</span>
+                      <span className="text-xs text-gray-500 mt-1">I want to train</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRole("parent")}
+                      className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${
+                        selectedRole === "parent"
+                          ? "border-orange-500 bg-orange-50 text-orange-700"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <Users className={`w-8 h-8 mb-2 ${selectedRole === "parent" ? "text-orange-500" : "text-gray-400"}`} />
+                      <span className="font-semibold">Parent</span>
+                      <span className="text-xs text-gray-500 mt-1">Track my child</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="fullName">Full Name</Label>
+                  <Input
+                    id="fullName"
+                    type="text"
+                    placeholder="John Doe"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                  />
+                </div>
+              </>
             )}
 
             <div className="space-y-2">

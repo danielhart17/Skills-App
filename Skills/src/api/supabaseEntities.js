@@ -207,6 +207,21 @@ export const ShootingSession = {
     if (error) throw error;
     return data || [];
   },
+
+  /** Save a session for a linked child (requires RLS policy for parent → child). */
+  async createForChild(childId, sessionData) {
+    const { data, error } = await supabase
+      .from("shooting_sessions")
+      .insert({
+        ...sessionData,
+        user_id: childId,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
 };
 
 // =============================================
@@ -1194,5 +1209,284 @@ export const DrillProgress = {
     const { data, error } = await queryBuilder;
     if (error) throw error;
     return data || [];
+  },
+};
+
+// =============================================
+// PLAYER GAME STATS (parent-logged games for children)
+// =============================================
+
+export const PlayerGameStats = {
+  async list(childId) {
+    if (!childId) return [];
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("player_game_stats")
+      .select("*")
+      .eq("parent_id", user.id)
+      .eq("child_id", childId)
+      .order("game_date", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  async create(row) {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("player_game_stats")
+      .insert({
+        ...row,
+        parent_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async get(id) {
+    const { data, error } = await supabase
+      .from("player_game_stats")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async delete(id) {
+    const { error } = await supabase
+      .from("player_game_stats")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+  },
+};
+
+// =============================================
+// PARENT-CHILD LINKING SYSTEM
+// =============================================
+
+export const ParentChild = {
+  // Create an invite code for child to share with parent
+  async createInviteCode() {
+    const { data, error } = await supabase.rpc("create_child_invite_code");
+
+    if (error) throw error;
+    return data?.[0] || data;
+  },
+
+  // Link parent to child using invite code
+  async linkByCode(code) {
+    const { data, error } = await supabase.rpc("link_parent_to_child_by_code", {
+      p_code: code.toUpperCase(),
+    });
+
+    if (error) throw error;
+    return data?.[0] || data;
+  },
+
+  // Get all linked children for current parent
+  async getLinkedChildren() {
+    const { data, error } = await supabase.rpc("get_linked_children");
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Get progress summary for a linked child
+  async getChildProgressSummary(childId) {
+    const { data, error } = await supabase.rpc("get_child_progress_summary", {
+      p_child_id: childId,
+    });
+
+    if (error) throw error;
+    return data?.[0] || data;
+  },
+
+  // Revoke a parent-child link
+  async revokeLink(linkId) {
+    const { data, error } = await supabase.rpc("revoke_parent_child_link", {
+      p_link_id: linkId,
+    });
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Get active invite codes for current child
+  async getMyInviteCodes() {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("child_invite_codes")
+      .select("*")
+      .eq("child_id", user.id)
+      .is("used_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Get all parent links for current child
+  async getMyParentLinks() {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("parent_child_links")
+      .select(
+        `
+        *,
+        parent:parent_id(id, full_name, email)
+      `
+      )
+      .eq("child_id", user.id)
+      .eq("status", "linked");
+
+    if (error) throw error;
+    return data || [];
+  },
+};
+
+// =============================================
+// WORKOUT ASSIGNMENTS ENTITY
+// =============================================
+
+export const WorkoutAssignment = {
+  // Create a new assignment (parent assigns to child)
+  async create(childId, challengeId, notes = null) {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("workout_assignments")
+      .insert({
+        child_id: childId,
+        assigned_by_parent_id: user.id,
+        challenge_id: challengeId,
+        notes: notes,
+      })
+      .select(
+        `
+        *,
+        challenge:challenge_id(id, title, description, category, difficulty, duration_minutes, xp_reward)
+      `
+      )
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Get assignments created by current parent
+  async getMyAssignments(status = null) {
+    const user = await getCurrentUser();
+    let query = supabase
+      .from("workout_assignments")
+      .select(
+        `
+        *,
+        challenge:challenge_id(id, title, description, category, difficulty, duration_minutes, xp_reward),
+        child:child_id(id, full_name, email)
+      `
+      )
+      .eq("assigned_by_parent_id", user.id)
+      .order("assigned_at", { ascending: false });
+
+    if (status) {
+      query = query.eq("status", status);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Get assignments for current child
+  async getAssignedToMe(status = null) {
+    const user = await getCurrentUser();
+    let query = supabase
+      .from("workout_assignments")
+      .select(
+        `
+        *,
+        challenge:challenge_id(id, title, description, category, difficulty, duration_minutes, xp_reward),
+        parent:assigned_by_parent_id(id, full_name)
+      `
+      )
+      .eq("child_id", user.id)
+      .order("assigned_at", { ascending: false });
+
+    if (status) {
+      query = query.eq("status", status);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Start an assignment
+  async start(assignmentId) {
+    const { data, error } = await supabase
+      .from("workout_assignments")
+      .update({
+        status: "in_progress",
+        started_at: new Date().toISOString(),
+      })
+      .eq("id", assignmentId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Complete an assignment (via RPC for proper credit)
+  async complete(assignmentId, timeSpentSeconds = 0, notes = null) {
+    const { data, error } = await supabase.rpc("complete_assigned_workout", {
+      p_assignment_id: assignmentId,
+      p_time_spent_seconds: timeSpentSeconds,
+      p_notes: notes,
+    });
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Cancel an assignment
+  async cancel(assignmentId) {
+    const { data, error } = await supabase
+      .from("workout_assignments")
+      .update({
+        status: "cancelled",
+      })
+      .eq("id", assignmentId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Get a single assignment by ID
+  async get(assignmentId) {
+    const { data, error } = await supabase
+      .from("workout_assignments")
+      .select(
+        `
+        *,
+        challenge:challenge_id(id, title, description, category, difficulty, duration_minutes, xp_reward, setup, instructions, focus, equipment_needed),
+        child:child_id(id, full_name, email),
+        parent:assigned_by_parent_id(id, full_name)
+      `
+      )
+      .eq("id", assignmentId)
+      .single();
+
+    if (error) throw error;
+    return data;
   },
 };

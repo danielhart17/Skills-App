@@ -600,7 +600,7 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger value="challenges">
             <Trophy className="w-4 h-4 mr-2" />
-            Challenges
+            Workouts
           </TabsTrigger>
           <TabsTrigger value="events">
             <Calendar className="w-4 h-4 mr-2" />
@@ -963,18 +963,18 @@ export default function AdminDashboard() {
           })}
         </TabsContent>
 
-        {/* Challenges Tab */}
+        {/* Workouts Tab */}
         <TabsContent value="challenges" className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-semibold">
-              Challenges ({challenges.length})
+              Workouts ({challenges.length})
             </h2>
             <ChallengeDialog
               onSave={(data) => handleSave("challenges", data)}
               trigger={
                 <Button>
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Challenge
+                  Add Workout
                 </Button>
               }
             />
@@ -1869,6 +1869,7 @@ function ChallengeDialog({ challenge, onSave, trigger }) {
       xp_reward: 100,
       equipment_needed: [],
       is_featured: false,
+      youtube_url: "",
     }
   );
 
@@ -1884,12 +1885,12 @@ function ChallengeDialog({ challenge, onSave, trigger }) {
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {challenge ? "Edit Challenge" : "Create New Challenge"}
+            {challenge ? "Edit Workout" : "Create New Workout"}
           </DialogTitle>
           <DialogDescription>
             {challenge
-              ? "Update challenge details"
-              : "Add a new challenge to the platform"}
+              ? "Update workout details"
+              : "Add a new workout to the platform"}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -1996,7 +1997,22 @@ function ChallengeDialog({ challenge, onSave, trigger }) {
               }
               className="rounded"
             />
-            <Label htmlFor="featured">Featured Challenge</Label>
+            <Label htmlFor="featured">Featured Workout</Label>
+          </div>
+          <div>
+            <Label htmlFor="youtube_url">YouTube Video URL (optional)</Label>
+            <Input
+              id="youtube_url"
+              type="url"
+              value={formData.youtube_url || ""}
+              onChange={(e) =>
+                setFormData({ ...formData, youtube_url: e.target.value })
+              }
+              placeholder="https://www.youtube.com/watch?v=..."
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Athletes will see this video when they open the workout
+            </p>
           </div>
           <div className="flex justify-end gap-2 pt-4">
             <Button
@@ -2007,7 +2023,7 @@ function ChallengeDialog({ challenge, onSave, trigger }) {
               Cancel
             </Button>
             <Button type="submit">
-              {challenge ? "Update" : "Create"} Challenge
+              {challenge ? "Update" : "Create"} Workout
             </Button>
           </div>
         </form>
