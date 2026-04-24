@@ -24,8 +24,8 @@ Links parent accounts to child athlete accounts.
 | Column | Type | Description |
 |--------|------|-------------|
 | id | UUID | Primary key |
-| parent_id | UUID | References auth.users |
-| child_id | UUID | References auth.users |
+| parent_id | UUID | References public.profiles(id) |
+| child_id | UUID | References public.profiles(id) |
 | status | TEXT | 'pending', 'linked', or 'revoked' |
 | created_at | TIMESTAMPTZ | When link was created |
 | linked_at | TIMESTAMPTZ | When link was activated |
@@ -37,11 +37,11 @@ Temporary invite codes for linking.
 | Column | Type | Description |
 |--------|------|-------------|
 | id | UUID | Primary key |
-| child_id | UUID | References auth.users |
+| child_id | UUID | References public.profiles(id) |
 | code | TEXT | 6-character alphanumeric code |
 | expires_at | TIMESTAMPTZ | Code expiration (15 minutes) |
 | used_at | TIMESTAMPTZ | When code was used |
-| used_by_parent_id | UUID | Parent who used the code |
+| used_by_parent_id | UUID | References public.profiles(id) |
 
 #### `workout_assignments`
 Parent-assigned workouts for children.
@@ -49,8 +49,8 @@ Parent-assigned workouts for children.
 | Column | Type | Description |
 |--------|------|-------------|
 | id | UUID | Primary key |
-| child_id | UUID | Child receiving the assignment |
-| assigned_by_parent_id | UUID | Parent who assigned it |
+| child_id | UUID | References public.profiles(id); child receiving the assignment |
+| assigned_by_parent_id | UUID | References public.profiles(id); parent who assigned it |
 | challenge_id | UUID | The workout/challenge |
 | status | TEXT | 'assigned', 'in_progress', 'completed', 'cancelled' |
 | completion_source | TEXT | 'child' or 'parent' (who marked complete) |

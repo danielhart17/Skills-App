@@ -127,7 +127,7 @@ BEGIN
     AND status = 'linked'
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = public;
 
 -- Helper function to check if current user is a parent
 CREATE OR REPLACE FUNCTION is_parent()
@@ -138,7 +138,7 @@ BEGIN
     WHERE id = auth.uid() AND role = 'parent'
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = public;
 
 -- Helper function to check if current user is an athlete
 CREATE OR REPLACE FUNCTION is_athlete()
@@ -149,7 +149,7 @@ BEGIN
     WHERE id = auth.uid() AND role IN ('user', 'athlete')
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = public;
 
 -- =============================================
 -- STEP 8: RLS POLICIES FOR PARENT_CHILD_LINKS
@@ -192,11 +192,11 @@ CREATE POLICY "Children can view their own invite codes"
   TO authenticated
   USING (child_id = auth.uid());
 
--- Children can insert codes for themselves (will be done via RPC for security)
-CREATE POLICY "Children can create their own invite codes"
-  ON public.child_invite_codes FOR INSERT
-  TO authenticated
-  WITH CHECK (child_id = auth.uid());
+-- Do not allow direct client INSERTs: a client insert could choose an
+-- arbitrary `code`, `expires_at`, or pre-populate `used_at`, bypassing the
+-- 15-minute TTL and single-use flow the RPC is meant to enforce. Invite
+-- codes must be created through create_child_invite_code() (SECURITY
+-- DEFINER) so generation and expiry stay server-controlled.
 
 -- =============================================
 -- STEP 10: RLS POLICIES FOR WORKOUT_ASSIGNMENTS
@@ -325,7 +325,7 @@ BEGIN
   
   RETURN QUERY SELECT v_code, v_expires_at;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- =============================================
 -- STEP 13: RPC FUNCTION - LINK PARENT TO CHILD BY CODE
@@ -383,7 +383,7 @@ BEGIN
   
   RETURN QUERY SELECT v_child_id, v_child_name, v_child_email;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- =============================================
 -- STEP 14: RPC FUNCTION - COMPLETE ASSIGNED WORKOUT
@@ -421,6 +421,17 @@ BEGIN
   
   IF NOT v_is_child AND NOT v_is_parent THEN
     RAISE EXCEPTION 'You are not authorized to complete this assignment';
+  END IF;
+
+  -- Reject terminal states. Cancelled assignments must be re-assigned, not
+  -- resurrected; already-completed assignments should be idempotent failures
+  -- rather than silently overwriting challenge_progress with new timing.
+  IF v_assignment.status = 'cancelled' THEN
+    RAISE EXCEPTION 'Cannot complete a cancelled assignment';
+  END IF;
+
+  IF v_assignment.status = 'completed' THEN
+    RAISE EXCEPTION 'Assignment already completed';
   END IF;
   
   -- Update assignment status
@@ -470,7 +481,7 @@ BEGIN
   -- Note: XP and streak updates happen via existing triggers on challenge_progress
 
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- =============================================
 -- STEP 15: RPC FUNCTION - GET LINKED CHILDREN FOR PARENT
@@ -500,7 +511,7 @@ BEGIN
   WHERE pcl.parent_id = auth.uid()
     AND pcl.status = 'linked';
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = public;
 
 -- =============================================
 -- STEP 16: RPC FUNCTION - GET CHILD PROGRESS SUMMARY
@@ -552,7 +563,7 @@ BEGIN
   FROM public.profiles p
   WHERE p.id = p_child_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = public;
 
 -- =============================================
 -- STEP 17: RPC FUNCTION - REVOKE PARENT-CHILD LINK
@@ -584,7 +595,7 @@ BEGIN
     AND child_id = v_link.child_id
     AND status IN ('assigned', 'in_progress');
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- =============================================
 -- STEP 18: TRIGGER TO UPDATE WORKOUT_ASSIGNMENTS UPDATED_AT
@@ -616,7 +627,7 @@ BEGIN
   );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- =============================================
 -- COMMENTS
