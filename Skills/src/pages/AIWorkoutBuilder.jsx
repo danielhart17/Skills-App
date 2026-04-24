@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Zap, Clock, ChevronDown, ChevronUp, Play, RotateCcw } from "lucide-react";
+import { Zap, Clock, ChevronUp, Play, RotateCcw } from "lucide-react";
 
 const CAT_ICONS = {
   shooting: "🎯", dribbling: "⚡", footwork: "👟",

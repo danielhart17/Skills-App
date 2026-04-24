@@ -30,8 +30,36 @@ serve(async (req) => {
       }),
     });
 
+    if (!response.ok) {
+      const upstream = await response.text();
+      return new Response(
+        JSON.stringify({
+          error: "Anthropic request failed",
+          status: response.status,
+          details: upstream,
+        }),
+        {
+          status: response.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
     const data = await response.json();
-    const text = data.content?.[0]?.text || "";
+    const text = data.content?.[0]?.text;
+
+    if (!text) {
+      return new Response(
+        JSON.stringify({
+          error: "Anthropic response missing content",
+          details: data,
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
 
     return new Response(text, {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -19,8 +19,16 @@ struct Trainer: Codable, Identifiable {
     var yearsExperience: Int?
     var profileImage: String?
     var verified: Bool?
+    var stripeAccountId: String? = nil
+    var stripeOnboardingComplete: Bool? = nil
+    var stripeChargesEnabled: Bool? = nil
+    var stripePayoutsEnabled: Bool? = nil
     let createdAt: Date
-    
+
+    var canAcceptPayments: Bool {
+        stripeChargesEnabled == true
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"
@@ -33,6 +41,10 @@ struct Trainer: Codable, Identifiable {
         case yearsExperience = "years_experience"
         case profileImage = "profile_image"
         case verified
+        case stripeAccountId = "stripe_account_id"
+        case stripeOnboardingComplete = "stripe_onboarding_complete"
+        case stripeChargesEnabled = "stripe_charges_enabled"
+        case stripePayoutsEnabled = "stripe_payouts_enabled"
         case createdAt = "created_at"
     }
 }

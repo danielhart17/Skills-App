@@ -31,7 +31,7 @@ import {
 export default function WorkoutSession() {
   const { assignmentId } = useParams();
   const navigate = useNavigate();
-  const { user, isParent, isAthlete } = useAuth();
+  const { user, isParent } = useAuth();
   const [assignment, setAssignment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);

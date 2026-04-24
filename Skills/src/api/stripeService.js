@@ -125,3 +125,142 @@ export async function registerForFreeEvent(eventId, userId) {
     throw error;
   }
 }
+
+// ============================================
+// STRIPE CONNECT - TRAINER PAYMENTS
+// ============================================
+
+/**
+ * Create a Stripe Connect account for a trainer and get onboarding link
+ * @param {string} trainerId - Trainer ID
+ * @returns {Promise<Object>} Contains onboarding URL and account ID
+ */
+export async function createConnectAccount(trainerId) {
+  try {
+    const { data, error } = await supabase.functions.invoke(
+      "create-connect-account",
+      {
+        body: {
+          trainerId,
+          refreshUrl: `${globalThis.location.origin}/TrainerDashboard?stripe_refresh=true`,
+          returnUrl: `${globalThis.location.origin}/TrainerDashboard?stripe_onboarding=complete`,
+        },
+      }
+    );
+
+    if (error) {
+      throw new Error(`Failed to create Connect account: ${error.message}`);
+    }
+
+    if (!data || !data.url) {
+      throw new Error("Edge Function did not return an onboarding URL");
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error creating Connect account:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get trainer's Stripe account status
+ * @param {string} trainerId - Trainer ID
+ * @returns {Promise<Object>} Stripe account status
+ */
+export async function getTrainerStripeStatus(trainerId) {
+  try {
+    const { data, error } = await supabase
+      .from("trainers")
+      .select("stripe_account_id, stripe_onboarding_complete, stripe_charges_enabled, stripe_payouts_enabled")
+      .eq("id", trainerId)
+      .single();
+
+    if (error) throw error;
+
+    return {
+      hasAccount: !!data?.stripe_account_id,
+      onboardingComplete: data?.stripe_onboarding_complete || false,
+      chargesEnabled: data?.stripe_charges_enabled || false,
+      payoutsEnabled: data?.stripe_payouts_enabled || false,
+    };
+  } catch (error) {
+    console.error("Error getting trainer Stripe status:", error);
+    throw error;
+  }
+}
+
+/**
+ * Create a checkout session for trainer booking
+ * @param {Object} params - Booking parameters
+ * @returns {Promise<Object>} Checkout session data
+ */
+export async function createBookingCheckoutSession({
+  trainerId,
+  userId,
+  serviceId,
+  serviceName,
+  servicePrice,
+  serviceDuration,
+  bookingDatetime,
+  userNotes,
+}) {
+  try {
+    const { data, error } = await supabase.functions.invoke(
+      "create-booking-checkout",
+      {
+        body: {
+          trainerId,
+          userId,
+          serviceId,
+          serviceName,
+          servicePrice,
+          serviceDuration,
+          bookingDatetime,
+          userNotes,
+          successUrl: `${globalThis.location.origin}/Booking?success=true`,
+          cancelUrl: `${globalThis.location.origin}/Booking?canceled=true`,
+        },
+      }
+    );
+
+    if (error) {
+      // Check if it's a trainer setup issue
+      if (data?.message) {
+        throw new Error(data.message);
+      }
+      throw new Error(`Failed to create booking checkout: ${error.message}`);
+    }
+
+    if (!data || !data.sessionId) {
+      throw new Error("Edge Function did not return a session ID");
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error creating booking checkout:", error);
+    throw error;
+  }
+}
+
+/**
+ * Verify booking payment status
+ * @param {string} bookingId - Booking ID
+ * @returns {Promise<Object>} Booking with payment status
+ */
+export async function verifyBookingPayment(bookingId) {
+  try {
+    const { data, error } = await supabase
+      .from("bookings")
+      .select("id, status, payment_status, total_price")
+      .eq("id", bookingId)
+      .single();
+
+    if (error) throw error;
+
+    return data;
+  } catch (error) {
+    console.error("Error verifying booking payment:", error);
+    throw error;
+  }
+}

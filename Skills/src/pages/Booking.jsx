@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Trainer } from "@/api/entities";
 import { TrainerService } from "@/api/entities";
 import { Booking } from "@/api/entities";
@@ -8,9 +8,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, CheckCircle, CreditCard } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, CheckCircle, CreditCard, AlertCircle, Loader2 } from "lucide-react";
 import { add, format, setHours, setMinutes } from "date-fns";
 import { createPageUrl } from "@/utils";
+import { 
+  createBookingCheckoutSession, 
+  redirectToCheckout, 
+  verifyBookingPayment,
+  getTrainerStripeStatus 
+} from "@/api/stripeService";
+import { toast } from "sonner";
 
 const BookingStep = ({ number, title, children, isActive }) => (
   <div
@@ -35,6 +43,7 @@ const BookingStep = ({ number, title, children, isActive }) => (
 export default function BookingPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [step, setStep] = useState(1);
   const [trainer, setTrainer] = useState(null);
   const [services, setServices] = useState([]);
@@ -44,6 +53,31 @@ export default function BookingPage() {
   const [userNotes, setUserNotes] = useState("");
   const [bookedTimes, setBookedTimes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [trainerStripeStatus, setTrainerStripeStatus] = useState(null);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [confirmedBooking, setConfirmedBooking] = useState(null);
+
+  // Handle payment success/cancel URL params
+  useEffect(() => {
+    const success = searchParams.get("success");
+    const canceled = searchParams.get("canceled");
+    const bookingId = searchParams.get("booking_id");
+
+    if (success === "true" && bookingId) {
+      // Payment was successful
+      toast.success("Payment successful! Your booking is confirmed.");
+      setStep(4);
+      // Verify the booking
+      verifyBookingPayment(bookingId).then((booking) => {
+        setConfirmedBooking(booking);
+      }).catch(console.error);
+      // Clear URL params
+      setSearchParams({});
+    } else if (canceled === "true") {
+      toast.error("Payment was cancelled. Your booking was not completed.");
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -90,6 +124,16 @@ export default function BookingPage() {
 
       setTrainer(trainerData);
       setServices(servicesData);
+
+      // Load trainer's Stripe status
+      try {
+        const stripeStatus = await getTrainerStripeStatus(trainerData.id);
+        setTrainerStripeStatus(stripeStatus);
+        console.log("Trainer Stripe status:", stripeStatus);
+      } catch (stripeError) {
+        console.log("Could not load Stripe status:", stripeError);
+        setTrainerStripeStatus(null);
+      }
 
       if (serviceId) {
         const preselectedService = servicesData.find((s) => s.id === serviceId);
@@ -259,25 +303,62 @@ export default function BookingPage() {
 
   const handleConfirmBooking = async () => {
     if (!trainer || !selectedService || !selectedTime) return;
+    
+    setIsProcessingPayment(true);
+    
     try {
       const user = await User.me();
-      await Booking.create({
-        trainer_id: trainer.id,
-        user_id: user.id,
-        service_id: selectedService.id,
-        service_name: selectedService.name,
-        booking_datetime: selectedTime.toISOString(),
-        duration_minutes: selectedService.duration_minutes,
-        total_price: selectedService.price,
-        user_notes: userNotes,
-        status: "confirmed", // Mocking payment for now
-      });
-      setStep(4); // Move to confirmation step
+      
+      // Check if trainer has Stripe set up for real payments
+      const canProcessPayment = trainerStripeStatus?.chargesEnabled;
+      
+      if (canProcessPayment && selectedService.price > 0) {
+        // Use Stripe checkout for real payment
+        console.log("Processing real payment via Stripe Connect");
+        
+        const { sessionId, bookingId } = await createBookingCheckoutSession({
+          trainerId: trainer.id,
+          userId: user.id,
+          serviceId: selectedService.id,
+          serviceName: selectedService.name,
+          servicePrice: selectedService.price,
+          serviceDuration: selectedService.duration_minutes,
+          bookingDatetime: selectedTime.toISOString(),
+          userNotes: userNotes,
+        });
+        
+        // Redirect to Stripe checkout
+        await redirectToCheckout(sessionId);
+        // Note: Page will redirect, so code below won't execute
+        
+      } else {
+        // Free service or trainer hasn't set up Stripe - create booking directly
+        console.log("Creating booking without payment (free or no Stripe setup)");
+        
+        await Booking.create({
+          trainer_id: trainer.id,
+          user_id: user.id,
+          service_id: selectedService.id,
+          service_name: selectedService.name,
+          booking_datetime: selectedTime.toISOString(),
+          duration_minutes: selectedService.duration_minutes,
+          total_price: selectedService.price,
+          user_notes: userNotes,
+          status: selectedService.price > 0 ? "pending_payment" : "confirmed",
+          payment_status: selectedService.price > 0 ? "awaiting_setup" : "free",
+        });
+        
+        if (selectedService.price > 0 && !canProcessPayment) {
+          toast.info("Booking created! The trainer will contact you about payment.");
+        }
+
+        setIsProcessingPayment(false);
+        setStep(4); // Move to confirmation step
+      }
     } catch (error) {
       console.error("Failed to create booking:", error);
-      // For demo purposes, still show confirmation even if booking fails
-      console.log("Booking failed, but showing confirmation for demo");
-      setStep(4);
+      toast.error(error.message || "Failed to process booking. Please try again.");
+      setIsProcessingPayment(false);
     }
   };
 
@@ -321,20 +402,50 @@ export default function BookingPage() {
           <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold mb-2">Booking Confirmed!</h1>
           <p className="text-gray-600 mb-6">
-            Your session with {trainer.name} is scheduled. You'll receive an
-            email with the details.
+            {trainer ? (
+              <>Your session with {trainer.name} is scheduled. You'll receive an email with the details.</>
+            ) : (
+              <>Your booking has been confirmed! Check your email for details.</>
+            )}
           </p>
-          <div className="text-left p-4 rounded-lg mb-6">
-            <p>
-              <strong>Service:</strong> {selectedService.name}
-            </p>
-            <p>
-              <strong>Date:</strong> {format(selectedTime, "MMMM d, yyyy")}
-            </p>
-            <p>
-              <strong>Time:</strong> {format(selectedTime, "h:mm a")}
-            </p>
-          </div>
+          {(selectedService && selectedTime) ? (
+            <div className="text-left p-4 rounded-lg mb-6 bg-gray-50">
+              <p>
+                <strong>Service:</strong> {selectedService.name}
+              </p>
+              <p>
+                <strong>Date:</strong> {format(selectedTime, "MMMM d, yyyy")}
+              </p>
+              <p>
+                <strong>Time:</strong> {format(selectedTime, "h:mm a")}
+              </p>
+              {confirmedBooking?.payment_status === "paid" && (
+                <p className="mt-2">
+                  <Badge className="bg-green-100 text-green-700">
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                    Payment Complete
+                  </Badge>
+                </p>
+              )}
+            </div>
+          ) : confirmedBooking ? (
+            <div className="text-left p-4 rounded-lg mb-6 bg-gray-50">
+              <p>
+                <strong>Booking ID:</strong> {confirmedBooking.id?.slice(0, 8)}...
+              </p>
+              <p>
+                <strong>Status:</strong> {confirmedBooking.status}
+              </p>
+              {confirmedBooking.payment_status === "paid" && (
+                <p className="mt-2">
+                  <Badge className="bg-green-100 text-green-700">
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                    Payment Complete
+                  </Badge>
+                </p>
+              )}
+            </div>
+          ) : null}
           <Button onClick={() => navigate(createPageUrl("Home"))}>
             Back to Home
           </Button>
@@ -548,18 +659,53 @@ export default function BookingPage() {
                   <div className="flex justify-between items-center text-lg">
                     <span className="text-gray-600">Total</span>
                     <span className="font-bold text-blue-600">
-                      ${selectedService.price}
+                      {selectedService.price > 0 ? `$${selectedService.price}` : "Free"}
                     </span>
                   </div>
+
+                  {/* Stripe status indicator */}
+                  {step >= 2 && selectedService.price > 0 && (
+                    <div className="pt-2">
+                      {trainerStripeStatus?.chargesEnabled ? (
+                        <div className="flex items-center gap-2 text-sm text-green-600">
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Secure payment via Stripe</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-2 text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
+                          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                          <span>
+                            This trainer hasn't set up online payments yet. 
+                            You can still book, and they'll contact you about payment.
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {step === 3 && (
                     <Button
                       onClick={handleConfirmBooking}
                       size="lg"
+                      disabled={isProcessingPayment}
                       className="w-full mt-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white"
                     >
-                      <CreditCard className="w-5 h-5 mr-2" />
-                      Confirm & Finalize
+                      {isProcessingPayment ? (
+                        <>
+                          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                          Processing...
+                        </>
+                      ) : trainerStripeStatus?.chargesEnabled && selectedService.price > 0 ? (
+                        <>
+                          <CreditCard className="w-5 h-5 mr-2" />
+                          Pay ${selectedService.price}
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-5 h-5 mr-2" />
+                          {selectedService.price > 0 ? "Request Booking" : "Confirm Booking"}
+                        </>
+                      )}
                     </Button>
                   )}
                 </CardContent>

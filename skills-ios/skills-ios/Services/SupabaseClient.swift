@@ -37,7 +37,7 @@ class SupabaseClient {
     // MARK: - Authentication
     
     func signUp(email: String, password: String, fullName: String) async throws -> AuthResponse {
-        let url = URL(string: "\(baseURL)/auth/v1/signup")!
+        guard let url = URL(string: "\(baseURL)/auth/v1/signup") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -60,7 +60,7 @@ class SupabaseClient {
     }
     
     func signIn(email: String, password: String) async throws -> AuthResponse {
-        let url = URL(string: "\(baseURL)/auth/v1/token?grant_type=password")!
+        guard let url = URL(string: "\(baseURL)/auth/v1/token?grant_type=password") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -84,7 +84,7 @@ class SupabaseClient {
     }
     
     func signOut() async throws {
-        let url = URL(string: "\(baseURL)/auth/v1/logout")!
+        guard let url = URL(string: "\(baseURL)/auth/v1/logout") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
@@ -107,7 +107,7 @@ class SupabaseClient {
             return nil
         }
         
-        let url = URL(string: "\(baseURL)/auth/v1/user")!
+        guard let url = URL(string: "\(baseURL)/auth/v1/user") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
@@ -186,7 +186,7 @@ class SupabaseClient {
     }
     
     func insert<T: Encodable>(into table: String, values: T) async throws {
-        let url = URL(string: "\(baseURL)/rest/v1/\(table)")!
+        guard let url = URL(string: "\(baseURL)/rest/v1/\(table)") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -208,7 +208,7 @@ class SupabaseClient {
     }
     
     func update<T: Encodable>(table: String, values: T, filter: String) async throws {
-        let url = URL(string: "\(baseURL)/rest/v1/\(table)?\(filter)")!
+        guard let url = URL(string: "\(baseURL)/rest/v1/\(table)?\(filter)") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -230,7 +230,7 @@ class SupabaseClient {
     }
     
     func delete(from table: String, filter: String) async throws {
-        let url = URL(string: "\(baseURL)/rest/v1/\(table)?\(filter)")!
+        guard let url = URL(string: "\(baseURL)/rest/v1/\(table)?\(filter)") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
@@ -247,7 +247,7 @@ class SupabaseClient {
     }
     
     func upsert<T: Encodable>(into table: String, values: T, onConflict: String) async throws {
-        let url = URL(string: "\(baseURL)/rest/v1/\(table)?on_conflict=\(onConflict)")!
+        guard let url = URL(string: "\(baseURL)/rest/v1/\(table)?on_conflict=\(onConflict)") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -275,7 +275,7 @@ class SupabaseClient {
     }
     
     func rpc<T: Decodable>(function: String, params: [String: Any]? = nil) async throws -> T {
-        let url = URL(string: "\(baseURL)/rest/v1/rpc/\(function)")!
+        guard let url = URL(string: "\(baseURL)/rest/v1/rpc/\(function)") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -299,10 +299,38 @@ class SupabaseClient {
         return try decoder.decode(T.self, from: data)
     }
     
+    // MARK: - Edge Functions
+
+    func invokeFunction<T: Decodable>(_ name: String, body: [String: Any]) async throws -> T {
+        guard let url = URL(string: "\(baseURL)/functions/v1/\(name)") else { throw SupabaseError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        if let token = accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
+            if let httpResponse = response as? HTTPURLResponse,
+               let responseString = String(data: data, encoding: .utf8) {
+                print("Function \(name) failed (\(httpResponse.statusCode)): \(responseString)")
+            }
+            throw SupabaseError.functionFailed
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(T.self, from: data)
+    }
+
     // MARK: - Storage Operations
     
     func uploadFile(bucket: String, path: String, data: Data) async throws {
-        let url = URL(string: "\(baseURL)/storage/v1/object/\(bucket)/\(path)")!
+        guard let url = URL(string: "\(baseURL)/storage/v1/object/\(bucket)/\(path)") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
@@ -367,6 +395,7 @@ enum SupabaseError: LocalizedError {
     case upsertFailed
     case rpcFailed
     case uploadFailed
+    case functionFailed
     
     var errorDescription: String? {
         switch self {
@@ -392,6 +421,8 @@ enum SupabaseError: LocalizedError {
             return "RPC call failed."
         case .uploadFailed:
             return "Failed to upload file."
+        case .functionFailed:
+            return "Edge function call failed."
         }
     }
 }
