@@ -6,7 +6,13 @@ This feature allows parent/guardian accounts to:
 1. Link to their child athlete accounts via secure invite codes
 2. Track their child's progress (IQ curriculum, workouts/drills completion, streaks/levels)
 3. Go through the IQ curriculum themselves (parent has their own learning/progress)
-4. Assign and lead workouts for their child, with completions credited to both profiles
+4. Log game stats and shooting sessions for their child
+
+> **Note on workout assignment UI:** the `workout_assignments` schema, RLS,
+> RPCs, and the athlete-side "Assigned by Parent" view are in place, but the
+> Parent Dashboard UI to create/lead assignments has not shipped in this PR.
+> Parents currently see Progress / IQ / Game Stats / Shooting tabs only.
+> Follow-up work will add the Workouts tab described below.
 
 ## Database Schema
 
@@ -127,7 +133,8 @@ The `user_role` enum now includes:
 1. **ParentDashboard** (`/ParentDashboard`)
    - List of linked children
    - Child progress overview
-   - Workout assignment management
+   - Game stats and shooting session logging
+   - *Planned (not shipped in this PR):* workout assignment management
 
 2. **WorkoutSession** (`/workout-session/:assignmentId`)
    - Timer and instructions
@@ -178,27 +185,24 @@ supabase db push
 5. Enter the invite code
 6. Click "Link Child"
 
-### 4. Test Workout Assignment
+### 4. Test Workout Assignment (backend only in this PR)
 
-1. **As Parent**: Go to Parent Dashboard → "Workouts" tab
-2. Click "Assign Workout"
-3. Select the linked child and a workout
-4. Click "Assign Workout"
+The Parent Dashboard UI for assigning workouts is not yet shipped. The
+backend path can still be exercised directly:
 
-5. **As Athlete**: Go to Workouts page
-6. See the "Assigned by Parent" section
-7. Click to start the workout
+1. **As Parent**: insert a row via the `workout_assignments` table or the
+   `WorkoutAssignment.create(childId, challengeId)` entity in a dev console,
+   using a linked child_id.
+2. **As Athlete**: go to the Workouts page; the "Assigned by Parent" section
+   should show the new assignment and link to `WorkoutSession`.
+3. Completing the session should call `complete_assigned_workout` and credit
+   the child's `challenge_progress`.
 
-### 5. Test Guided Workout (Parent Leading)
+### 5. Test Guided Workout (Parent Leading) — planned
 
-1. **As Parent**: Go to Parent Dashboard → "Workouts" tab
-2. Click "Start Session" on an assignment
-3. Run through the workout with your child
-4. Click "Complete Workout"
-5. Verify:
-   - Assignment shows as completed
-   - Child's profile shows the completion
-   - XP was awarded to child
+Parent-led sessions require the Parent Dashboard "Workouts" tab UI, which is
+not included in this PR. `WorkoutSession` already supports a parent-driven
+flow (`isParent` branch), so enabling this only requires the dashboard UI.
 
 ### 6. Verify RLS Policies
 

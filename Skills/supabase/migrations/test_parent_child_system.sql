@@ -98,12 +98,12 @@ WHERE NOT EXISTS (
 );
 -- Expected: 0 rows (all assignments should have valid links)
 
--- Check 4: Expired/used invite codes are not reusable
-SELECT COUNT(*) as reusable_codes 
-FROM child_invite_codes 
-WHERE (expires_at < NOW() OR used_at IS NOT NULL) 
+-- Check 4: Expired invite codes should not remain reusable
+SELECT COUNT(*) as expired_unused_codes
+FROM child_invite_codes
+WHERE expires_at < NOW()
 AND used_at IS NULL;
--- This query doesn't make sense as written, but shows the validation concept
+-- Expected: 0 (expired codes should not still be considered available for use)
 
 -- =============================================
 -- CLEANUP (for testing environments only)
