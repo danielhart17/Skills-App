@@ -37,8 +37,26 @@ CREATE POLICY "Parents can manage their own game stats logs"
   ON public.player_game_stats
   FOR ALL
   TO authenticated
-  USING (parent_id = auth.uid())
-  WITH CHECK (parent_id = auth.uid());
+  USING (
+    parent_id = auth.uid()
+    AND EXISTS (
+      SELECT 1
+      FROM public.parent_child_links pcl
+      WHERE pcl.parent_id = auth.uid()
+        AND pcl.child_id = player_game_stats.child_id
+        AND pcl.status = 'linked'
+    )
+  )
+  WITH CHECK (
+    parent_id = auth.uid()
+    AND EXISTS (
+      SELECT 1
+      FROM public.parent_child_links pcl
+      WHERE pcl.parent_id = auth.uid()
+        AND pcl.child_id = player_game_stats.child_id
+        AND pcl.status = 'linked'
+    )
+  );
 
 COMMENT ON TABLE public.player_game_stats IS 'Game box scores and shot charts logged by parents for linked children';
 

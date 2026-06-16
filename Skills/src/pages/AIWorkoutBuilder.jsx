@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Zap, Clock, ChevronDown, ChevronUp, Play, RotateCcw } from "lucide-react";
+import { Zap, Clock, ChevronUp, Play, RotateCcw } from "lucide-react";
 
 const CAT_ICONS = {
   shooting: "🎯", dribbling: "⚡", footwork: "👟",
@@ -179,7 +179,21 @@ Select 4-7 drills that best match this player. Respond ONLY with valid JSON, no 
         body: { prompt },
       });
 
-      if (fnError) throw fnError;
+      if (fnError) {
+        let details = fnError.message;
+        // FunctionsHttpError exposes the Response on .context; the edge
+        // function returns { error, status, details } on upstream failure.
+        if (fnError.context && typeof fnError.context.text === "function") {
+          try {
+            const body = await fnError.context.text();
+            const parsed = JSON.parse(body);
+            details = parsed.details || parsed.error || body;
+          } catch {
+            // context body was not JSON; fall back to fnError.message
+          }
+        }
+        throw new Error(details);
+      }
 
       const raw = typeof data === "string" ? data : JSON.stringify(data);
       const clean = raw.replace(/```json|```/g, "").trim();
@@ -199,7 +213,11 @@ Select 4-7 drills that best match this player. Respond ONLY with valid JSON, no 
       setPlan(planWithDrills);
     } catch (err) {
       console.error(err);
-      setError("Something went wrong building your plan. Please try again.");
+      setError(
+        err?.message
+          ? `Couldn't build your plan: ${err.message}`
+          : "Something went wrong building your plan. Please try again."
+      );
     }
     setIsLoading(false);
   };

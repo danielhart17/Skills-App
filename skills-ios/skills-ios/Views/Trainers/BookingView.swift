@@ -3,7 +3,7 @@ import SwiftUI
 struct BookingView: View {
     let trainer: Trainer
     let service: TrainerService
-    
+
     @Environment(\.presentationMode) var presentationMode
     @State private var currentStep = 1
     @State private var selectedDate = Date()
@@ -13,6 +13,13 @@ struct BookingView: View {
     @State private var isLoading = false
     @State private var showConfirmation = false
     @State private var bookingError: String? = nil
+    @State private var checkoutURL: URL? = nil
+    @State private var pendingBookingId: String? = nil
+    @State private var paymentStatus: BookingPaymentStatus = .none
+
+    enum BookingPaymentStatus {
+        case none, awaitingPayment, paid, cancelled
+    }
     
     var body: some View {
         ZStack {
@@ -154,9 +161,14 @@ struct BookingView: View {
                                 } else if currentStep == 3 && selectedTime != nil {
                                     Button(action: confirmBooking) {
                                         HStack {
-                                            Image(systemName: "checkmark.circle.fill")
-                                            Text("Confirm Booking")
-                                                .fontWeight(.semibold)
+                                            if isLoading {
+                                                ProgressView()
+                                                    .tint(.white)
+                                            } else {
+                                                Image(systemName: "lock.fill")
+                                                Text("Pay $\(formatPrice(service.price))")
+                                                    .fontWeight(.semibold)
+                                            }
                                         }
                                         .frame(maxWidth: .infinity)
                                         .padding()
@@ -190,6 +202,15 @@ struct BookingView: View {
             Button("OK") { bookingError = nil }
         } message: {
             Text(bookingError ?? "")
+        }
+        .sheet(isPresented: Binding(
+            get: { checkoutURL != nil },
+            set: { if !$0 { handleCheckoutDismissed() } }
+        )) {
+            if let url = checkoutURL {
+                SafariView(url: url)
+                    .ignoresSafeArea()
+            }
         }
     }
     
@@ -539,9 +560,14 @@ struct BookingView: View {
     
     private func confirmBooking() {
         guard let selectedTime = selectedTime else { return }
-        
+
+        guard trainer.canAcceptPayments else {
+            bookingError = "This trainer hasn't finished setting up payments yet. Please contact them directly."
+            return
+        }
+
         isLoading = true
-        
+
         Task {
             do {
                 guard let userId = AuthService.shared.currentUser?.id else {
@@ -549,26 +575,61 @@ struct BookingView: View {
                     isLoading = false
                     return
                 }
-                
-                try await APIService.shared.createBooking(
+
+                let response = try await StripeService.shared.createBookingCheckoutSession(
                     trainerId: trainer.id,
                     userId: userId,
                     serviceId: service.id,
                     serviceName: service.name,
+                    servicePrice: service.price,
+                    serviceDuration: service.durationMinutes,
                     bookingDatetime: selectedTime,
-                    durationMinutes: service.durationMinutes,
-                    totalPrice: service.price,
                     userNotes: userNotes.isEmpty ? nil : userNotes
                 )
-                
-                isLoading = false
-                withAnimation {
-                    showConfirmation = true
+
+                pendingBookingId = response.bookingId
+                paymentStatus = .awaitingPayment
+
+                guard let urlString = response.url, let url = URL(string: urlString) else {
+                    bookingError = "Stripe did not return a checkout URL."
+                    isLoading = false
+                    return
                 }
+
+                checkoutURL = url
+                isLoading = false
             } catch {
                 isLoading = false
-                bookingError = "Failed to create booking: \(error.localizedDescription)"
-                print("Error creating booking: \(error)")
+                bookingError = "Failed to start checkout: \(error.localizedDescription)"
+                print("Error starting checkout: \(error)")
+            }
+        }
+    }
+
+    private func handleCheckoutDismissed() {
+        checkoutURL = nil
+        guard let bookingIdString = pendingBookingId,
+              let bookingUUID = UUID(uuidString: bookingIdString) else { return }
+
+        Task {
+            do {
+                let bookings: [BookingPaymentRow] = try await SupabaseClient.shared.select(
+                    from: "bookings",
+                    columns: "id,payment_status,status",
+                    filter: "id=eq.\(bookingUUID.uuidString)"
+                )
+                guard let row = bookings.first else { return }
+
+                if row.payment_status == "paid" {
+                    paymentStatus = .paid
+                    withAnimation { showConfirmation = true }
+                } else {
+                    paymentStatus = .cancelled
+                    bookingError = "Payment was not completed. Your session was not booked."
+                }
+            } catch {
+                print("Error refetching booking status: \(error)")
+                bookingError = "Could not verify payment status. Please check your bookings."
             }
         }
     }
@@ -592,6 +653,12 @@ struct BookingView: View {
         formatter.dateFormat = "h:mm a"
         return formatter.string(from: date)
     }
+}
+
+private struct BookingPaymentRow: Decodable {
+    let id: String
+    let payment_status: String?
+    let status: String?
 }
 
 // MARK: - Preview

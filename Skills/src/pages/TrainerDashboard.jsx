@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Card,
@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/api/supabaseClient";
+import { createConnectAccount, getTrainerStripeStatus } from "@/api/stripeService";
 import {
   Trophy,
   Calendar,
@@ -33,6 +34,11 @@ import {
   Play,
   X,
   Upload,
+  CreditCard,
+  CheckCircle,
+  AlertCircle,
+  ExternalLink,
+  Loader2,
 } from "lucide-react";
 import { ImageUpload } from "@/components/ImageUpload";
 import { toast } from "sonner";
@@ -58,6 +64,7 @@ import {
 export default function TrainerDashboard() {
   const { isTrainer, profile } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("challenges");
   const [challenges, setChallenges] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -65,6 +72,8 @@ export default function TrainerDashboard() {
   const [events, setEvents] = useState([]);
   const [trainerProfile, setTrainerProfile] = useState(null);
   const [_loading, setLoading] = useState(true);
+  const [stripeStatus, setStripeStatus] = useState(null);
+  const [stripeLoading, setStripeLoading] = useState(false);
 
   // Redirect if not trainer or admin
   useEffect(() => {
@@ -72,6 +81,42 @@ export default function TrainerDashboard() {
       navigate("/home");
     }
   }, [isTrainer, navigate]);
+
+  // Handle Stripe onboarding return
+  useEffect(() => {
+    const stripeOnboarding = searchParams.get("stripe_onboarding");
+    const stripeRefresh = searchParams.get("stripe_refresh");
+    
+    if (stripeOnboarding === "complete") {
+      toast.success("Stripe setup completed! Refreshing status...");
+      setActiveTab("profile");
+      // Clear the URL params
+      setSearchParams({});
+      // Refresh trainer profile to get updated Stripe status
+      loadData();
+    } else if (stripeRefresh === "true") {
+      toast.info("Please complete your Stripe onboarding to receive payments.");
+      setActiveTab("profile");
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Load Stripe status when trainer profile changes
+  useEffect(() => {
+    if (trainerProfile?.id) {
+      loadStripeStatus();
+    }
+  }, [trainerProfile?.id]);
+
+  const loadStripeStatus = async () => {
+    if (!trainerProfile?.id) return;
+    try {
+      const status = await getTrainerStripeStatus(trainerProfile.id);
+      setStripeStatus(status);
+    } catch (error) {
+      console.error("Error loading Stripe status:", error);
+    }
+  };
 
   const loadData = useCallback(async () => {
     if (!profile) return; // Safety check
@@ -983,6 +1028,18 @@ export default function TrainerDashboard() {
         {/* Profile Tab */}
         <TabsContent value="profile" className="space-y-4">
           <h2 className="text-2xl font-semibold">Trainer Profile</h2>
+          
+          {/* Stripe Connect Section */}
+          {trainerProfile && (
+            <StripeConnectCard 
+              trainerProfile={trainerProfile}
+              stripeStatus={stripeStatus}
+              onRefresh={loadStripeStatus}
+              loading={stripeLoading}
+              setLoading={setStripeLoading}
+            />
+          )}
+          
           <TrainerProfileForm
             profile={trainerProfile}
             onSave={handleSaveProfile}
@@ -993,18 +1050,180 @@ export default function TrainerDashboard() {
   );
 }
 
+// Stripe Connect Card Component
+function StripeConnectCard({ trainerProfile, stripeStatus, onRefresh, loading, setLoading }) {
+  const handleSetupStripe = async () => {
+    setLoading(true);
+    try {
+      const { url } = await createConnectAccount(trainerProfile.id);
+      // Redirect to Stripe onboarding
+      window.location.href = url;
+    } catch (error) {
+      console.error("Error setting up Stripe:", error);
+      toast.error("Failed to start Stripe setup. Please try again.");
+      setLoading(false);
+    }
+  };
+
+  const handleContinueSetup = async () => {
+    setLoading(true);
+    try {
+      const { url } = await createConnectAccount(trainerProfile.id);
+      window.location.href = url;
+    } catch (error) {
+      console.error("Error continuing Stripe setup:", error);
+      toast.error("Failed to continue Stripe setup. Please try again.");
+      setLoading(false);
+    }
+  };
+
+  const isFullySetup = stripeStatus?.chargesEnabled && stripeStatus?.payoutsEnabled;
+  const hasStartedSetup = stripeStatus?.hasAccount;
+  const needsMoreInfo = hasStartedSetup && !isFullySetup;
+
+  return (
+    <Card className={`border-2 ${isFullySetup ? "border-green-500/50 bg-green-950/20" : needsMoreInfo ? "border-yellow-500/50 bg-yellow-950/20" : "border-gray-600"}`}>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              isFullySetup ? "bg-green-500/20" : needsMoreInfo ? "bg-yellow-500/20" : "bg-gray-500/20"
+            }`}>
+              <CreditCard className={`w-5 h-5 ${
+                isFullySetup ? "text-green-400" : needsMoreInfo ? "text-yellow-400" : "text-gray-400"
+              }`} />
+            </div>
+            <div>
+              <CardTitle className="text-lg">Payment Setup</CardTitle>
+              <CardDescription>
+                Receive payments for your training sessions
+              </CardDescription>
+            </div>
+          </div>
+          {isFullySetup && (
+            <Badge className="bg-green-500/20 text-green-400 border-green-500/50">
+              <CheckCircle className="w-3 h-3 mr-1" />
+              Active
+            </Badge>
+          )}
+          {needsMoreInfo && (
+            <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50">
+              <AlertCircle className="w-3 h-3 mr-1" />
+              Incomplete
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isFullySetup ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-green-400">
+              <CheckCircle className="w-5 h-5" />
+              <span className="font-medium">Your payment account is active!</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              You can now receive payments for training sessions. A 15% platform fee is deducted from each booking.
+            </p>
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+                <div className="text-sm text-gray-400">Charges</div>
+                <div className="font-medium text-green-400 flex items-center gap-1">
+                  <CheckCircle className="w-4 h-4" /> Enabled
+                </div>
+              </div>
+              <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+                <div className="text-sm text-gray-400">Payouts</div>
+                <div className="font-medium text-green-400 flex items-center gap-1">
+                  <CheckCircle className="w-4 h-4" /> Enabled
+                </div>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleContinueSetup} disabled={loading}>
+              {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ExternalLink className="w-4 h-4 mr-2" />}
+              Manage Stripe Account
+            </Button>
+          </div>
+        ) : needsMoreInfo ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-yellow-400">
+              <AlertCircle className="w-5 h-5" />
+              <span className="font-medium">Additional information needed</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Your Stripe account setup is incomplete. Please complete the onboarding process to start receiving payments.
+            </p>
+            <Button onClick={handleContinueSetup} disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Redirecting...
+                </>
+              ) : (
+                <>
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Complete Setup
+                </>
+              )}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Connect your Stripe account to receive payments for training sessions booked through the app. We use Stripe Connect for secure, hassle-free payments.
+            </p>
+            <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700">
+              <h4 className="font-medium mb-2">How it works:</h4>
+              <ul className="text-sm text-muted-foreground space-y-2">
+                <li className="flex items-start gap-2">
+                  <span className="text-primary">•</span>
+                  Users pay for sessions through our secure checkout
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary">•</span>
+                  A 15% platform fee is automatically deducted
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary">•</span>
+                  Remaining funds are transferred to your Stripe account
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary">•</span>
+                  Payouts happen automatically on your schedule
+                </li>
+              </ul>
+            </div>
+            <Button onClick={handleSetupStripe} disabled={loading} className="w-full sm:w-auto">
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Setting up...
+                </>
+              ) : (
+                <>
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  Set Up Stripe Account
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // Challenge Dialog Component
 function ChallengeDialog({ challenge, onSave, trigger }) {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    category: "shooting",
-    difficulty: "beginner",
-    duration_minutes: 20,
-    xp_reward: 100,
-    equipment_needed: [],
-    is_featured: false,
+      title: "",
+      description: "",
+      category: "shooting",
+      difficulty: "beginner",
+      duration_minutes: 20,
+      xp_reward: 100,
+      equipment_needed: [],
+      is_featured: false,
     media_type: "",
     media_url: "",
     thumbnail_url: "",
@@ -2318,11 +2537,11 @@ function TrainerProfileForm({ profile, onSave }) {
                         day: "numeric",
                         year: "numeric",
                       })}
-                    </Badge>
-                  ))}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
         )}
       </CardContent>

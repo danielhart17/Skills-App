@@ -5,12 +5,26 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- =============================================
+-- USER ROLE ENUM
+-- =============================================
+-- Canonical list of roles. Must stay in sync with migrations/add_roles.sql
+-- and migrations/add_parent_child_system.sql (which adds parent/athlete).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+    CREATE TYPE user_role AS ENUM ('user', 'trainer', 'admin', 'parent', 'athlete');
+  END IF;
+END
+$$;
+
+-- =============================================
 -- USERS TABLE (extends Supabase auth.users)
 -- =============================================
 CREATE TABLE public.profiles (
   id UUID REFERENCES auth.users(id) PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   full_name TEXT,
+  role user_role NOT NULL DEFAULT 'user',
   current_level INTEGER DEFAULT 1,
   total_xp INTEGER DEFAULT 0,
   current_streak INTEGER DEFAULT 0,
@@ -282,15 +296,29 @@ BEFORE INSERT OR UPDATE ON public.shooting_sessions
 -- FUNCTIONS
 -- =============================================
 
--- Function to create profile on user signup
+-- Function to create profile on user signup.
+-- Reads role from raw_user_meta_data so signup can choose parent/athlete;
+-- must stay in sync with the version in migrations/add_parent_child_system.sql.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_role user_role;
 BEGIN
-  INSERT INTO public.profiles (id, email, full_name)
-  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name');
+  v_role := COALESCE(
+    (NEW.raw_user_meta_data->>'role')::user_role,
+    'user'::user_role
+  );
+
+  INSERT INTO public.profiles (id, email, full_name, role)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    NEW.raw_user_meta_data->>'full_name',
+    v_role
+  );
   RETURN NEW;
 END;
-$$ language 'plpgsql' SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Trigger to automatically create profile on signup
 CREATE TRIGGER on_auth_user_created

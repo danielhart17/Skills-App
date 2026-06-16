@@ -212,6 +212,9 @@ export default function Profile() {
         const activeCode = codes[0];
         setInviteCode(activeCode.code);
         setInviteExpires(new Date(activeCode.expires_at));
+      } else {
+        setInviteCode(null);
+        setInviteExpires(null);
       }
     } catch (error) {
       console.error("Error loading parent links:", error);
