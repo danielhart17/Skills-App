@@ -304,7 +304,7 @@ export default function Trainers() {
 
                   <div className="flex gap-2">
                     <Link
-                      to={`/TrainerProfile?id=${trainer.id}`}
+                      to={`/trainerprofile?id=${trainer.id}`}
                       className="flex-1"
                     >
                       <Button className="w-full bg-brand-blue hover:opacity-90 text-white">

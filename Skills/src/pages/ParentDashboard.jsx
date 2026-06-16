@@ -234,6 +234,7 @@ export default function ParentDashboard() {
   const [loadingChildren, setLoadingChildren] = useState(true);
   const [linkCode, setLinkCode] = useState("");
   const [linkingChild, setLinkingChild] = useState(false);
+  const [linkError, setLinkError] = useState("");
 
   // —— IQ ——
   const [iqLessons, setIqLessons] = useState([]);
@@ -273,7 +274,7 @@ export default function ParentDashboard() {
 
   useEffect(() => {
     if (!isParent()) {
-      navigate("/Home");
+      navigate("/home");
     }
   }, [isParent, navigate]);
 
@@ -395,18 +396,25 @@ export default function ParentDashboard() {
   }, [ssActive]);
 
   const handleLinkChild = async () => {
-    if (!linkCode.trim()) {
+    const normalizedCode = linkCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    setLinkError("");
+
+    if (!normalizedCode) {
       toast.error("Please enter an invite code");
+      setLinkError("Please enter an invite code");
       return;
     }
     setLinkingChild(true);
     try {
-      const result = await ParentChild.linkByCode(linkCode.trim());
+      const result = await ParentChild.linkByCode(normalizedCode);
       toast.success(`Linked to ${result.child_name || "athlete"}!`);
       setLinkCode("");
-      loadLinkedChildren();
+      await loadLinkedChildren();
     } catch (e) {
-      toast.error(e.message || "Could not link with that code");
+      console.error("Error linking child:", e);
+      const message = e.message || "Could not link with that code";
+      setLinkError(message);
+      toast.error(message);
     } finally {
       setLinkingChild(false);
     }
@@ -962,26 +970,33 @@ export default function ParentDashboard() {
                 Enter the 6-character code from your athlete&apos;s app.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col sm:flex-row gap-3">
-              <Input
-                placeholder="CODE"
-                value={linkCode}
-                onChange={(e) => setLinkCode(e.target.value.toUpperCase())}
-                maxLength={8}
-                className="font-mono tracking-widest uppercase bg-background border-border text-white"
-              />
-              <Button
-                onClick={handleLinkChild}
-                disabled={linkingChild}
-                className={primaryBtn}
-                style={primaryStyle}
-              >
-                {linkingChild ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  "Link"
-                )}
-              </Button>
+            <CardContent className="space-y-3">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Input
+                  placeholder="CODE"
+                  value={linkCode}
+                  onChange={(e) => setLinkCode(e.target.value.toUpperCase())}
+                  maxLength={16}
+                  className="font-mono tracking-widest uppercase bg-background border-border text-white"
+                />
+                <Button
+                  onClick={handleLinkChild}
+                  disabled={linkingChild}
+                  className={primaryBtn}
+                  style={primaryStyle}
+                >
+                  {linkingChild ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    "Link"
+                  )}
+                </Button>
+              </div>
+              {linkError && (
+                <p className="text-sm text-red-400 bg-red-950/30 border border-red-500/30 rounded-lg p-3">
+                  {linkError}
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

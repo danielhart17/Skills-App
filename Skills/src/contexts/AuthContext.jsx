@@ -104,6 +104,29 @@ export const AuthProvider = ({ children }) => {
       return profile;
     }
 
+    const getMetadataProfile = async () => {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      const metadataRole = authUser?.user_metadata?.role;
+      const allowedRoles = ["user", "athlete", "parent", "trainer", "admin"];
+      const safeRole = allowedRoles.includes(metadataRole)
+        ? metadataRole
+        : "user";
+
+      return {
+        id: userId,
+        email: authUser?.email || null,
+        full_name: authUser?.user_metadata?.full_name || "User",
+        role: safeRole,
+        current_level: 1,
+        total_xp: 0,
+        current_streak: 0,
+        longest_streak: 0,
+        entry_exam_completed: safeRole !== "user" && safeRole !== "athlete",
+      };
+    };
+
     try {
       // Add a timeout to the profile fetch (increased to 15 seconds)
       const timeoutPromise = new Promise((_, reject) =>
@@ -122,7 +145,47 @@ export const AuthProvider = ({ children }) => {
       ]);
 
       if (error) {
-        throw error;
+        if (error.code !== "PGRST116") {
+          throw error;
+        }
+
+        let createdProfile = null;
+        let createError = null;
+
+        const repairResult = await supabase.rpc("ensure_current_user_profile");
+
+        if (
+          repairResult.error &&
+          !repairResult.error.message?.includes("Could not find the function")
+        ) {
+          createError = repairResult.error;
+        } else if (repairResult.data) {
+          createdProfile = repairResult.data;
+        } else {
+          const profileFromMetadata = await getMetadataProfile();
+          const upsertResult = await supabase
+            .from("profiles")
+            .upsert(profileFromMetadata, { onConflict: "id" })
+            .select("*")
+            .single();
+
+          createdProfile = upsertResult.data;
+          createError = upsertResult.error;
+        }
+
+        if (createError) {
+          throw createError;
+        }
+
+        const normalizedProfile = {
+          ...createdProfile,
+          entry_exam_completed: createdProfile.entry_exam_completed ?? false,
+        };
+
+        setProfile(normalizedProfile);
+        setRole(normalizedProfile?.role || "user");
+        setProfileLoaded(true);
+        return normalizedProfile;
       }
 
       // Ensure entry_exam_completed has a default value
@@ -138,22 +201,12 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error("Error fetching profile:", error);
 
-      // On error, DON'T overwrite existing profile - just log the error
-      // Only set default if we have no profile at all
+      // On error, keep the role from auth metadata so routing does not
+      // temporarily send users to the wrong dashboard.
       if (!profile) {
-        const defaultProfile = {
-          id: userId,
-          email: null,
-          full_name: "User",
-          role: "admin", // Default to admin to prevent showing entry exam on error
-          current_level: 1,
-          total_xp: 0,
-          current_streak: 0,
-          longest_streak: 0,
-          entry_exam_completed: true, // Don't show exam on error
-        };
-        setProfile(defaultProfile);
-        setRole("admin");
+        const fallbackProfile = await getMetadataProfile();
+        setProfile(fallbackProfile);
+        setRole(fallbackProfile.role);
       }
       // Keep profileLoaded as false on error so we know fetch failed
       return profile;
@@ -179,8 +232,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const signUp = async (email, password, fullName, selectedRole = "athlete") => {
-    // Map frontend role selection to database role
-    const dbRole = selectedRole === "parent" ? "parent" : "athlete";
+    // Map frontend role selection to database role.
+    const allowedSignupRoles = ["athlete", "parent", "trainer"];
+    const dbRole = allowedSignupRoles.includes(selectedRole)
+      ? selectedRole
+      : "athlete";
     
     const { data, error } = await supabase.auth.signUp({
       email,

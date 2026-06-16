@@ -18,9 +18,10 @@ import {
   Play,
   Dumbbell,
 } from "lucide-react";
+import UnreadMessagesBadge from "@/components/UnreadMessagesBadge";
 
 export default function Home() {
-  const { isTrainer } = useAuth();
+  const { isAdmin, isTrainer, isParent, isAthlete } = useAuth();
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [recentLessons, setRecentLessons] = useState([]);
@@ -28,8 +29,21 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (isAdmin()) {
+      navigate("/admindashboard", { replace: true });
+      return;
+    }
+    if (isTrainer()) {
+      navigate("/trainerdashboard", { replace: true });
+      return;
+    }
+    if (isParent()) {
+      navigate("/parentdashboard", { replace: true });
+      return;
+    }
+
     loadUserData();
-  }, []);
+  }, [isAdmin, isTrainer, isParent, navigate]);
 
   const loadUserData = async () => {
     try {
@@ -95,6 +109,7 @@ export default function Home() {
   return (
     <div className="p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-8">
+        {isAthlete() && <UnreadMessagesBadge />}
         {/* Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
           <div>

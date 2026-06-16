@@ -3,14 +3,27 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Challenge, ChallengeProgress, WorkoutAssignment } from "@/api/entities";
 import { Trainer } from "@/api/entities";
+import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { toast } from "sonner";
 import {
+  CalendarPlus,
   Trophy,
   Target,
   Clock,
@@ -22,12 +35,36 @@ import {
   Users,
   ArrowRight,
   Dumbbell,
+  Loader2,
   Zap,
 } from "lucide-react";
 
+function formatDateForInput(date = new Date()) {
+  return date.toISOString().split("T")[0];
+}
+
+function buildWorkoutScheduleNotes(workout, extraNotes) {
+  return [
+    workout.description,
+    workout.duration_minutes ? `Duration: ${workout.duration_minutes} minutes` : null,
+    workout.category ? `Category: ${workout.category}` : null,
+    workout.difficulty ? `Difficulty: ${workout.difficulty}` : null,
+    workout.xp_reward ? `XP Reward: ${workout.xp_reward}` : null,
+    workout.equipment_needed?.length
+      ? `Equipment: ${workout.equipment_needed.join(", ")}`
+      : null,
+    workout.setup ? `Setup:\n${workout.setup}` : null,
+    workout.instructions ? `Instructions:\n${workout.instructions}` : null,
+    workout.focus ? `Focus:\n${workout.focus}` : null,
+    extraNotes?.trim() ? `Notes:\n${extraNotes.trim()}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export default function Challenges() {
   const navigate = useNavigate();
-  const { isAthlete } = useAuth();
+  const { isAthlete, user } = useAuth();
   const [challenges, setChallenges] = useState([]);
   const [completedChallenges, setCompletedChallenges] = useState([]);
   const [featuredChallenge, setFeaturedChallenge] = useState(null);
@@ -36,6 +73,14 @@ export default function Challenges() {
   const [selectedDifficulty, setSelectedDifficulty] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [parentAssignments, setParentAssignments] = useState([]);
+  const [scheduleWorkout, setScheduleWorkout] = useState(null);
+  const [scheduleForm, setScheduleForm] = useState({
+    event_date: formatDateForInput(),
+    start_time: "",
+    location: "",
+    notes: "",
+  });
+  const [isScheduling, setIsScheduling] = useState(false);
 
   const loadAssignments = useCallback(async () => {
     if (!isAthlete()) return;
@@ -146,6 +191,51 @@ export default function Challenges() {
     return completedChallenges.includes(challengeId);
   };
 
+  const openScheduleDialog = (workout) => {
+    setScheduleWorkout(workout);
+    setScheduleForm({
+      event_date: formatDateForInput(),
+      start_time: "",
+      location: "",
+      notes: "",
+    });
+  };
+
+  const handleAddWorkoutToSchedule = async (event) => {
+    event.preventDefault();
+    if (!user?.id) {
+      toast.error("Please sign in before adding workouts to your schedule.");
+      return;
+    }
+    if (!scheduleWorkout || !scheduleForm.event_date) {
+      toast.error("Pick a date for this workout.");
+      return;
+    }
+
+    setIsScheduling(true);
+    try {
+      const { error } = await supabase.from("athlete_events").insert({
+        athlete_id: user.id,
+        title: scheduleWorkout.title,
+        event_type: "workout",
+        event_date: scheduleForm.event_date,
+        start_time: scheduleForm.start_time || null,
+        location: scheduleForm.location.trim() || null,
+        notes: buildWorkoutScheduleNotes(scheduleWorkout, scheduleForm.notes),
+      });
+
+      if (error) throw error;
+
+      toast.success(`${scheduleWorkout.title} added to your schedule.`);
+      setScheduleWorkout(null);
+    } catch (error) {
+      console.error("Error adding workout to schedule:", error);
+      toast.error(error.message || "Could not add workout to schedule.");
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-6 lg:p-8">
@@ -240,29 +330,40 @@ export default function Challenges() {
                       {featuredChallenge.difficulty}
                     </Badge>
                   </div>
-                  <Button
-                    size="lg"
-                    className="bg-white text-blue-600 hover:bg-gray-100 font-bold shadow-lg px-8 py-3"
-                    onClick={() =>
-                      navigate(`/workouts/${featuredChallenge.id}`)
-                    }
-                  >
-                    {isChallengeCompleted(featuredChallenge.id) ? (
-                      <>
-                        <CheckCircle className="w-5 h-5 mr-2" />
-                        Completed
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-5 h-5 mr-2" />
-                        Start Workout
-                      </>
-                    )}
-                  </Button>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button
+                      size="lg"
+                      className="bg-white text-blue-600 hover:bg-gray-100 font-bold shadow-lg px-8 py-3"
+                      onClick={() =>
+                        navigate(`/workouts/${featuredChallenge.id}`)
+                      }
+                    >
+                      {isChallengeCompleted(featuredChallenge.id) ? (
+                        <>
+                          <CheckCircle className="w-5 h-5 mr-2" />
+                          Completed
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-5 h-5 mr-2" />
+                          Start Workout
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="bg-transparent border-white text-white hover:bg-white/10 font-bold shadow-lg px-8 py-3"
+                      onClick={() => openScheduleDialog(featuredChallenge)}
+                    >
+                      <CalendarPlus className="w-5 h-5 mr-2" />
+                      Add to Schedule
+                    </Button>
+                  </div>
                 </div>
 
                 <Link
-                  to={`/TrainerProfile?id=${featuredTrainer.id}`}
+                  to={`/trainerprofile?id=${featuredTrainer.id}`}
                   className="group bg-white/10 backdrop-blur-sm p-6 rounded-2xl flex flex-col items-center text-center hover:bg-white/20 transition-all duration-300 border border-white/20"
                 >
                   <p className="text-sm font-semibold uppercase tracking-wider text-blue-200 mb-4">
@@ -526,22 +627,32 @@ export default function Challenges() {
                       </div>
                     )}
 
-                  <Button
-                    className="w-full bg-brand-orange hover:opacity-90 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-                    onClick={() => navigate(`/workouts/${challenge.id}`)}
-                  >
-                    {isChallengeCompleted(challenge.id) ? (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Completed
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-4 h-4 mr-2" />
-                        Start Workout
-                      </>
-                    )}
-                  </Button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <Button
+                      className="w-full bg-brand-orange hover:opacity-90 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+                      onClick={() => navigate(`/workouts/${challenge.id}`)}
+                    >
+                      {isChallengeCompleted(challenge.id) ? (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Completed
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-4 h-4 mr-2" />
+                          Start Workout
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full border-brand-orange/60 text-brand-orange hover:bg-brand-orange/10 shadow-lg hover:shadow-xl transition-all duration-200"
+                      onClick={() => openScheduleDialog(challenge)}
+                    >
+                      <CalendarPlus className="w-4 h-4 mr-2" />
+                      Add to Schedule
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -571,6 +682,141 @@ export default function Challenges() {
           </div>
         )}
       </div>
+
+      <Dialog
+        open={!!scheduleWorkout}
+        onOpenChange={(open) => !open && setScheduleWorkout(null)}
+      >
+        <DialogContent className="bg-brand-black border-brand-gray/30 text-brand-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-brand-white">
+              Add Workout to Schedule
+            </DialogTitle>
+          </DialogHeader>
+          {scheduleWorkout && (
+            <form onSubmit={handleAddWorkoutToSchedule} className="space-y-4">
+              <div className="rounded-lg border border-brand-gray/30 bg-brand-charcoal p-3">
+                <p className="font-semibold text-brand-white">
+                  {scheduleWorkout.title}
+                </p>
+                <p className="text-sm text-brand-lightGray line-clamp-2 mt-1">
+                  {scheduleWorkout.description}
+                </p>
+                <div className="flex items-center gap-2 mt-3">
+                  <Badge className={getDifficultyColor(scheduleWorkout.difficulty)}>
+                    {scheduleWorkout.difficulty}
+                  </Badge>
+                  <span className="text-xs text-brand-lightGray">
+                    {scheduleWorkout.duration_minutes || 20} min
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="workout-date" className="text-brand-lightGray">
+                    Date *
+                  </Label>
+                  <Input
+                    id="workout-date"
+                    type="date"
+                    value={scheduleForm.event_date}
+                    onChange={(e) =>
+                      setScheduleForm((prev) => ({
+                        ...prev,
+                        event_date: e.target.value,
+                      }))
+                    }
+                    className="bg-brand-charcoal border-brand-gray/30 text-brand-white"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="workout-time" className="text-brand-lightGray">
+                    Time
+                  </Label>
+                  <Input
+                    id="workout-time"
+                    type="time"
+                    value={scheduleForm.start_time}
+                    onChange={(e) =>
+                      setScheduleForm((prev) => ({
+                        ...prev,
+                        start_time: e.target.value,
+                      }))
+                    }
+                    className="bg-brand-charcoal border-brand-gray/30 text-brand-white"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="workout-location" className="text-brand-lightGray">
+                  Location
+                </Label>
+                <Input
+                  id="workout-location"
+                  value={scheduleForm.location}
+                  onChange={(e) =>
+                    setScheduleForm((prev) => ({
+                      ...prev,
+                      location: e.target.value,
+                    }))
+                  }
+                  placeholder="Gym, driveway, park..."
+                  className="bg-brand-charcoal border-brand-gray/30 text-brand-white"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="workout-notes" className="text-brand-lightGray">
+                  Extra Notes
+                </Label>
+                <Textarea
+                  id="workout-notes"
+                  value={scheduleForm.notes}
+                  onChange={(e) =>
+                    setScheduleForm((prev) => ({
+                      ...prev,
+                      notes: e.target.value,
+                    }))
+                  }
+                  placeholder="Optional reminders for this workout"
+                  rows={3}
+                  className="bg-brand-charcoal border-brand-gray/30 text-brand-white resize-none"
+                />
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setScheduleWorkout(null)}
+                  className="border-brand-gray/30 text-brand-lightGray hover:bg-brand-charcoal"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isScheduling}
+                  className="bg-brand-orange hover:opacity-90 text-white"
+                >
+                  {isScheduling ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <CalendarPlus className="w-4 h-4 mr-2" />
+                      Add Workout
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

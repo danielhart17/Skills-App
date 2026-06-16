@@ -281,32 +281,78 @@ export default function TrainerDashboard() {
 
   const handleSaveProfile = async (data) => {
     try {
+      let savedProfile = null;
+
       if (trainerProfile) {
-        const { error } = await supabase
+        const { data: updatedTrainer, error } = await supabase
           .from("trainers")
           .update(data)
-          .eq("id", trainerProfile.id);
+          .eq("id", trainerProfile.id)
+          .select()
+          .single();
         if (error) throw error;
+        savedProfile = updatedTrainer;
       } else {
-        const { error } = await supabase
+        const { data: newTrainer, error } = await supabase
           .from("trainers")
-          .insert([{ ...data, user_id: profile.id }]);
+          .insert([{ ...data, user_id: profile.id }])
+          .select()
+          .single();
         if (error) throw error;
+        savedProfile = newTrainer;
+
+        if (newTrainer?.id) {
+          const { error: profileError } = await supabase
+            .from("profiles")
+            .update({ trainer_id: newTrainer.id })
+            .eq("id", profile.id);
+          if (profileError) {
+            console.warn("Trainer profile created, but profile link failed:", profileError);
+          }
+        }
       }
 
-      toast.success("Profile updated successfully");
-      loadData();
+      setTrainerProfile(savedProfile);
+      toast.success(trainerProfile ? "Profile updated successfully" : "Trainer profile created successfully");
+      await loadData();
+      return savedProfile;
     } catch (error) {
       console.error("Error saving profile:", error);
-      toast.error("Failed to save profile");
+      toast.error(error.message || "Failed to save profile");
+      throw error;
     }
   };
 
   const handleSaveEvent = async (data, isEdit = false) => {
     try {
+      let activeTrainerProfile = trainerProfile;
+      if (!activeTrainerProfile) {
+        const { data: trainerData, error: trainerError } = await supabase
+          .from("trainers")
+          .select("*")
+          .eq("user_id", profile.id)
+          .single();
+
+        if (trainerError && trainerError.code !== "PGRST116") {
+          throw trainerError;
+        }
+
+        activeTrainerProfile = trainerData;
+        setTrainerProfile(trainerData);
+      }
+
+      if (!activeTrainerProfile?.id) {
+        throw new Error("Create your trainer profile before creating events.");
+      }
+
       const saveData = {
-        ...data,
-        trainer_id: trainerProfile?.id || null,
+        title: data.title,
+        date: data.date,
+        location: data.location || null,
+        price: data.price ?? 0,
+        spots_available: data.max_participants ?? data.spots_available ?? 20,
+        trainer_id: activeTrainerProfile.id,
+        created_by: profile.id,
       };
 
       if (isEdit) {
@@ -317,15 +363,18 @@ export default function TrainerDashboard() {
         if (error) throw error;
         toast.success("Event updated successfully");
       } else {
-        const { error } = await supabase.from("training_events").insert([saveData]);
+        const { error } = await supabase
+          .from("training_events")
+          .insert([saveData]);
         if (error) throw error;
         toast.success("Event created successfully");
       }
 
-      loadData();
+      await loadData();
     } catch (error) {
       console.error("Error saving event:", error);
-      toast.error("Failed to save event");
+      toast.error(error.message || "Failed to save event");
+      throw error;
     }
   };
 
@@ -419,13 +468,13 @@ export default function TrainerDashboard() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto overflow-x-hidden">
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-2">
-          <GraduationCap className="w-8 h-8 text-primary" />
-          <h1 className="text-3xl font-bold">Trainer Dashboard</h1>
+          <GraduationCap className="w-7 h-7 sm:w-8 sm:h-8 text-primary shrink-0" />
+          <h1 className="text-2xl sm:text-3xl font-bold">Trainer Dashboard</h1>
         </div>
-        <p className="text-muted-foreground">
+        <p className="text-sm sm:text-base text-muted-foreground">
           Manage your workouts, bookings, and profile
         </p>
       </div>
@@ -435,32 +484,34 @@ export default function TrainerDashboard() {
         onValueChange={setActiveTab}
         className="space-y-6"
       >
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="challenges">
-            <Trophy className="w-4 h-4 mr-2" />
+        <div className="-mx-4 sm:mx-0 overflow-x-auto px-4 sm:px-0 pb-1">
+        <TabsList className="inline-flex w-max min-w-full gap-1 sm:grid sm:w-full sm:grid-cols-6">
+          <TabsTrigger value="challenges" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+            <Trophy className="w-4 h-4 mr-1.5 sm:mr-2" />
             Workouts
           </TabsTrigger>
-          <TabsTrigger value="events">
-            <CalendarPlus className="w-4 h-4 mr-2" />
+          <TabsTrigger value="events" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+            <CalendarPlus className="w-4 h-4 mr-1.5 sm:mr-2" />
             Events
           </TabsTrigger>
-          <TabsTrigger value="bookings">
-            <Calendar className="w-4 h-4 mr-2" />
+          <TabsTrigger value="bookings" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+            <Calendar className="w-4 h-4 mr-1.5 sm:mr-2" />
             Bookings
           </TabsTrigger>
-          <TabsTrigger value="reviews">
-            <Star className="w-4 h-4 mr-2" />
+          <TabsTrigger value="reviews" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+            <Star className="w-4 h-4 mr-1.5 sm:mr-2" />
             Reviews
           </TabsTrigger>
-          <TabsTrigger value="gallery">
-            <Images className="w-4 h-4 mr-2" />
+          <TabsTrigger value="gallery" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+            <Images className="w-4 h-4 mr-1.5 sm:mr-2" />
             Gallery
           </TabsTrigger>
-          <TabsTrigger value="profile">
-            <User className="w-4 h-4 mr-2" />
+          <TabsTrigger value="profile" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+            <User className="w-4 h-4 mr-1.5 sm:mr-2" />
             Profile
           </TabsTrigger>
         </TabsList>
+        </div>
 
         {/* Workouts Tab */}
         <TabsContent value="challenges" className="space-y-4">
@@ -622,10 +673,13 @@ export default function TrainerDashboard() {
                             <span>{event.location}</span>
                           </div>
                         )}
-                        {event.max_participants && (
+                        {(event.max_participants || event.spots_available) && (
                           <div className="flex items-center gap-1">
                             <Users className="w-4 h-4 text-muted-foreground" />
-                            <span>{event.current_participants || 0}/{event.max_participants}</span>
+                            <span>
+                              {event.current_participants || event.registered_count || 0}/
+                              {event.max_participants || event.spots_available}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -1248,6 +1302,7 @@ const DAYS_OF_WEEK = [
 // Event Dialog Component
 function EventDialog({ event, onSave, trigger }) {
   const [open, setOpen] = useState(false);
+  const [isSavingEvent, setIsSavingEvent] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -1268,7 +1323,7 @@ function EventDialog({ event, onSave, trigger }) {
         date: eventDate.toISOString().split("T")[0],
         time: eventDate.toTimeString().slice(0, 5),
         event_type: event.event_type || "training",
-        max_participants: event.max_participants || 20,
+        max_participants: event.max_participants || event.spots_available || 20,
         price: event.price || 0,
         duration_minutes: event.duration_minutes || 60,
       });
@@ -1287,7 +1342,7 @@ function EventDialog({ event, onSave, trigger }) {
     }
   }, [event, open]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     // Combine date and time into a single datetime
     const datetime = new Date(`${formData.date}T${formData.time}`);
@@ -1297,8 +1352,15 @@ function EventDialog({ event, onSave, trigger }) {
       id: event?.id,
     };
     delete submitData.time; // Remove the separate time field
-    onSave(submitData);
-    setOpen(false);
+    setIsSavingEvent(true);
+    try {
+      await onSave(submitData);
+      setOpen(false);
+    } catch (error) {
+      console.error("Event save failed:", error);
+    } finally {
+      setIsSavingEvent(false);
+    }
   };
 
   return (
@@ -1451,11 +1513,19 @@ function EventDialog({ event, onSave, trigger }) {
               type="button"
               variant="outline"
               onClick={() => setOpen(false)}
+              disabled={isSavingEvent}
             >
               Cancel
             </Button>
-            <Button type="submit">
-              {event ? "Update" : "Create"} Event
+            <Button type="submit" disabled={isSavingEvent}>
+              {isSavingEvent ? (
+                <>
+                  <Clock className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                `${event ? "Update" : "Create"} Event`
+              )}
             </Button>
           </div>
         </form>
@@ -1602,6 +1672,7 @@ function TrainerProfileForm({ profile, onSave }) {
     min_booking_notice_hours: 24,
   });
   const [isEditing, setIsEditing] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [newBlockedDate, setNewBlockedDate] = useState("");
   const [newCertification, setNewCertification] = useState({ name: "", issuer: "", year: new Date().getFullYear() });
 
@@ -1672,10 +1743,18 @@ function TrainerProfileForm({ profile, onSave }) {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave(formData);
-    setIsEditing(false);
+    setIsSavingProfile(true);
+    try {
+      await onSave(formData);
+      setIsEditing(false);
+    } catch (error) {
+      // Keep the form open so the trainer can correct any validation/RLS issues.
+      console.error("Trainer profile form submit failed:", error);
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const handleCancel = () => {
@@ -1702,8 +1781,8 @@ function TrainerProfileForm({ profile, onSave }) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex justify-between items-center">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+          <div className="min-w-0">
             <CardTitle>
               {profile ? "Trainer Profile" : "Create Trainer Profile"}
             </CardTitle>
@@ -1716,6 +1795,8 @@ function TrainerProfileForm({ profile, onSave }) {
             <Button
               variant={isEditing ? "outline" : "default"}
               onClick={() => setIsEditing(!isEditing)}
+              disabled={isSavingProfile}
+              className="w-full sm:w-auto"
             >
               {isEditing ? "Cancel" : "Edit Profile"}
             </Button>
@@ -1748,7 +1829,7 @@ function TrainerProfileForm({ profile, onSave }) {
                 placeholder="Tell students about your experience and coaching style..."
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="location">Location</Label>
                 <Input
@@ -1851,7 +1932,7 @@ function TrainerProfileForm({ profile, onSave }) {
               </p>
               
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <Input
                     placeholder="Certification name"
                     value={newCertification.name}
@@ -1866,7 +1947,7 @@ function TrainerProfileForm({ profile, onSave }) {
                       setNewCertification({ ...newCertification, issuer: e.target.value })
                     }
                   />
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       type="number"
                       placeholder="Year"
@@ -1876,9 +1957,9 @@ function TrainerProfileForm({ profile, onSave }) {
                       }
                       min="1950"
                       max={new Date().getFullYear()}
-                      className="w-24"
+                      className="w-full sm:w-24"
                     />
-                    <Button type="button" variant="outline" onClick={addCertification}>
+                    <Button type="button" variant="outline" onClick={addCertification} className="w-full sm:w-auto">
                       Add
                     </Button>
                   </div>
@@ -1889,9 +1970,9 @@ function TrainerProfileForm({ profile, onSave }) {
                     {formData.certifications.map((cert, index) => (
                       <div
                         key={index}
-                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 bg-muted/50 rounded-lg"
                       >
-                        <div>
+                        <div className="min-w-0">
                           <div className="font-medium">{cert.name}</div>
                           <div className="text-sm text-muted-foreground">
                             {cert.issuer} {cert.year && `• ${cert.year}`}
@@ -1928,8 +2009,8 @@ function TrainerProfileForm({ profile, onSave }) {
               
               <div className="space-y-3">
                 {DAYS_OF_WEEK.map(({ key, label }) => (
-                  <div key={key} className="flex items-center gap-4 p-3 border rounded-lg">
-                    <div className="flex items-center gap-2 w-32">
+                  <div key={key} className="flex flex-col gap-3 p-3 border rounded-lg sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex items-center gap-2 sm:w-32">
                       <input
                         type="checkbox"
                         id={`day-${key}`}
@@ -1943,19 +2024,19 @@ function TrainerProfileForm({ profile, onSave }) {
                     </div>
                     
                     {formData.availability_schedule[key]?.enabled && (
-                      <div className="flex items-center gap-2 flex-1">
+                      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex sm:flex-1">
                         <Input
                           type="time"
                           value={formData.availability_schedule[key]?.start || "09:00"}
                           onChange={(e) => updateDayAvailability(key, "start", e.target.value)}
-                          className="w-32"
+                          className="w-full sm:w-32"
                         />
                         <span className="text-muted-foreground">to</span>
                         <Input
                           type="time"
                           value={formData.availability_schedule[key]?.end || "17:00"}
                           onChange={(e) => updateDayAvailability(key, "end", e.target.value)}
-                          className="w-32"
+                          className="w-full sm:w-32"
                         />
                       </div>
                     )}
@@ -1972,7 +2053,7 @@ function TrainerProfileForm({ profile, onSave }) {
             <div className="border-t pt-6 mt-6">
               <h3 className="text-lg font-semibold mb-4">Booking Settings</h3>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="buffer">Buffer Between Sessions (minutes)</Label>
                   <Input
@@ -2021,15 +2102,15 @@ function TrainerProfileForm({ profile, onSave }) {
                 Block specific dates when you're unavailable (vacation, holidays, etc.)
               </p>
               
-              <div className="flex gap-2 mb-4">
+              <div className="flex flex-col sm:flex-row gap-2 mb-4">
                 <Input
                   type="date"
                   value={newBlockedDate}
                   onChange={(e) => setNewBlockedDate(e.target.value)}
                   min={new Date().toISOString().split("T")[0]}
-                  className="w-48"
+                  className="w-full sm:w-48"
                 />
-                <Button type="button" variant="outline" onClick={addBlockedDate}>
+                <Button type="button" variant="outline" onClick={addBlockedDate} className="w-full sm:w-auto">
                   Add Date
                 </Button>
               </div>
@@ -2059,14 +2140,27 @@ function TrainerProfileForm({ profile, onSave }) {
               )}
             </div>
 
-            <div className="flex justify-end gap-2 pt-6 border-t mt-6">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-6 border-t mt-6">
               {isEditing && (
-                <Button type="button" variant="outline" onClick={handleCancel}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCancel}
+                  disabled={isSavingProfile}
+                  className="w-full sm:w-auto"
+                >
                   Cancel
                 </Button>
               )}
-              <Button type="submit">
-                {profile ? "Update" : "Create"} Profile
+              <Button type="submit" disabled={isSavingProfile} className="w-full sm:w-auto">
+                {isSavingProfile ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  `${profile ? "Update" : "Create"} Profile`
+                )}
               </Button>
             </div>
           </form>
@@ -2166,7 +2260,7 @@ function TrainerProfileForm({ profile, onSave }) {
                 <Clock className="w-5 h-5" />
                 Availability Schedule
               </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                 {DAYS_OF_WEEK.map(({ key, label }) => {
                   const daySchedule = formData.availability_schedule?.[key];
                   return (
@@ -2197,7 +2291,7 @@ function TrainerProfileForm({ profile, onSave }) {
                 })}
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                 <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
                   <div className="text-sm text-gray-400">Session Buffer</div>
                   <div className="font-medium text-white">{formData.session_buffer_minutes || 15} minutes</div>

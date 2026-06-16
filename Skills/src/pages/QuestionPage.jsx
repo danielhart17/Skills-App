@@ -182,9 +182,9 @@ export default function QuestionPage() {
 
   const handleBackToPath = () => {
     if (lesson?.chapter) {
-      navigate(`/LearningPath/${encodeURIComponent(lesson.chapter)}`);
+      navigate(`/learningpath/${encodeURIComponent(lesson.chapter)}`);
     } else {
-      navigate("/Learn");
+      navigate("/learn");
     }
   };
 

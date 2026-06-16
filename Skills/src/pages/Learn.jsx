@@ -158,7 +158,7 @@ export default function Learn() {
                   className="group hover:shadow-2xl transition-all duration-300 border-0 shadow-lg bg-card overflow-hidden cursor-pointer"
                   onClick={() =>
                     navigate(
-                      `/LearningPath/${encodeURIComponent(chapter.title)}`
+                      `/learningpath/${encodeURIComponent(chapter.title)}`
                     )
                   }
                 >

@@ -1,10 +1,23 @@
 import { useState, useEffect } from "react";
 import { Drill, DrillProgress } from "@/api/entities";
+import { supabase } from "@/api/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "@/components/ui/use-toast";
+import {
+  CalendarPlus,
   Clock,
   Search,
   Filter,
@@ -12,6 +25,7 @@ import {
   CheckCircle,
   Play,
   Dumbbell,
+  Loader2,
 } from "lucide-react";
 
 const CAT_ICONS = {
@@ -42,7 +56,31 @@ function getDifficultyColor(difficulty) {
   }
 }
 
-function DrillCard({ drill, isCompleted }) {
+function formatDateForInput(date = new Date()) {
+  return date.toISOString().split("T")[0];
+}
+
+function buildWorkoutNotes(drill, extraNotes) {
+  return [
+    drill.description,
+    drill.duration_minutes ? `Duration: ${drill.duration_minutes} minutes` : null,
+    drill.category ? `Category: ${drill.category}` : null,
+    drill.difficulty ? `Difficulty: ${drill.difficulty}` : null,
+    drill.equipment_needed?.length
+      ? `Equipment: ${drill.equipment_needed.join(", ")}`
+      : null,
+    drill.setup ? `Setup:\n${drill.setup}` : null,
+    drill.steps?.length
+      ? `Steps:\n${drill.steps.map((step, i) => `${i + 1}. ${step}`).join("\n")}`
+      : null,
+    drill.focus ? `Focus:\n${drill.focus}` : null,
+    extraNotes?.trim() ? `Notes:\n${extraNotes.trim()}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function DrillCard({ drill, isCompleted, onAddToSchedule }) {
   const [expanded, setExpanded] = useState(false);
   const ytId = getYouTubeId(drill.youtube_url);
 
@@ -94,16 +132,26 @@ function DrillCard({ drill, isCompleted }) {
         )}
 
         <div className="px-5 pb-5">
-          <Button
-            className="w-full bg-brand-orange hover:opacity-90 text-white"
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? (
-              <><ChevronUp className="w-4 h-4 mr-2" />Hide Details</>
-            ) : (
-              <><Play className="w-4 h-4 mr-2" />{isCompleted ? "Review Drill" : "View Drill"}</>
-            )}
-          </Button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Button
+              className="w-full bg-brand-orange hover:opacity-90 text-white"
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded ? (
+                <><ChevronUp className="w-4 h-4 mr-2" />Hide Details</>
+              ) : (
+                <><Play className="w-4 h-4 mr-2" />{isCompleted ? "Review Drill" : "View Drill"}</>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full border-brand-orange/50 text-brand-orange hover:bg-brand-orange/10"
+              onClick={() => onAddToSchedule(drill)}
+            >
+              <CalendarPlus className="w-4 h-4 mr-2" />
+              Add to Schedule
+            </Button>
+          </div>
         </div>
 
         {expanded && (
@@ -172,12 +220,21 @@ function DrillCard({ drill, isCompleted }) {
 }
 
 export default function WorkoutLibrary() {
+  const { user } = useAuth();
   const [drills, setDrills] = useState([]);
   const [completedDrillIds, setCompletedDrillIds] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedDifficulty, setSelectedDifficulty] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [scheduleDrill, setScheduleDrill] = useState(null);
+  const [scheduleForm, setScheduleForm] = useState({
+    event_date: formatDateForInput(),
+    start_time: "",
+    location: "",
+    notes: "",
+  });
+  const [isScheduling, setIsScheduling] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -209,6 +266,66 @@ export default function WorkoutLibrary() {
       drill.difficulty.toLowerCase().includes(searchQuery.toLowerCase());
     return categoryMatch && difficultyMatch && searchMatch;
   });
+
+  const openScheduleDialog = (drill) => {
+    setScheduleDrill(drill);
+    setScheduleForm({
+      event_date: formatDateForInput(),
+      start_time: "",
+      location: "",
+      notes: "",
+    });
+  };
+
+  const handleScheduleWorkout = async (event) => {
+    event.preventDefault();
+    if (!user?.id) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in before adding workouts to your schedule.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!scheduleDrill || !scheduleForm.event_date) {
+      toast({
+        title: "Choose a date",
+        description: "Pick the day you want to do this workout.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsScheduling(true);
+    try {
+      const { error } = await supabase.from("athlete_events").insert({
+        athlete_id: user.id,
+        title: scheduleDrill.title,
+        event_type: "workout",
+        event_date: scheduleForm.event_date,
+        start_time: scheduleForm.start_time || null,
+        location: scheduleForm.location.trim() || null,
+        notes: buildWorkoutNotes(scheduleDrill, scheduleForm.notes),
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Workout added",
+        description: `${scheduleDrill.title} was added to your schedule.`,
+      });
+      setScheduleDrill(null);
+    } catch (error) {
+      console.error("Error adding workout to schedule:", error);
+      toast({
+        title: "Could not add workout",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsScheduling(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -300,6 +417,7 @@ export default function WorkoutLibrary() {
                 key={drill.id}
                 drill={drill}
                 isCompleted={completedDrillIds.includes(drill.id)}
+                onAddToSchedule={openScheduleDialog}
               />
             ))}
           </div>
@@ -323,6 +441,136 @@ export default function WorkoutLibrary() {
           </div>
         )}
       </div>
+
+      <Dialog open={!!scheduleDrill} onOpenChange={(open) => !open && setScheduleDrill(null)}>
+        <DialogContent className="bg-brand-black border-brand-gray/30 text-brand-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-brand-white">
+              Add Workout to Schedule
+            </DialogTitle>
+          </DialogHeader>
+          {scheduleDrill && (
+            <form onSubmit={handleScheduleWorkout} className="space-y-4">
+              <div className="rounded-lg border border-brand-gray/30 bg-brand-charcoal p-3">
+                <p className="font-semibold text-brand-white">{scheduleDrill.title}</p>
+                <p className="text-sm text-brand-lightGray line-clamp-2 mt-1">
+                  {scheduleDrill.description}
+                </p>
+                <div className="flex items-center gap-2 mt-3">
+                  <Badge className={getDifficultyColor(scheduleDrill.difficulty)}>
+                    {scheduleDrill.difficulty}
+                  </Badge>
+                  <span className="text-xs text-brand-lightGray">
+                    {scheduleDrill.duration_minutes} min
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="workout-date" className="text-brand-lightGray">
+                    Date *
+                  </Label>
+                  <Input
+                    id="workout-date"
+                    type="date"
+                    value={scheduleForm.event_date}
+                    onChange={(e) =>
+                      setScheduleForm((prev) => ({
+                        ...prev,
+                        event_date: e.target.value,
+                      }))
+                    }
+                    className="bg-brand-charcoal border-brand-gray/30 text-brand-white"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="workout-time" className="text-brand-lightGray">
+                    Time
+                  </Label>
+                  <Input
+                    id="workout-time"
+                    type="time"
+                    value={scheduleForm.start_time}
+                    onChange={(e) =>
+                      setScheduleForm((prev) => ({
+                        ...prev,
+                        start_time: e.target.value,
+                      }))
+                    }
+                    className="bg-brand-charcoal border-brand-gray/30 text-brand-white"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="workout-location" className="text-brand-lightGray">
+                  Location
+                </Label>
+                <Input
+                  id="workout-location"
+                  value={scheduleForm.location}
+                  onChange={(e) =>
+                    setScheduleForm((prev) => ({
+                      ...prev,
+                      location: e.target.value,
+                    }))
+                  }
+                  placeholder="Gym, driveway, park..."
+                  className="bg-brand-charcoal border-brand-gray/30 text-brand-white"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="workout-notes" className="text-brand-lightGray">
+                  Extra Notes
+                </Label>
+                <Textarea
+                  id="workout-notes"
+                  value={scheduleForm.notes}
+                  onChange={(e) =>
+                    setScheduleForm((prev) => ({
+                      ...prev,
+                      notes: e.target.value,
+                    }))
+                  }
+                  placeholder="Optional reminders for this workout"
+                  rows={3}
+                  className="bg-brand-charcoal border-brand-gray/30 text-brand-white resize-none"
+                />
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setScheduleDrill(null)}
+                  className="border-brand-gray/30 text-brand-lightGray hover:bg-brand-charcoal"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isScheduling}
+                  className="bg-brand-orange hover:opacity-90 text-white"
+                >
+                  {isScheduling ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <CalendarPlus className="w-4 h-4 mr-2" />
+                      Add Workout
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

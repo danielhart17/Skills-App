@@ -26,8 +26,8 @@ export async function createEventCheckoutSession({
       eventTitle,
       price,
       userId,
-      successUrl: `${globalThis.location.origin}/Events?success=true&event_id=${eventId}`,
-      cancelUrl: `${globalThis.location.origin}/Events?canceled=true`,
+      successUrl: `${globalThis.location.origin}/events?success=true&event_id=${eventId}`,
+      cancelUrl: `${globalThis.location.origin}/events?canceled=true`,
     };
 
     // Call Supabase Edge Function to create Stripe checkout session

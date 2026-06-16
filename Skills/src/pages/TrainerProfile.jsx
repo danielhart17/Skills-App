@@ -159,7 +159,7 @@ export default function TrainerProfile() {
                   {trainer.bio?.length > 150 && "..."}
                 </p>
                 <div className="mt-6 flex justify-center md:justify-start gap-3">
-                  <Link to={`/Booking?trainerId=${trainer.id}`}>
+                  <Link to={`/booking?trainerId=${trainer.id}`}>
                     <Button className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg">
                       <Calendar className="w-4 h-4 mr-2" />
                       Book a Session
@@ -259,7 +259,7 @@ export default function TrainerProfile() {
                           </p>
                         </div>
                         <Link
-                          to={`/Booking?trainerId=${trainer.id}&serviceId=${service.id}`}
+                          to={`/booking?trainerId=${trainer.id}&serviceId=${service.id}`}
                         >
                           <Button size="sm" variant="outline" className="ml-4">
                             Book

@@ -45,6 +45,7 @@ import {
   Copy,
   RefreshCw,
   UserX,
+  LogOut,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -173,7 +174,7 @@ const POSITIONS = [
 ];
 
 export default function Profile() {
-  const { isTrainer, isAthlete, refreshProfile } = useAuth();
+  const { isTrainer, isAthlete, refreshProfile, signOut } = useAuth();
   const [user, setUser] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -189,6 +190,7 @@ export default function Profile() {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Parent linking state
   const [inviteCode, setInviteCode] = useState(null);
@@ -196,6 +198,7 @@ export default function Profile() {
   const [linkedParents, setLinkedParents] = useState([]);
   const [generatingCode, setGeneratingCode] = useState(false);
   const [loadingParents, setLoadingParents] = useState(false);
+  const [inviteError, setInviteError] = useState("");
 
   const loadParentLinks = useCallback(async () => {
     if (!isAthlete()) return;
@@ -395,6 +398,7 @@ export default function Profile() {
 
   const handleGenerateInviteCode = async () => {
     setGeneratingCode(true);
+    setInviteError("");
     try {
       const result = await ParentChild.createInviteCode();
       setInviteCode(result.code);
@@ -402,7 +406,9 @@ export default function Profile() {
       toast.success("Invite code generated!");
     } catch (error) {
       console.error("Error generating code:", error);
-      toast.error(error.message || "Failed to generate invite code");
+      const message = error.message || "Failed to generate invite code";
+      setInviteError(message);
+      toast.error(message);
     } finally {
       setGeneratingCode(false);
     }
@@ -423,6 +429,19 @@ export default function Profile() {
     } catch (error) {
       console.error("Error revoking link:", error);
       toast.error("Failed to remove parent link");
+    }
+  };
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    try {
+      await signOut();
+      toast.success("Signed out successfully");
+    } catch (error) {
+      console.error("Sign out error:", error);
+      toast.error("Failed to sign out");
+    } finally {
+      setIsSigningOut(false);
     }
   };
 
@@ -463,14 +482,30 @@ export default function Profile() {
 
         {/* Profile Overview */}
         <Card className="border-0 shadow-xl bg-gradient-to-r from-purple-500 to-pink-600 text-white relative">
-          <Button
-            onClick={openEditDialog}
-            variant="ghost"
-            size="icon"
-            className="absolute top-4 right-4 bg-white/20 hover:bg-white/30 text-white"
-          >
-            <Edit className="w-4 h-4" />
-          </Button>
+          <div className="absolute top-4 right-4 flex gap-2">
+            <Button
+              onClick={handleSignOut}
+              variant="ghost"
+              size="sm"
+              disabled={isSigningOut}
+              className="bg-white/20 hover:bg-white/30 text-white"
+            >
+              {isSigningOut ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <LogOut className="w-4 h-4 mr-2" />
+              )}
+              Sign Out
+            </Button>
+            <Button
+              onClick={openEditDialog}
+              variant="ghost"
+              size="icon"
+              className="bg-white/20 hover:bg-white/30 text-white"
+            >
+              <Edit className="w-4 h-4" />
+            </Button>
+          </div>
           <CardContent className="p-8">
             <div className="flex flex-col md:flex-row items-center gap-6">
               <Avatar className="w-24 h-24 border-4 border-white shadow-lg">
@@ -761,6 +796,11 @@ export default function Profile() {
                     )}
                     Generate Invite Code
                   </Button>
+                )}
+                {inviteError && (
+                  <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg p-3">
+                    {inviteError}
+                  </p>
                 )}
               </div>
             </CardContent>

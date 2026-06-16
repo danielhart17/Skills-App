@@ -54,7 +54,7 @@ export default function Events() {
         variant: "default",
       });
       // Clean up URL
-      globalThis.history.replaceState({}, "", "/Events");
+      globalThis.history.replaceState({}, "", "/events");
     }
   }, [searchParams]);
 
@@ -158,7 +158,7 @@ export default function Events() {
       });
 
       // Clean up URL
-      globalThis.history.replaceState({}, "", "/Events");
+      globalThis.history.replaceState({}, "", "/events");
     } catch (error) {
       console.error("Error processing payment:", error);
       toast({
