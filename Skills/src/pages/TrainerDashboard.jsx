@@ -1030,7 +1030,7 @@ export default function TrainerDashboard() {
           <h2 className="text-2xl font-semibold">Trainer Profile</h2>
           
           {/* Stripe Connect Section */}
-          {trainerProfile && (
+          {trainerProfile ? (
             <StripeConnectCard 
               trainerProfile={trainerProfile}
               stripeStatus={stripeStatus}
@@ -1038,6 +1038,15 @@ export default function TrainerDashboard() {
               loading={stripeLoading}
               setLoading={setStripeLoading}
             />
+          ) : (
+            <Card className="border border-gray-600">
+              <CardHeader>
+                <CardTitle className="text-lg">Payment Setup</CardTitle>
+                <CardDescription>
+                  Save your trainer profile first, then connect Stripe to receive payments.
+                </CardDescription>
+              </CardHeader>
+            </Card>
           )}
           
           <TrainerProfileForm
@@ -1052,27 +1061,37 @@ export default function TrainerDashboard() {
 
 // Stripe Connect Card Component
 function StripeConnectCard({ trainerProfile, stripeStatus, onRefresh, loading, setLoading }) {
+  const [stripeError, setStripeError] = useState("");
+
   const handleSetupStripe = async () => {
     setLoading(true);
+    setStripeError("");
     try {
       const { url } = await createConnectAccount(trainerProfile.id);
       // Redirect to Stripe onboarding
       window.location.href = url;
     } catch (error) {
       console.error("Error setting up Stripe:", error);
-      toast.error("Failed to start Stripe setup. Please try again.");
+      const message =
+        error.message || "Failed to start Stripe setup. Please try again.";
+      setStripeError(message);
+      toast.error(message);
       setLoading(false);
     }
   };
 
   const handleContinueSetup = async () => {
     setLoading(true);
+    setStripeError("");
     try {
       const { url } = await createConnectAccount(trainerProfile.id);
       window.location.href = url;
     } catch (error) {
       console.error("Error continuing Stripe setup:", error);
-      toast.error("Failed to continue Stripe setup. Please try again.");
+      const message =
+        error.message || "Failed to continue Stripe setup. Please try again.";
+      setStripeError(message);
+      toast.error(message);
       setLoading(false);
     }
   };
@@ -1122,7 +1141,7 @@ function StripeConnectCard({ trainerProfile, stripeStatus, onRefresh, loading, s
               <span className="font-medium">Your payment account is active!</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              You can now receive payments for training sessions. A 15% platform fee is deducted from each booking.
+              You can now receive payments for training sessions. A 1.5% platform fee is deducted from each booking.
             </p>
             <div className="grid grid-cols-2 gap-4 mt-4">
               <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
@@ -1180,7 +1199,7 @@ function StripeConnectCard({ trainerProfile, stripeStatus, onRefresh, loading, s
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-primary">•</span>
-                  A 15% platform fee is automatically deducted
+                  A 1.5% platform fee is automatically deducted
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-primary">•</span>
@@ -1205,6 +1224,11 @@ function StripeConnectCard({ trainerProfile, stripeStatus, onRefresh, loading, s
                 </>
               )}
             </Button>
+            {stripeError && (
+              <p className="text-sm text-red-400 bg-red-950/30 border border-red-500/30 rounded-lg p-3">
+                {stripeError}
+              </p>
+            )}
           </div>
         )}
       </CardContent>

@@ -1,6 +1,6 @@
 # Stripe Connect Setup Guide
 
-This guide explains how to set up Stripe Connect for trainer payments with a 15%
+This guide explains how to set up Stripe Connect for trainer payments with a 1.5%
 platform fee.
 
 ## Overview
@@ -9,8 +9,8 @@ The Skills App uses **Stripe Connect (Express)** to handle payments for trainer
 bookings:
 
 - Users pay for training sessions through a secure Stripe checkout
-- A **15% platform fee** is automatically deducted from each booking
-- Trainers receive the remaining 85% directly to their connected Stripe account
+- A **1.5% platform fee** is automatically deducted from each booking
+- Trainers receive the remaining 98.5% directly to their connected Stripe account
 - Payouts happen automatically on Stripe's standard schedule
 
 ## Setup Steps
@@ -97,7 +97,7 @@ supabase functions deploy stripe-connect-webhook
 2. UI shows "Secure payment via Stripe" if trainer has Stripe setup
 3. User clicks "Pay $X"
 4. Redirected to Stripe Checkout
-5. Payment processed with 15% platform fee
+5. Payment processed with 1.5% platform fee
 6. User redirected back with confirmation
 7. Webhook confirms booking as "paid"
 
@@ -106,16 +106,16 @@ supabase functions deploy stripe-connect-webhook
 For a $100 training session:
 
 - **Total charged**: $100.00
-- **Platform fee** (15%): $15.00
-- **Trainer receives**: $85.00
+- **Platform fee** (1.5%): $1.50
+- **Trainer receives**: $98.50
 
 ## Customizing the Platform Fee
 
 The fee is set in `create-booking-checkout/index.ts`:
 
 ```typescript
-// Platform fee percentage (e.g., 0.15 = 15%)
-const PLATFORM_FEE_PERCENTAGE = 0.15;
+// Platform fee percentage (e.g., 0.015 = 1.5%)
+const PLATFORM_FEE_PERCENTAGE = 0.015;
 ```
 
 Change this value and redeploy the function to adjust the fee.

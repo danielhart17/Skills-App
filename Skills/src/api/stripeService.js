@@ -137,23 +137,39 @@ export async function registerForFreeEvent(eventId, userId) {
  */
 export async function createConnectAccount(trainerId) {
   try {
+    const baseUrl = globalThis.location.origin;
     const { data, error } = await supabase.functions.invoke(
       "create-connect-account",
       {
         body: {
           trainerId,
-          refreshUrl: `${globalThis.location.origin}/TrainerDashboard?stripe_refresh=true`,
-          returnUrl: `${globalThis.location.origin}/TrainerDashboard?stripe_onboarding=complete`,
+          refreshUrl: `${baseUrl}/trainerdashboard?stripe_refresh=true`,
+          returnUrl: `${baseUrl}/trainerdashboard?stripe_onboarding=complete`,
         },
       }
     );
 
     if (error) {
-      throw new Error(`Failed to create Connect account: ${error.message}`);
+      let message = error.message || "Failed to create Connect account";
+      try {
+        if (error.context?.json) {
+          const body = await error.context.json();
+          message = body?.error || body?.message || message;
+        }
+      } catch {
+        // Keep the default message if the response body cannot be parsed.
+      }
+      throw new Error(message);
     }
 
-    if (!data || !data.url) {
-      throw new Error("Edge Function did not return an onboarding URL");
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+
+    if (!data?.url) {
+      throw new Error(
+        "Stripe onboarding URL was not returned. Make sure the create-connect-account edge function is deployed."
+      );
     }
 
     return data;
@@ -172,11 +188,20 @@ export async function getTrainerStripeStatus(trainerId) {
   try {
     const { data, error } = await supabase
       .from("trainers")
-      .select("stripe_account_id, stripe_onboarding_complete, stripe_charges_enabled, stripe_payouts_enabled")
+      .select(
+        "stripe_account_id, stripe_onboarding_complete, stripe_charges_enabled, stripe_payouts_enabled"
+      )
       .eq("id", trainerId)
       .single();
 
-    if (error) throw error;
+    if (error) {
+      if (error.message?.includes("stripe_account_id")) {
+        throw new Error(
+          "Stripe columns are missing on trainers. Run add_trainer_stripe_connect.sql in Supabase."
+        );
+      }
+      throw error;
+    }
 
     return {
       hasAccount: !!data?.stripe_account_id,

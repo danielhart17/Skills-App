@@ -10,8 +10,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Platform fee percentage (e.g., 0.15 = 15%)
-const PLATFORM_FEE_PERCENTAGE = 0.15;
+// Platform fee percentage (e.g., 0.015 = 1.5%)
+const PLATFORM_FEE_PERCENTAGE = 0.015;
 
 // Append booking_id to a URL that may already contain query params.
 function appendBookingId(rawUrl: string, bookingId: string): string {
