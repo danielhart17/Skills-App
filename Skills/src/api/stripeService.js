@@ -130,6 +130,36 @@ export async function registerForFreeEvent(eventId, userId) {
 // STRIPE CONNECT - TRAINER PAYMENTS
 // ============================================
 
+const STRIPE_CONNECT_NOT_DEPLOYED_MESSAGE =
+  "The Stripe Connect edge function is not deployed yet. In Supabase Dashboard go to Edge Functions and deploy create-connect-account, or run: npx supabase functions deploy create-connect-account --project-ref dadyciqoypfdeotuspms";
+
+async function parseFunctionInvokeError(error, data) {
+  if (data?.error) return data.error;
+
+  let message = error?.message || "Edge function request failed";
+
+  try {
+    if (error?.context?.json) {
+      const body = await error.context.json();
+      if (body?.error) return body.error;
+      if (body?.message) return body.message;
+    }
+  } catch {
+    // Ignore JSON parse failures.
+  }
+
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("failed to send a request to the edge function") ||
+    lower.includes("not_found") ||
+    lower.includes("requested function was not found")
+  ) {
+    return STRIPE_CONNECT_NOT_DEPLOYED_MESSAGE;
+  }
+
+  return message;
+}
+
 /**
  * Create a Stripe Connect account for a trainer and get onboarding link
  * @param {string} trainerId - Trainer ID
@@ -150,26 +180,11 @@ export async function createConnectAccount(trainerId) {
     );
 
     if (error) {
-      let message = error.message || "Failed to create Connect account";
-      try {
-        if (error.context?.json) {
-          const body = await error.context.json();
-          message = body?.error || body?.message || message;
-        }
-      } catch {
-        // Keep the default message if the response body cannot be parsed.
-      }
-      throw new Error(message);
-    }
-
-    if (data?.error) {
-      throw new Error(data.error);
+      throw new Error(await parseFunctionInvokeError(error, data));
     }
 
     if (!data?.url) {
-      throw new Error(
-        "Stripe onboarding URL was not returned. Make sure the create-connect-account edge function is deployed."
-      );
+      throw new Error(STRIPE_CONNECT_NOT_DEPLOYED_MESSAGE);
     }
 
     return data;
