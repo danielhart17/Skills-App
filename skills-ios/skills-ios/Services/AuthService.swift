@@ -57,6 +57,12 @@ class AuthService: ObservableObject {
         currentUser = nil
         isAuthenticated = false
     }
+
+    func deleteAccount() async throws {
+        try await supabase.deleteAccount()
+        currentUser = nil
+        isAuthenticated = false
+    }
     
     func refreshUser() async throws {
         currentUser = try await supabase.getCurrentUser()

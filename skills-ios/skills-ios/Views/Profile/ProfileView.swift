@@ -14,6 +14,8 @@ struct ProfileView: View {
     @State private var bookings: [Booking] = []
     @State private var isLoading = true
     @State private var showEditSheet = false
+    @State private var showDeleteAlert = false
+    @State private var showDeleteConfirmSheet = false
     
     var body: some View {
         ScrollView {
@@ -370,7 +372,26 @@ struct ProfileView: View {
                     .foregroundColor(.white)
                     .cornerRadius(10)
                 }
-                .padding()
+                .padding(.horizontal)
+
+                // Delete Account Button (required by App Store Guideline 5.1.1(v))
+                Button(action: { showDeleteAlert = true }) {
+                    HStack {
+                        Image(systemName: "trash")
+                        Text("Delete Account")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.clear)
+                    .foregroundColor(.red)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.red, lineWidth: 1)
+                    )
+                }
+                .padding(.horizontal)
+                .padding(.bottom)
             }
             .padding(.vertical)
         }
@@ -393,6 +414,17 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showEditSheet) {
             EditProfileSheet(authService: authService)
+        }
+        .alert("Delete Account?", isPresented: $showDeleteAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Continue", role: .destructive) {
+                showDeleteConfirmSheet = true
+            }
+        } message: {
+            Text("This will permanently delete your account, profile, XP, sessions, and progress. This cannot be undone.")
+        }
+        .sheet(isPresented: $showDeleteConfirmSheet) {
+            DeleteAccountConfirmSheet(authService: authService)
         }
     }
     
@@ -876,6 +908,126 @@ struct ImagePicker: UIViewControllerRepresentable {
         
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.dismiss()
+        }
+    }
+}
+
+// MARK: - Delete Account Confirmation Sheet
+
+struct DeleteAccountConfirmSheet: View {
+    @ObservedObject var authService: AuthService
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmationText = ""
+    @State private var isDeleting = false
+    @State private var errorMessage: String?
+
+    private let requiredPhrase = "DELETE"
+
+    private var canDelete: Bool {
+        confirmationText == requiredPhrase && !isDeleting
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.red)
+                            .font(.title2)
+                        Text("This is permanent")
+                            .font(.headline)
+                    }
+                    Text("Deleting your account will remove:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        BulletRow(text: "Your profile, avatar, and personal info")
+                        BulletRow(text: "Your XP, level, and streaks")
+                        BulletRow(text: "Your shooting sessions and drill progress")
+                        BulletRow(text: "Your bookings and event registrations")
+                    }
+                    Text("This action cannot be undone. You will need to create a new account to use Skills again.")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 4)
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Type \(requiredPhrase) to confirm")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    TextField(requiredPhrase, text: $confirmationText)
+                        .textFieldStyle(.roundedBorder)
+                        .autocapitalization(.allCharacters)
+                        .disableAutocorrection(true)
+                        .disabled(isDeleting)
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundColor(.red)
+                }
+
+                Spacer()
+
+                Button(action: performDelete) {
+                    HStack {
+                        if isDeleting {
+                            ProgressView()
+                                .tint(.white)
+                        }
+                        Text(isDeleting ? "Deleting..." : "Delete Account")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(canDelete ? Color.red : Color.red.opacity(0.4))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                }
+                .disabled(!canDelete)
+            }
+            .padding()
+            .navigationTitle("Delete Account")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isDeleting)
+                }
+            }
+            .interactiveDismissDisabled(isDeleting)
+        }
+    }
+
+    private func performDelete() {
+        isDeleting = true
+        errorMessage = nil
+        Task {
+            do {
+                try await authService.deleteAccount()
+                // Auth state changed; the app's root will swap to the auth screen.
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Couldn't delete your account. Please check your connection and try again."
+                    isDeleting = false
+                }
+            }
+        }
+    }
+}
+
+private struct BulletRow: View {
+    let text: String
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("•").foregroundColor(.secondary)
+            Text(text).font(.subheadline)
         }
     }
 }

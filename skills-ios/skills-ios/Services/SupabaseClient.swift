@@ -299,6 +299,18 @@ class SupabaseClient {
         return try decoder.decode(T.self, from: data)
     }
     
+    // MARK: - Account deletion
+
+    /// Deletes the currently authenticated user's account by invoking the
+    /// `delete-user-account` edge function, then clears the local token.
+    /// Required by App Store Review Guideline 5.1.1(v).
+    func deleteAccount() async throws {
+        struct DeleteResponse: Decodable { let success: Bool }
+        let response: DeleteResponse = try await invokeFunction("delete-user-account", body: [:])
+        guard response.success else { throw SupabaseError.deleteFailed }
+        self.accessToken = nil
+    }
+
     // MARK: - Edge Functions
 
     func invokeFunction<T: Decodable>(_ name: String, body: [String: Any]) async throws -> T {
