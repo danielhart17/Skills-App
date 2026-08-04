@@ -19,6 +19,13 @@ import {
   getTrainerStripeStatus 
 } from "@/api/stripeService";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+
+function safeReturnPath(returnTo) {
+  if (!returnTo || typeof returnTo !== "string") return null;
+  if (!returnTo.startsWith("/") || returnTo.startsWith("//")) return null;
+  return returnTo;
+}
 
 const BookingStep = ({ number, title, children, isActive }) => (
   <div
@@ -44,6 +51,13 @@ export default function BookingPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { isParent } = useAuth();
+  const returnTo =
+    safeReturnPath(searchParams.get("returnTo")) ||
+    (isParent() ? `${createPageUrl("ParentDashboard")}?tab=trainers` : null);
+  const browseTrainersPath =
+    returnTo || createPageUrl("Trainers");
+  const donePath = returnTo || createPageUrl("Home");
   const [step, setStep] = useState(1);
   const [trainer, setTrainer] = useState(null);
   const [services, setServices] = useState([]);
@@ -375,7 +389,7 @@ export default function BookingPage() {
         <p className="text-gray-600 mb-6">
           Please select a trainer from the trainers page to book a session.
         </p>
-        <Button onClick={() => navigate(createPageUrl("Trainers"))}>
+        <Button onClick={() => navigate(browseTrainersPath)}>
           Browse Trainers
         </Button>
       </div>
@@ -389,7 +403,7 @@ export default function BookingPage() {
         <p className="text-gray-600 mb-6">
           The trainer you're looking for doesn't exist or the link is invalid.
         </p>
-        <Button onClick={() => navigate(createPageUrl("Trainers"))}>
+        <Button onClick={() => navigate(browseTrainersPath)}>
           Browse Trainers
         </Button>
       </div>
@@ -446,8 +460,8 @@ export default function BookingPage() {
               )}
             </div>
           ) : null}
-          <Button onClick={() => navigate(createPageUrl("Home"))}>
-            Back to Home
+          <Button onClick={() => navigate(donePath)}>
+            {isParent() ? "Back to Parent Dashboard" : "Back to Home"}
           </Button>
         </Card>
       </div>

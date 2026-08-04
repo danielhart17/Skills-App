@@ -7,6 +7,7 @@ export { Challenge } from "./supabaseEntities";
 export { ChallengeRating } from "./supabaseEntities";
 export { ChallengeProgress } from "./supabaseEntities";
 export { ShootingSession } from "./supabaseEntities";
+export { Run } from "./supabaseEntities";
 export { Trainer } from "./supabaseEntities";
 export { TrainingEvent } from "./supabaseEntities";
 export { Review } from "./supabaseEntities";

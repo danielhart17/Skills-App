@@ -1,15 +1,29 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, MapPin, Clock, Users, CalendarDays } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+  Plus,
+  MapPin,
+  Clock,
+  Users,
+  CalendarDays,
+  ExternalLink,
+  Play,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import WeeklyCalendar from "@/components/WeeklyCalendar";
 import AddEventModal from "@/components/AddEventModal";
-import WeekConfirmBanner from "@/components/WeekConfirmBanner";
 import AthleteStatsBar from "@/components/AthleteStatsBar";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/use-toast";
+import {
+  getScheduleEventHref,
+  getYouTubeId,
+  loadScheduleEventSource,
+} from "@/utils/scheduleLinks";
 import {
   getWeekBounds,
   addWeeks,
@@ -28,13 +42,47 @@ const EVENT_TYPE_LABELS = {
 
 export default function SchedulePage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [weekAnchor, setWeekAnchor] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [eventSource, setEventSource] = useState(null);
+  const [loadingSource, setLoadingSource] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [statsRefresh, setStatsRefresh] = useState(0);
+
+  const openEventDetail = (event) => {
+    setSelectedEvent(event);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSource = async () => {
+      if (!selectedEvent || selectedEvent.event_type !== "workout") {
+        setEventSource(null);
+        setLoadingSource(false);
+        return;
+      }
+
+      setLoadingSource(true);
+      try {
+        const source = await loadScheduleEventSource(selectedEvent);
+        if (!cancelled) setEventSource(source);
+      } catch (error) {
+        console.error("Error loading workout media:", error);
+        if (!cancelled) setEventSource(null);
+      } finally {
+        if (!cancelled) setLoadingSource(false);
+      }
+    };
+
+    loadSource();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEvent]);
 
   const fetchEvents = useCallback(async () => {
     if (!user?.id) return;
@@ -95,14 +143,15 @@ export default function SchedulePage() {
     await fetchEvents();
   };
 
-  const handleGamificationUpdate = () => {
-    setStatsRefresh((k) => k + 1);
-  };
-
   const handleSelectDate = (dateKey) => {
     setSelectedDate(dateKey);
     setSelectedEvent(null);
+    setEventSource(null);
   };
+
+  const detailHref =
+    eventSource?.href || getScheduleEventHref(selectedEvent);
+  const videoId = getYouTubeId(eventSource?.youtube_url);
 
   const selectedDayEvents = events.filter(
     (event) => event.event_date === selectedDate
@@ -137,49 +186,11 @@ export default function SchedulePage() {
         </Button>
       </div>
 
-      <WeekConfirmBanner
-        athleteId={user?.id}
-        onConfirmed={handleGamificationUpdate}
-      />
-
-      <AthleteStatsBar athleteId={user?.id} refreshKey={statsRefresh} />
+      <AthleteStatsBar athleteId={user?.id} />
 
       <div id="schedule-post-event-anchor" />
 
-      <Card className="bg-brand-black border-brand-gray/30">
-        <CardContent className="p-3 sm:p-6">
-          <WeeklyCalendar
-            weekAnchor={weekAnchor}
-            events={events}
-            selectedDate={selectedDate}
-            selectedEventId={selectedEvent?.id}
-            onSelectDate={handleSelectDate}
-            onSelectEvent={setSelectedEvent}
-            onPrevWeek={() => {
-              setWeekAnchor((d) => addWeeks(d, -1));
-              setSelectedDate((d) =>
-                toDateKey(addWeeks(new Date(`${d}T00:00:00`), -1))
-              );
-              setSelectedEvent(null);
-            }}
-            onNextWeek={() => {
-              setWeekAnchor((d) => addWeeks(d, 1));
-              setSelectedDate((d) =>
-                toDateKey(addWeeks(new Date(`${d}T00:00:00`), 1))
-              );
-              setSelectedEvent(null);
-            }}
-            onToday={() => {
-              const today = new Date();
-              setWeekAnchor(today);
-              setSelectedDate(toDateKey(today));
-              setSelectedEvent(null);
-            }}
-            loading={loading}
-          />
-        </CardContent>
-      </Card>
-
+      {/* Selected day above week view */}
       <Card className="bg-brand-black border-brand-gray/30">
         <CardContent className="p-4 sm:p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -222,12 +233,13 @@ export default function SchedulePage() {
                   EVENT_TYPE_BADGE_STYLES[event.event_type] ||
                   EVENT_TYPE_BADGE_STYLES.rest;
                 const active = selectedEvent?.id === event.id;
+                const linked = !!(event.drill_id || event.challenge_id);
 
                 return (
                   <button
                     key={event.id}
                     type="button"
-                    onClick={() => setSelectedEvent(event)}
+                    onClick={() => openEventDetail(event)}
                     className={`w-full text-left rounded-xl border p-4 transition-all ${
                       active
                         ? "border-brand-orange bg-brand-orange/10"
@@ -236,8 +248,11 @@ export default function SchedulePage() {
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                       <div>
-                        <h3 className="font-semibold text-brand-white">
+                        <h3 className="font-semibold text-brand-white flex items-center gap-2">
                           {event.title}
+                          {(linked || event.event_type === "workout") && (
+                            <Play className="w-3.5 h-3.5 text-brand-orange shrink-0" />
+                          )}
                         </h3>
                         <div className="flex flex-wrap gap-3 mt-2 text-sm text-brand-lightGray">
                           {event.start_time && (
@@ -256,6 +271,11 @@ export default function SchedulePage() {
                             <span className="flex items-center gap-1">
                               <Users className="w-4 h-4 text-brand-orange" />
                               vs {event.opponent}
+                            </span>
+                          )}
+                          {event.event_type === "workout" && (
+                            <span className="text-brand-orange text-xs">
+                              Tap to view video & details
                             </span>
                           )}
                         </div>
@@ -284,9 +304,16 @@ export default function SchedulePage() {
         <Card className="bg-brand-black border-brand-gray/30 animate-in fade-in slide-in-from-top-2 duration-200">
           <CardContent className="p-4 sm:p-6 space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <h3 className="text-xl font-bold text-brand-white">
-                {selectedEvent.title}
-              </h3>
+              <div>
+                <h3 className="text-xl font-bold text-brand-white">
+                  {selectedEvent.title}
+                </h3>
+                {eventSource?.description && (
+                  <p className="text-sm text-brand-lightGray mt-2">
+                    {eventSource.description}
+                  </p>
+                )}
+              </div>
               <Badge
                 variant="outline"
                 className={`capitalize border ${badgeClass}`}
@@ -318,6 +345,71 @@ export default function SchedulePage() {
               )}
             </div>
 
+            {loadingSource && (
+              <div className="flex items-center gap-2 text-sm text-brand-lightGray py-4">
+                <Loader2 className="w-4 h-4 animate-spin text-brand-orange" />
+                Loading workout video...
+              </div>
+            )}
+
+            {!loadingSource && videoId && (
+              <div className="pt-2 border-t border-brand-gray/30 space-y-2">
+                <p className="text-sm font-medium text-brand-lightGray flex items-center gap-2">
+                  <Play className="w-4 h-4 text-brand-orange" />
+                  Demo Video
+                </p>
+                <div
+                  className="relative w-full rounded-xl overflow-hidden border border-brand-gray/40 bg-black"
+                  style={{ paddingBottom: "56.25%", height: 0 }}
+                >
+                  <iframe
+                    src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`}
+                    className="absolute top-0 left-0 w-full h-full"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    title={`${selectedEvent.title} demo video`}
+                  />
+                </div>
+              </div>
+            )}
+
+            {!loadingSource &&
+              selectedEvent.event_type === "workout" &&
+              !videoId &&
+              eventSource && (
+                <p className="text-sm text-brand-gray italic">
+                  No demo video linked for this workout yet.
+                </p>
+              )}
+
+            {eventSource?.setup && (
+              <div className="pt-2 border-t border-brand-gray/30">
+                <p className="text-sm font-medium text-brand-lightGray mb-1">
+                  Setup
+                </p>
+                <p className="text-brand-white whitespace-pre-wrap text-sm">
+                  {eventSource.setup}
+                </p>
+              </div>
+            )}
+
+            {eventSource?.steps?.length > 0 && (
+              <div className="pt-2 border-t border-brand-gray/30 space-y-2">
+                <p className="text-sm font-medium text-brand-lightGray">
+                  Steps
+                </p>
+                {eventSource.steps.map((step, i) => (
+                  <div key={i} className="flex gap-2 text-sm text-brand-white">
+                    <span className="text-brand-orange font-semibold">
+                      {i + 1}.
+                    </span>
+                    <span>{step}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {selectedEvent.notes ? (
               <div className="pt-2 border-t border-brand-gray/30">
                 <p className="text-sm font-medium text-brand-lightGray mb-1">
@@ -328,11 +420,60 @@ export default function SchedulePage() {
                 </p>
               </div>
             ) : (
-              <p className="text-sm text-brand-gray italic">No notes</p>
+              !eventSource && (
+                <p className="text-sm text-brand-gray italic">No notes</p>
+              )
+            )}
+
+            {detailHref && (
+              <Button
+                className="w-full sm:w-auto bg-brand-orange hover:opacity-90 text-white"
+                onClick={() => navigate(detailHref)}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open full details
+              </Button>
             )}
           </CardContent>
         </Card>
       )}
+
+      <Card className="bg-brand-black border-brand-gray/30">
+        <CardContent className="p-3 sm:p-6">
+          <WeeklyCalendar
+            weekAnchor={weekAnchor}
+            events={events}
+            selectedDate={selectedDate}
+            selectedEventId={selectedEvent?.id}
+            onSelectDate={handleSelectDate}
+            onSelectEvent={openEventDetail}
+            onPrevWeek={() => {
+              setWeekAnchor((d) => addWeeks(d, -1));
+              setSelectedDate((d) =>
+                toDateKey(addWeeks(new Date(`${d}T00:00:00`), -1))
+              );
+              setSelectedEvent(null);
+              setEventSource(null);
+            }}
+            onNextWeek={() => {
+              setWeekAnchor((d) => addWeeks(d, 1));
+              setSelectedDate((d) =>
+                toDateKey(addWeeks(new Date(`${d}T00:00:00`), 1))
+              );
+              setSelectedEvent(null);
+              setEventSource(null);
+            }}
+            onToday={() => {
+              const today = new Date();
+              setWeekAnchor(today);
+              setSelectedDate(toDateKey(today));
+              setSelectedEvent(null);
+              setEventSource(null);
+            }}
+            loading={loading}
+          />
+        </CardContent>
+      </Card>
 
       <AddEventModal
         open={modalOpen}

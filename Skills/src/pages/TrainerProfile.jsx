@@ -58,15 +58,23 @@ const StarRating = ({ rating, count }) => (
 
 export default function TrainerProfile() {
   const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const returnTo = searchParams.get("returnTo");
   const [trainer, setTrainer] = useState(null);
   const [events, setEvents] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [services, setServices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const bookingHref = (trainerId, serviceId) => {
+    const params = new URLSearchParams({ trainerId });
+    if (serviceId) params.set("serviceId", serviceId);
+    if (returnTo) params.set("returnTo", returnTo);
+    return `/booking?${params.toString()}`;
+  };
+
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const trainerId = params.get("id");
+    const trainerId = searchParams.get("id");
     if (trainerId) {
       loadTrainerData(trainerId);
     }
@@ -159,7 +167,7 @@ export default function TrainerProfile() {
                   {trainer.bio?.length > 150 && "..."}
                 </p>
                 <div className="mt-6 flex justify-center md:justify-start gap-3">
-                  <Link to={`/booking?trainerId=${trainer.id}`}>
+                  <Link to={bookingHref(trainer.id)}>
                     <Button className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg">
                       <Calendar className="w-4 h-4 mr-2" />
                       Book a Session
@@ -258,9 +266,7 @@ export default function TrainerProfile() {
                             {service.description}
                           </p>
                         </div>
-                        <Link
-                          to={`/booking?trainerId=${trainer.id}&serviceId=${service.id}`}
-                        >
+                        <Link to={bookingHref(trainer.id, service.id)}>
                           <Button size="sm" variant="outline" className="ml-4">
                             Book
                           </Button>

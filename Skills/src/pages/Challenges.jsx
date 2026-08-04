@@ -1,8 +1,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Challenge, ChallengeProgress, WorkoutAssignment } from "@/api/entities";
-import { Trainer } from "@/api/entities";
+import {
+  Challenge,
+  ChallengeProgress,
+  WorkoutAssignment,
+  Drill,
+  DrillProgress,
+} from "@/api/entities";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +25,6 @@ import {
 } from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import {
   CalendarPlus,
@@ -34,13 +38,46 @@ import {
   CheckCircle,
   Users,
   ArrowRight,
-  Dumbbell,
   Loader2,
   Zap,
+  Footprints,
+  Search,
+  Dumbbell,
 } from "lucide-react";
+import BetaBadge from "@/components/BetaBadge";
+import DrillCard from "@/components/drills/DrillCard";
+import { FEATURE_FLAGS } from "@/config/featureFlags";
+import { isDrillLike } from "@/utils/scheduleLinks";
 
 function formatDateForInput(date = new Date()) {
   return date.toISOString().split("T")[0];
+}
+
+function getYouTubeId(url) {
+  if (!url) return null;
+  const match = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/
+  );
+  return match ? match[1] : null;
+}
+
+function getWorkoutThumbnail(challenge) {
+  if (challenge?.thumbnail_url) return challenge.thumbnail_url;
+  const ytId = getYouTubeId(challenge?.youtube_url);
+  if (ytId) return `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+  return null;
+}
+
+function matchesSearchQuery(item, searchQuery) {
+  if (!searchQuery?.trim()) return true;
+  const q = searchQuery.trim().toLowerCase();
+  return (
+    item.title?.toLowerCase().includes(q) ||
+    item.category?.toLowerCase().includes(q) ||
+    item.description?.toLowerCase().includes(q) ||
+    item.difficulty?.toLowerCase().includes(q) ||
+    item.tags?.some((tag) => tag.toLowerCase().includes(q))
+  );
 }
 
 function buildWorkoutScheduleNotes(workout, extraNotes) {
@@ -55,6 +92,9 @@ function buildWorkoutScheduleNotes(workout, extraNotes) {
       : null,
     workout.setup ? `Setup:\n${workout.setup}` : null,
     workout.instructions ? `Instructions:\n${workout.instructions}` : null,
+    workout.steps?.length
+      ? `Steps:\n${workout.steps.map((step, i) => `${i + 1}. ${step}`).join("\n")}`
+      : null,
     workout.focus ? `Focus:\n${workout.focus}` : null,
     extraNotes?.trim() ? `Notes:\n${extraNotes.trim()}` : null,
   ]
@@ -66,14 +106,21 @@ export default function Challenges() {
   const navigate = useNavigate();
   const { isAthlete, user } = useAuth();
   const [challenges, setChallenges] = useState([]);
+  const [drills, setDrills] = useState([]);
   const [completedChallenges, setCompletedChallenges] = useState([]);
+  const [completedDrillIds, setCompletedDrillIds] = useState([]);
   const [featuredChallenge, setFeaturedChallenge] = useState(null);
-  const [featuredTrainer, setFeaturedTrainer] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedDifficulty, setSelectedDifficulty] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [parentAssignments, setParentAssignments] = useState([]);
+  const [challengeCompletionCounts, setChallengeCompletionCounts] = useState(
+    {}
+  );
+  const [drillCompletionCounts, setDrillCompletionCounts] = useState({});
   const [scheduleWorkout, setScheduleWorkout] = useState(null);
+  const [scheduleSourceType, setScheduleSourceType] = useState("challenge");
   const [scheduleForm, setScheduleForm] = useState({
     event_date: formatDateForInput(),
     start_time: "",
@@ -105,30 +152,37 @@ export default function Challenges() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [allChallenges, allTrainers, completedIds] = await Promise.all([
-        Challenge.list(),
-        Trainer.list(),
-        ChallengeProgress.getCompletedChallenges(),
-      ]);
+      const [allChallenges, completedIds, allDrills, completedDrills] =
+        await Promise.all([
+          Challenge.list().catch(() => []),
+          ChallengeProgress.getCompletedChallenges().catch(() => []),
+          Drill.list().catch(() => []),
+          DrillProgress.getCompletedDrills().catch(() => []),
+        ]);
 
-      setChallenges(allChallenges);
-      setCompletedChallenges(completedIds);
+      setChallenges(allChallenges || []);
+      setCompletedChallenges(completedIds || []);
+      setDrills(allDrills || []);
+      setCompletedDrillIds(completedDrills || []);
 
-      // Find the featured challenge - prioritize is_featured flag, then any challenge with trainer_id
       const featured =
         allChallenges.find((c) => c.is_featured) ||
         allChallenges.find((c) => c.trainer_id);
 
       if (featured) {
         setFeaturedChallenge(featured);
-        // Find the trainer who created this challenge
-        const trainer = allTrainers.find((t) => t.id === featured.trainer_id);
-        setFeaturedTrainer(trainer);
-        console.log("Featured Challenge:", featured);
-        console.log("Featured Trainer:", trainer);
-      } else {
-        console.log("No featured challenge found");
       }
+
+      const [challengeCounts, drillCounts] = await Promise.all([
+        ChallengeProgress.getCompletionCounts(
+          (allChallenges || []).map((c) => c.id)
+        ).catch(() => ({})),
+        DrillProgress.getCompletionCounts(
+          (allDrills || []).map((d) => d.id)
+        ).catch(() => ({})),
+      ]);
+      setChallengeCompletionCounts(challengeCounts || {});
+      setDrillCompletionCounts(drillCounts || {});
     } catch (error) {
       console.error("Error loading challenges and trainers:", error);
     }
@@ -138,24 +192,48 @@ export default function Challenges() {
   const getCategories = () => {
     return [
       ...new Set(
-        challenges.map((challenge) => challenge.category).filter(Boolean)
+        [
+          ...challenges.map((challenge) => challenge.category),
+          ...drills.map((drill) => drill.category),
+        ].filter(Boolean)
       ),
-    ];
+    ].sort();
   };
 
   const filteredChallenges = challenges.filter((challenge) => {
-    // Exclude the featured challenge from the main list if it exists
-    const isFeatured =
-      featuredChallenge && challenge.id === featuredChallenge.id;
-    if (isFeatured) return false;
-
     const categoryMatch =
       selectedCategory === "all" || challenge.category === selectedCategory;
     const difficultyMatch =
       selectedDifficulty === "all" ||
       challenge.difficulty === selectedDifficulty;
-    return categoryMatch && difficultyMatch;
+    return (
+      categoryMatch &&
+      difficultyMatch &&
+      matchesSearchQuery(challenge, searchQuery)
+    );
   });
+
+  const filteredDrills = drills.filter((drill) => {
+    const categoryMatch =
+      selectedCategory === "all" || drill.category === selectedCategory;
+    const difficultyMatch =
+      selectedDifficulty === "all" ||
+      drill.difficulty === selectedDifficulty;
+    return (
+      categoryMatch && difficultyMatch && matchesSearchQuery(drill, searchQuery)
+    );
+  });
+
+  const gridChallenges = [];
+  const featuredInResults =
+    featuredChallenge &&
+    filteredChallenges.some((c) => c.id === featuredChallenge.id);
+  if (featuredInResults) {
+    gridChallenges.push({ ...featuredChallenge, isFeatured: true });
+  }
+  filteredChallenges
+    .filter((c) => !featuredInResults || c.id !== featuredChallenge.id)
+    .forEach((c) => gridChallenges.push({ ...c, isFeatured: false }));
 
   const getDifficultyColor = (difficulty) => {
     switch (difficulty) {
@@ -191,7 +269,14 @@ export default function Challenges() {
     return completedChallenges.includes(challengeId);
   };
 
-  const openScheduleDialog = (workout) => {
+  const openScheduleDialog = (workout, sourceType = "auto") => {
+    const kind =
+      sourceType === "drill" || sourceType === "challenge"
+        ? sourceType
+        : isDrillLike(workout)
+          ? "drill"
+          : "challenge";
+    setScheduleSourceType(kind);
     setScheduleWorkout(workout);
     setScheduleForm({
       event_date: formatDateForInput(),
@@ -214,7 +299,8 @@ export default function Challenges() {
 
     setIsScheduling(true);
     try {
-      const { error } = await supabase.from("athlete_events").insert({
+      const isDrill = scheduleSourceType === "drill";
+      const payload = {
         athlete_id: user.id,
         title: scheduleWorkout.title,
         event_type: "workout",
@@ -222,7 +308,24 @@ export default function Challenges() {
         start_time: scheduleForm.start_time || null,
         location: scheduleForm.location.trim() || null,
         notes: buildWorkoutScheduleNotes(scheduleWorkout, scheduleForm.notes),
-      });
+        drill_id: isDrill ? scheduleWorkout.id : null,
+        challenge_id: isDrill ? null : scheduleWorkout.id,
+      };
+
+      let { error } = await supabase.from("athlete_events").insert(payload);
+
+      // Fallback if migration columns are not applied yet
+      if (
+        error &&
+        (error.message?.includes("drill_id") ||
+          error.message?.includes("challenge_id") ||
+          error.code === "PGRST204")
+      ) {
+        const { drill_id, challenge_id, ...legacyPayload } = payload;
+        ({ error } = await supabase
+          .from("athlete_events")
+          .insert(legacyPayload));
+      }
 
       if (error) throw error;
 
@@ -268,168 +371,89 @@ export default function Challenges() {
             </h1>
           </div>
           <p className="text-xl text-brand-lightGray max-w-2xl mx-auto">
-            Push your limits with specialized drills and shooting workouts
+            Search drills and workouts by name or category — all in one place
           </p>
-          <div className="flex items-center justify-center gap-4 flex-wrap">
-            <Button
-              onClick={() => navigate("/drill-library")}
-              className="bg-gradient-to-r from-yellow-500 to-orange-600 font-semibold"
-            >
-              <Dumbbell className="w-4 h-4 mr-2" />
-              Drill Library
-            </Button>
-            <Button
-              onClick={() => navigate("/ai-workout-builder")}
-              variant="outline"
-              className="border-orange-500 text-orange-400 hover:bg-orange-500/10 font-semibold"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              Build My Workout
-            </Button>
-          </div>
-        </div>
-
-        {/* Featured Challenge Section - Always show this section for testing */}
-        <div className="space-y-4">
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Star className="w-6 h-6 text-yellow-400 fill-current" />
-            Featured Trainer Workout
-          </h2>
-
-          {featuredChallenge && featuredTrainer ? (
-            <Card className="border-0 shadow-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white overflow-hidden">
-              <CardContent className="p-8 grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
-                <div className="md:col-span-2">
-                  <Badge className="bg-white text-blue-600 mb-4 uppercase font-semibold">
-                    {getCategoryIcon(featuredChallenge.category)}{" "}
-                    {featuredChallenge.category}
-                  </Badge>
-                  <h3 className="text-3xl font-bold mb-2">
-                    {featuredChallenge.title}
-                  </h3>
-                  <p className="text-blue-100 mb-6 text-lg">
-                    {featuredChallenge.description}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-6">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-5 h-5" />
-                      <span className="font-semibold">
-                        {featuredChallenge.duration_minutes || 20} min
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Trophy className="w-5 h-5" />
-                      <span className="font-semibold">
-                        +{featuredChallenge.xp_reward} XP
-                      </span>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className="bg-transparent border-white text-white uppercase font-semibold"
-                    >
-                      {featuredChallenge.difficulty}
-                    </Badge>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <Button
-                      size="lg"
-                      className="bg-white text-blue-600 hover:bg-gray-100 font-bold shadow-lg px-8 py-3"
-                      onClick={() =>
-                        navigate(`/workouts/${featuredChallenge.id}`)
-                      }
-                    >
-                      {isChallengeCompleted(featuredChallenge.id) ? (
-                        <>
-                          <CheckCircle className="w-5 h-5 mr-2" />
-                          Completed
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-5 h-5 mr-2" />
-                          Start Workout
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="bg-transparent border-white text-white hover:bg-white/10 font-bold shadow-lg px-8 py-3"
-                      onClick={() => openScheduleDialog(featuredChallenge)}
-                    >
-                      <CalendarPlus className="w-5 h-5 mr-2" />
-                      Add to Schedule
-                    </Button>
-                  </div>
-                </div>
-
-                <Link
-                  to={`/trainerprofile?id=${featuredTrainer.id}`}
-                  className="group bg-white/10 backdrop-blur-sm p-6 rounded-2xl flex flex-col items-center text-center hover:bg-white/20 transition-all duration-300 border border-white/20"
-                >
-                  <p className="text-sm font-semibold uppercase tracking-wider text-blue-200 mb-4">
-                    From Trainer
-                  </p>
-                  <Avatar className="w-24 h-24 mb-4 border-4 border-white/50 group-hover:border-white transition-all shadow-lg">
-                    <AvatarImage
-                      src={featuredTrainer.profile_image}
-                      alt={`${featuredTrainer.name}'s profile`}
-                    />
-                    <AvatarFallback className="text-blue-600 font-bold text-2xl bg-white">
-                      {featuredTrainer.name
-                        ?.split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <h4 className="text-xl font-bold mb-1">
-                    {featuredTrainer.name}
-                  </h4>
-                  <div className="flex items-center justify-center gap-1 text-blue-200 mb-2">
-                    {featuredTrainer.verified && (
-                      <CheckCircle className="w-4 h-4 text-green-300" />
-                    )}
-                    <span className="text-sm">{featuredTrainer.location}</span>
-                  </div>
-                  <p className="text-xs text-blue-200 opacity-80">
-                    {featuredTrainer.years_experience} years experience
-                  </p>
-                </Link>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="border-0 shadow-xl bg-gradient-to-br from-gray-100 to-gray-200">
-              <CardContent className="p-8 text-center">
-                <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                  No Featured Workout This Week
-                </h3>
-                <p className="text-gray-500">
-                  Check back soon for a new trainer workout!
-                </p>
-              </CardContent>
-            </Card>
+          {FEATURE_FLAGS.AI_WORKOUT_BUILDER && (
+            <div className="flex items-center justify-center gap-4 flex-wrap">
+              <Button
+                onClick={() => navigate("/ai-workout-builder")}
+                variant="outline"
+                className="border-orange-500 text-orange-400 hover:bg-orange-500/10 font-semibold"
+              >
+                <Zap className="w-4 h-4 mr-2" />
+                Build My Workout
+              </Button>
+            </div>
           )}
         </div>
 
-        {/* Special Shooting Session Button */}
-        <div className="bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl p-8 text-white text-center shadow-xl">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <Crosshair className="w-8 h-8" />
-            <h2 className="text-2xl font-bold">Live Shooting Session</h2>
-          </div>
-          <p className="text-orange-100 mb-6 max-w-md mx-auto">
-            Track your makes and misses in real-time with our interactive court
-            tracker
-          </p>
-          <Link to={createPageUrl("ShootingSession")}>
+        <div className="relative max-w-2xl mx-auto">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Input
+            placeholder="Search drills, workouts, categories, or tags..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 bg-card border-gray-700 text-white placeholder:text-gray-500"
+          />
+        </div>
+
+
+        {/* Featured trackers */}
+        <div
+          className={`grid grid-cols-1 gap-6 ${
+            FEATURE_FLAGS.LIVE_SHOOTING_SESSION_TRACKER
+              ? "md:grid-cols-2"
+              : "md:grid-cols-1 md:max-w-xl md:mx-auto"
+          }`}
+        >
+          {FEATURE_FLAGS.LIVE_SHOOTING_SESSION_TRACKER && (
+            <div className="bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl p-6 sm:p-8 text-white text-center shadow-xl">
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-4">
+                <Crosshair className="w-7 h-7 sm:w-8 sm:h-8 shrink-0" />
+                <h2 className="text-xl sm:text-2xl font-bold leading-tight">
+                  Live Shooting Session
+                </h2>
+              </div>
+              <p className="text-orange-100 mb-6 max-w-md mx-auto text-sm sm:text-base">
+                Track your makes and misses in real-time with our interactive
+                court tracker
+              </p>
+              <Link
+                to={createPageUrl("ShootingSession")}
+                className="inline-block w-full sm:w-auto"
+              >
+                <Button
+                  size="lg"
+                  className="w-full sm:w-auto h-auto min-h-10 whitespace-normal bg-white text-orange-600 hover:bg-gray-100 font-semibold px-6 sm:px-8 py-3"
+                >
+                  <Target className="w-5 h-5 mr-2 shrink-0" />
+                  Start Shooting Session
+                </Button>
+              </Link>
+            </div>
+          )}
+
+          <div className="bg-gradient-to-r from-sky-500 to-blue-700 rounded-2xl p-6 sm:p-8 text-white text-center shadow-xl">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-4">
+              <Footprints className="w-7 h-7 sm:w-8 sm:h-8 shrink-0" />
+              <h2 className="text-xl sm:text-2xl font-bold leading-tight flex flex-wrap items-center justify-center gap-2">
+                Go for a Run
+                <BetaBadge className="bg-white/20 text-white border-white/30" />
+              </h2>
+            </div>
+            <p className="text-sky-100 mb-6 max-w-md mx-auto text-sm sm:text-base">
+              Track your pace and distance live with GPS — like a run club
+              session
+            </p>
             <Button
               size="lg"
-              className="bg-white text-orange-600 hover:bg-gray-100 font-semibold px-8 py-3"
+              onClick={() => navigate("/run-tracker")}
+              className="w-full sm:w-auto h-auto min-h-10 whitespace-normal bg-white text-blue-700 hover:bg-gray-100 font-semibold px-6 sm:px-8 py-3"
             >
-              <Target className="w-5 h-5 mr-2" />
-              Start Shooting Session
+              <Play className="w-5 h-5 mr-2 shrink-0" />
+              Start Run
             </Button>
-          </Link>
+          </div>
         </div>
 
         {/* Parent-Assigned Workouts - For Athletes Only */}
@@ -463,19 +487,19 @@ export default function Challenges() {
                           {assignment.challenge?.duration_minutes} min
                         </Badge>
                       </div>
-                      <h3 className="font-bold text-xl mb-2">
+                      <h3 className="font-bold text-xl mb-2 break-words leading-snug">
                         {assignment.challenge?.title}
                       </h3>
-                      <p className="text-purple-100 text-sm mb-4 line-clamp-2">
+                      <p className="text-purple-100 text-sm mb-4 line-clamp-2 break-words">
                         {assignment.challenge?.description}
                       </p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-purple-200">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs text-purple-200 min-w-0 break-words">
                           From {assignment.parent?.full_name}
                         </span>
                         <Button
                           size="sm"
-                          className="bg-white text-purple-600 hover:bg-purple-50"
+                          className="bg-white text-purple-600 hover:bg-purple-50 h-auto min-h-8 whitespace-normal shrink-0"
                         >
                           {assignment.status === "in_progress" ? (
                             <>Continue</>
@@ -503,9 +527,9 @@ export default function Challenges() {
         )}
 
         {/* Filters */}
-        <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
-          <div className="flex flex-wrap gap-3">
-            <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 shrink-0">
               <Filter className="w-4 h-4 text-gray-400" />
               <span className="text-sm font-medium text-white">Category:</span>
             </div>
@@ -513,11 +537,11 @@ export default function Challenges() {
               variant={selectedCategory === "all" ? "default" : "outline"}
               onClick={() => setSelectedCategory("all")}
               size="sm"
-              className={
+              className={`h-auto min-h-8 whitespace-normal ${
                 selectedCategory === "all"
                   ? "bg-gradient-to-r from-yellow-500 to-orange-600"
                   : ""
-              }
+              }`}
             >
               All
             </Button>
@@ -527,11 +551,11 @@ export default function Challenges() {
                 variant={selectedCategory === category ? "default" : "outline"}
                 onClick={() => setSelectedCategory(category)}
                 size="sm"
-                className={
+                className={`h-auto min-h-8 whitespace-normal capitalize ${
                   selectedCategory === category
                     ? "bg-gradient-to-r from-yellow-500 to-orange-600"
                     : ""
-                }
+                }`}
               >
                 <span className="mr-1">{getCategoryIcon(category)}</span>
                 {category}
@@ -539,8 +563,10 @@ export default function Challenges() {
             ))}
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-white">Difficulty:</span>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <span className="text-sm font-medium text-white shrink-0">
+              Difficulty:
+            </span>
             {["all", "beginner", "intermediate", "advanced"].map(
               (difficulty) => (
                 <Button
@@ -550,11 +576,11 @@ export default function Challenges() {
                   }
                   onClick={() => setSelectedDifficulty(difficulty)}
                   size="sm"
-                  className={
+                  className={`h-auto min-h-8 whitespace-normal capitalize ${
                     selectedDifficulty === difficulty
                       ? "bg-gradient-to-r from-yellow-500 to-orange-600"
                       : ""
-                  }
+                  }`}
                 >
                   {difficulty}
                 </Button>
@@ -563,44 +589,110 @@ export default function Challenges() {
           </div>
         </div>
 
+        <p className="text-sm text-gray-500">
+          Showing {gridChallenges.length} workout
+          {gridChallenges.length !== 1 ? "s" : ""}
+          {drills.length > 0 &&
+            ` · ${filteredDrills.length} drill${
+              filteredDrills.length !== 1 ? "s" : ""
+            }`}
+          {(searchQuery ||
+            selectedCategory !== "all" ||
+            selectedDifficulty !== "all") &&
+            " matching your filters"}
+        </p>
+
         {/* Workouts Grid */}
+        {gridChallenges.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-yellow-500" />
+              Workouts
+            </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredChallenges.map((challenge) => (
+          {gridChallenges.map((challenge) => {
+            const thumbnailUrl = getWorkoutThumbnail(challenge);
+
+            return (
             <Card
               key={challenge.id}
-              className="group hover:shadow-xl transition-all duration-300 border-0 shadow-lg bg-card overflow-hidden"
+              className={`group hover:shadow-xl transition-all duration-300 border-0 shadow-lg overflow-hidden relative ${
+                challenge.isFeatured
+                  ? "ring-2 ring-yellow-400/50 bg-gradient-to-br from-yellow-500/5 to-orange-500/10"
+                  : "bg-card"
+              }`}
             >
-              <CardHeader className="pb-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">
+              {challenge.isFeatured && (
+                <Badge className="absolute top-3 right-3 z-10 bg-yellow-500/90 text-white text-[10px] uppercase font-semibold border-0 shadow-sm">
+                  <Star className="w-3 h-3 mr-1 fill-current" />
+                  Trainer Pick
+                </Badge>
+              )}
+
+              <div
+                className="relative w-full aspect-video bg-black/40 cursor-pointer overflow-hidden"
+                onClick={() => navigate(`/workouts/${challenge.id}`)}
+              >
+                {thumbnailUrl ? (
+                  <img
+                    src={thumbnailUrl}
+                    alt={`${challenge.title} video thumbnail`}
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-800 to-gray-900">
+                    <span className="text-4xl">
                       {getCategoryIcon(challenge.category)}
                     </span>
-                    <div>
-                      <CardTitle className="text-lg font-bold text-white group-hover:text-yellow-400 transition-colors">
-                        {challenge.title}
-                      </CardTitle>
-                      <p className="text-gray-400 text-sm mt-1">
-                        {challenge.description}
-                      </p>
-                    </div>
+                    <span className="text-xs text-gray-400">No video yet</span>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-black/55 border border-white/30 flex items-center justify-center backdrop-blur-sm group-hover:bg-brand-orange/90 transition-colors">
+                    <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+                  </div>
+                </div>
+              </div>
+
+              <CardHeader className="pb-4">
+                <div className="flex items-start gap-3 min-w-0">
+                  <span className="text-2xl shrink-0">
+                    {getCategoryIcon(challenge.category)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <CardTitle className="text-lg font-bold text-white group-hover:text-yellow-400 transition-colors break-words leading-snug">
+                      {challenge.title}
+                    </CardTitle>
+                    <p className="text-gray-400 text-sm mt-1 line-clamp-2 break-words">
+                      {challenge.description}
+                    </p>
                   </div>
                 </div>
               </CardHeader>
 
               <CardContent className="pt-0">
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Badge className={getDifficultyColor(challenge.difficulty)}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Badge
+                      className={`${getDifficultyColor(challenge.difficulty)} capitalize shrink-0`}
+                    >
                       {challenge.difficulty}
                     </Badge>
-                    <div className="flex items-center gap-4 text-sm text-gray-400">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
+                    <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
+                      <span className="flex items-center gap-1 whitespace-nowrap">
+                        <Clock className="w-4 h-4 shrink-0" />
                         {challenge.duration_minutes || 20}min
                       </span>
-                      <span className="flex items-center gap-1">
-                        <Star className="w-4 h-4" />+{challenge.xp_reward}XP
+                      <span className="flex items-center gap-1 whitespace-nowrap">
+                        <Star className="w-4 h-4 shrink-0" />+
+                        {challenge.xp_reward}XP
+                      </span>
+                      <span className="flex items-center gap-1 whitespace-nowrap">
+                        <Users className="w-4 h-4 shrink-0" />
+                        {challengeCompletionCounts[challenge.id] ?? 0}{" "}
+                        completed
                       </span>
                     </div>
                   </div>
@@ -617,7 +709,7 @@ export default function Challenges() {
                               <Badge
                                 key={index}
                                 variant="outline"
-                                className="text-xs"
+                                className="text-xs max-w-full whitespace-normal break-words h-auto py-1"
                               >
                                 {equipment}
                               </Badge>
@@ -627,53 +719,79 @@ export default function Challenges() {
                       </div>
                     )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2">
                     <Button
-                      className="w-full bg-brand-orange hover:opacity-90 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+                      className="w-full h-auto min-h-9 whitespace-normal bg-brand-orange hover:opacity-90 text-white shadow-lg hover:shadow-xl transition-all duration-200"
                       onClick={() => navigate(`/workouts/${challenge.id}`)}
                     >
                       {isChallengeCompleted(challenge.id) ? (
                         <>
-                          <CheckCircle className="w-4 h-4 mr-2" />
+                          <CheckCircle className="w-4 h-4 mr-2 shrink-0" />
                           Completed
                         </>
                       ) : (
                         <>
-                          <Play className="w-4 h-4 mr-2" />
+                          <Play className="w-4 h-4 mr-2 shrink-0" />
                           Start Workout
                         </>
                       )}
                     </Button>
                     <Button
                       variant="outline"
-                      className="w-full border-brand-orange/60 text-brand-orange hover:bg-brand-orange/10 shadow-lg hover:shadow-xl transition-all duration-200"
-                      onClick={() => openScheduleDialog(challenge)}
+                      className="w-full h-auto min-h-9 whitespace-normal border-brand-orange/60 text-brand-orange hover:bg-brand-orange/10 shadow-lg hover:shadow-xl transition-all duration-200"
+                      onClick={() => openScheduleDialog(challenge, "challenge")}
                     >
-                      <CalendarPlus className="w-4 h-4 mr-2" />
+                      <CalendarPlus className="w-4 h-4 mr-2 shrink-0" />
                       Add to Schedule
                     </Button>
                   </div>
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
+          </div>
+        )}
 
-        {filteredChallenges.length === 0 && (
-          <div className="text-center py-12">
-            <div className="w-24 h-24 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Trophy className="w-12 h-12 text-yellow-500" />
+        {/* Drills Grid (formerly Drill Library) */}
+        {filteredDrills.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Dumbbell className="w-5 h-5 text-brand-orange" />
+              Drills
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredDrills.map((drill) => (
+                <DrillCard
+                  key={drill.id}
+                  drill={drill}
+                  isCompleted={completedDrillIds.includes(drill.id)}
+                  completionCount={drillCompletionCounts[drill.id] ?? 0}
+                  onAddToSchedule={(item) => openScheduleDialog(item, "drill")}
+                />
+              ))}
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              No Workouts Found
+          </div>
+        )}
+
+        {gridChallenges.length === 0 && filteredDrills.length === 0 && (
+          <div className="text-center py-12">
+            <div className="w-24 h-24 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Search className="w-12 h-12 text-yellow-500" />
+            </div>
+            <h3 className="text-xl font-semibold text-white mb-2">
+              No Workouts or Drills Found
             </h3>
-            <p className="text-gray-600 mb-6">
-              Try adjusting your filters or check back later for new workouts
+            <p className="text-gray-400 mb-6">
+              Try a different search or adjust your category and difficulty
+              filters
             </p>
             <Button
               onClick={() => {
                 setSelectedCategory("all");
                 setSelectedDifficulty("all");
+                setSearchQuery("");
               }}
               className="bg-gradient-to-r from-yellow-500 to-orange-600"
             >

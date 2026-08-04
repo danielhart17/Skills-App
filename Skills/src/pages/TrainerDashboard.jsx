@@ -39,6 +39,9 @@ import {
   AlertCircle,
   ExternalLink,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
+  DollarSign,
 } from "lucide-react";
 import { ImageUpload } from "@/components/ImageUpload";
 import { toast } from "sonner";
@@ -67,7 +70,9 @@ export default function TrainerDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("challenges");
   const [challenges, setChallenges] = useState([]);
+  const [trainingSessions, setTrainingSessions] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [selectedSession, setSelectedSession] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [events, setEvents] = useState([]);
   const [trainerProfile, setTrainerProfile] = useState(null);
@@ -131,8 +136,7 @@ export default function TrainerDashboard() {
           .order("created_at", { ascending: false });
         if (error) throw error;
         setChallenges(data || []);
-      } else if (activeTab === "bookings") {
-        // Get trainer profile first to get the trainer_id
+      } else if (activeTab === "sessions") {
         const { data: trainerData, error: trainerError } = await supabase
           .from("trainers")
           .select("*")
@@ -146,47 +150,30 @@ export default function TrainerDashboard() {
 
         if (trainerData) {
           setTrainerProfile(trainerData);
-          console.log("Found trainer data:", trainerData);
-          console.log("Looking for bookings with trainer_id:", trainerData.id);
 
-          // First, let's check what the current user's auth context looks like
-          const {
-            data: { user: currentUser },
-          } = await supabase.auth.getUser();
-          console.log("Current authenticated user:", currentUser);
+          const [sessionsResult, bookingsResult] = await Promise.all([
+            supabase
+              .from("trainer_services")
+              .select("*")
+              .eq("trainer_id", trainerData.id)
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("bookings")
+              .select("*, profiles:user_id(full_name, email)")
+              .eq("trainer_id", trainerData.id)
+              .order("booking_datetime", { ascending: true }),
+          ]);
 
-          // Check the user's profile and role
-          const { data: userProfile, error: profileError } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", currentUser.id)
-            .single();
-          console.log(
-            "User profile:",
-            userProfile,
-            "Profile error:",
-            profileError
-          );
+          if (sessionsResult.error) throw sessionsResult.error;
+          if (bookingsResult.error) throw bookingsResult.error;
 
-          // Now fetch bookings using the trainer_id from the trainers table
-          const { data, error } = await supabase
-            .from("bookings")
-            .select("*, profiles:user_id(full_name, email)")
-            .eq("trainer_id", trainerData.id)
-            .order("booking_datetime", { ascending: true });
-
-          console.log("Bookings query result:", { data, error });
-
-          if (error) {
-            console.error("Error fetching bookings:", error);
-            throw error;
-          }
-          setBookings(data || []);
+          setTrainingSessions(sessionsResult.data || []);
+          setBookings(bookingsResult.data || []);
         } else {
-          // No trainer profile found
-          console.log("No trainer profile found for user:", profile.id);
           setTrainerProfile(null);
+          setTrainingSessions([]);
           setBookings([]);
+          setSelectedSession(null);
         }
       } else if (activeTab === "reviews") {
         // Get trainer profile first
@@ -438,6 +425,83 @@ export default function TrainerDashboard() {
     }
   };
 
+  const getSessionBookings = (session) => {
+    if (!session) return [];
+    return bookings.filter(
+      (booking) =>
+        booking.service_id === session.id ||
+        (!booking.service_id &&
+          booking.service_name &&
+          booking.service_name === session.name)
+    );
+  };
+
+  const handleSaveTrainingSession = async (data, isEdit = false) => {
+    if (!trainerProfile?.id) {
+      toast.error("Create your trainer profile before adding training sessions.");
+      setActiveTab("profile");
+      return;
+    }
+
+    try {
+      const saveData = {
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        price: Number(data.price) || 0,
+        duration_minutes: Number(data.duration_minutes) || 60,
+        trainer_id: trainerProfile.id,
+      };
+
+      if (isEdit) {
+        const { error } = await supabase
+          .from("trainer_services")
+          .update(saveData)
+          .eq("id", data.id);
+        if (error) throw error;
+        toast.success("Training session updated");
+        if (selectedSession?.id === data.id) {
+          setSelectedSession({ ...selectedSession, ...saveData, id: data.id });
+        }
+      } else {
+        const { error } = await supabase
+          .from("trainer_services")
+          .insert([saveData]);
+        if (error) throw error;
+        toast.success("Training session created — athletes can book it now");
+      }
+
+      await loadData();
+    } catch (error) {
+      console.error("Error saving training session:", error);
+      toast.error(error.message || "Failed to save training session");
+      throw error;
+    }
+  };
+
+  const handleDeleteTrainingSession = async (id) => {
+    if (
+      !confirm(
+        "Delete this training session? Existing bookings stay, but athletes can no longer book this offering."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("trainer_services")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      toast.success("Training session deleted");
+      if (selectedSession?.id === id) setSelectedSession(null);
+      loadData();
+    } catch (error) {
+      console.error("Error deleting training session:", error);
+      toast.error(error.message || "Failed to delete training session");
+    }
+  };
+
   const handleAddGalleryItem = async (item) => {
     try {
       const currentGallery = trainerProfile?.gallery || [];
@@ -520,13 +584,16 @@ export default function TrainerDashboard() {
           <h1 className="text-2xl sm:text-3xl font-bold">Trainer Dashboard</h1>
         </div>
         <p className="text-sm sm:text-base text-muted-foreground">
-          Manage your workouts, bookings, and profile
+          Manage your workouts, training sessions, and profile
         </p>
       </div>
 
       <Tabs
         value={activeTab}
-        onValueChange={setActiveTab}
+        onValueChange={(value) => {
+          setSelectedSession(null);
+          setActiveTab(value);
+        }}
         className="space-y-6"
       >
         <div className="-mx-4 sm:mx-0 overflow-x-auto px-4 sm:px-0 pb-1">
@@ -539,9 +606,9 @@ export default function TrainerDashboard() {
             <CalendarPlus className="w-4 h-4 mr-1.5 sm:mr-2" />
             Events
           </TabsTrigger>
-          <TabsTrigger value="bookings" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+          <TabsTrigger value="sessions" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
             <Calendar className="w-4 h-4 mr-1.5 sm:mr-2" />
-            Bookings
+            Training Sessions
           </TabsTrigger>
           <TabsTrigger value="reviews" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
             <Star className="w-4 h-4 mr-1.5 sm:mr-2" />
@@ -745,67 +812,240 @@ export default function TrainerDashboard() {
           )}
         </TabsContent>
 
-        {/* Bookings Tab */}
-        <TabsContent value="bookings" className="space-y-4">
-          <h2 className="text-2xl font-semibold">
-            My Bookings ({bookings.length})
-          </h2>
-
+        {/* Training Sessions Tab (replaces flat Bookings list) */}
+        <TabsContent value="sessions" className="space-y-4">
           {!trainerProfile ? (
             <Card>
               <CardContent className="py-12 text-center">
                 <User className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-muted-foreground mb-4">
-                  Set up your trainer profile to receive bookings
+                  Set up your trainer profile to offer training sessions
                 </p>
                 <Button onClick={() => setActiveTab("profile")}>
                   Create Trainer Profile
                 </Button>
               </CardContent>
             </Card>
-          ) : bookings.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                <p className="text-muted-foreground">No bookings yet</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4">
-              {bookings.map((booking) => (
-                <Card key={booking.id}>
-                  <CardHeader>
-                    <CardTitle>
-                      {booking.profiles?.full_name || "Unknown User"}
-                    </CardTitle>
-                    <CardDescription>{booking.profiles?.email}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-muted-foreground" />
-                        <span>
-                          {new Date(booking.booking_datetime).toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex gap-2">
-                        <Badge>{booking.status}</Badge>
-                        {booking.duration_minutes && (
-                          <Badge variant="secondary">
-                            {booking.duration_minutes} min
-                          </Badge>
-                        )}
-                      </div>
-                      {booking.notes && (
-                        <p className="text-sm text-muted-foreground mt-2">
-                          {booking.notes}
-                        </p>
-                      )}
+          ) : selectedSession ? (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div className="space-y-2">
+                  <Button
+                    variant="ghost"
+                    className="px-0 h-auto text-muted-foreground hover:text-foreground"
+                    onClick={() => setSelectedSession(null)}
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" />
+                    Back to Training Sessions
+                  </Button>
+                  <div>
+                    <h2 className="text-2xl font-semibold">
+                      {selectedSession.name}
+                    </h2>
+                    <p className="text-muted-foreground mt-1">
+                      {selectedSession.description || "No description"}
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <Badge variant="secondary">
+                        <DollarSign className="w-3 h-3 mr-1" />
+                        ${selectedSession.price}
+                      </Badge>
+                      <Badge variant="outline">
+                        <Clock className="w-3 h-3 mr-1" />
+                        {selectedSession.duration_minutes} min
+                      </Badge>
+                      <Badge>
+                        <Users className="w-3 h-3 mr-1" />
+                        {getSessionBookings(selectedSession).length} booked
+                      </Badge>
                     </div>
+                  </div>
+                </div>
+                <TrainingSessionDialog
+                  session={selectedSession}
+                  onSave={(data) => handleSaveTrainingSession(data, true)}
+                  trigger={
+                    <Button variant="outline" size="sm">
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit Session
+                    </Button>
+                  }
+                />
+              </div>
+
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Users className="w-5 h-5 text-brand-orange" />
+                Who booked this session
+              </h3>
+
+              {getSessionBookings(selectedSession).length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground">
+                      No one has booked this session yet
+                    </p>
                   </CardContent>
                 </Card>
-              ))}
+              ) : (
+                <div className="grid gap-4">
+                  {getSessionBookings(selectedSession).map((booking) => (
+                    <Card key={booking.id}>
+                      <CardHeader>
+                        <CardTitle>
+                          {booking.profiles?.full_name || "Unknown Athlete"}
+                        </CardTitle>
+                        <CardDescription>
+                          {booking.profiles?.email || "No email on file"}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-muted-foreground" />
+                            <span>
+                              {new Date(
+                                booking.booking_datetime
+                              ).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge>{booking.status}</Badge>
+                            {booking.payment_status && (
+                              <Badge variant="secondary">
+                                {booking.payment_status}
+                              </Badge>
+                            )}
+                            {booking.duration_minutes && (
+                              <Badge variant="outline">
+                                {booking.duration_minutes} min
+                              </Badge>
+                            )}
+                          </div>
+                          {(booking.user_notes || booking.notes) && (
+                            <p className="text-sm text-muted-foreground mt-2">
+                              {booking.user_notes || booking.notes}
+                            </p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
+          ) : (
+            <>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-semibold">
+                    Training Sessions ({trainingSessions.length})
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Create bookable sessions for athletes, then open one to see
+                    who booked.
+                  </p>
+                </div>
+                <TrainingSessionDialog
+                  onSave={(data) => handleSaveTrainingSession(data)}
+                  trigger={
+                    <Button>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Training Session
+                    </Button>
+                  }
+                />
+              </div>
+
+              {trainingSessions.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground mb-4">
+                      No training sessions yet. Add one so athletes can book
+                      with you.
+                    </p>
+                    <TrainingSessionDialog
+                      onSave={(data) => handleSaveTrainingSession(data)}
+                      trigger={
+                        <Button>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Training Session
+                        </Button>
+                      }
+                    />
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-4">
+                  {trainingSessions.map((session) => {
+                    const sessionBookings = getSessionBookings(session);
+                    return (
+                      <Card
+                        key={session.id}
+                        className="cursor-pointer hover:border-brand-orange/50 transition-colors"
+                        onClick={() => setSelectedSession(session)}
+                      >
+                        <CardHeader>
+                          <div className="flex justify-between items-start gap-3">
+                            <div className="min-w-0">
+                              <CardTitle className="flex items-center gap-2">
+                                {session.name}
+                                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                              </CardTitle>
+                              <CardDescription className="line-clamp-2 mt-1">
+                                {session.description || "No description"}
+                              </CardDescription>
+                            </div>
+                            <div
+                              className="flex gap-2 shrink-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <TrainingSessionDialog
+                                session={session}
+                                onSave={(data) =>
+                                  handleSaveTrainingSession(data, true)
+                                }
+                                trigger={
+                                  <Button variant="outline" size="sm">
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                }
+                              />
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() =>
+                                  handleDeleteTrainingSession(session.id)
+                                }
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="secondary">
+                              <DollarSign className="w-3 h-3 mr-1" />$
+                              {session.price}
+                            </Badge>
+                            <Badge variant="outline">
+                              <Clock className="w-3 h-3 mr-1" />
+                              {session.duration_minutes} min
+                            </Badge>
+                            <Badge>
+                              <Users className="w-3 h-3 mr-1" />
+                              {sessionBookings.length} booked
+                            </Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
 
@@ -1237,6 +1477,149 @@ function StripeConnectCard({ trainerProfile, stripeStatus, onRefresh, loading, s
 }
 
 // Challenge Dialog Component
+function TrainingSessionDialog({ session, onSave, trigger }) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    id: session?.id,
+    name: session?.name || "",
+    description: session?.description || "",
+    price: session?.price ?? 75,
+    duration_minutes: session?.duration_minutes ?? 60,
+  });
+
+  useEffect(() => {
+    if (open) {
+      setFormData({
+        id: session?.id,
+        name: session?.name || "",
+        description: session?.description || "",
+        price: session?.price ?? 75,
+        duration_minutes: session?.duration_minutes ?? 60,
+      });
+    }
+  }, [open, session]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.name.trim()) {
+      toast.error("Session name is required");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(formData);
+      setOpen(false);
+    } catch {
+      // Parent shows toast
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {session ? "Edit Training Session" : "Add Training Session"}
+          </DialogTitle>
+          <DialogDescription>
+            {session
+              ? "Update this bookable session for athletes"
+              : "Athletes will see this on your profile and can book it"}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="session-name">Session Name</Label>
+            <Input
+              id="session-name"
+              value={formData.name}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
+              placeholder="1-on-1 Shooting Session"
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="session-description">Description</Label>
+            <Textarea
+              id="session-description"
+              value={formData.description}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
+              placeholder="What athletes can expect from this session"
+              rows={3}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="session-price">Price ($)</Label>
+              <Input
+                id="session-price"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.price}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    price: parseFloat(e.target.value) || 0,
+                  })
+                }
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="session-duration">Duration (min)</Label>
+              <Input
+                id="session-duration"
+                type="number"
+                min="15"
+                step="15"
+                value={formData.duration_minutes}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    duration_minutes: parseInt(e.target.value, 10) || 60,
+                  })
+                }
+                required
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : session ? (
+                "Save Changes"
+              ) : (
+                "Create Session"
+              )}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ChallengeDialog({ challenge, onSave, trigger }) {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({

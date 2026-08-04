@@ -1,48 +1,5 @@
-import { format, getDay, getHours, subDays } from "date-fns";
-import { getWeekBounds, toDateKey } from "@/lib/scheduleUtils";
-
-export function weekConfirmStorageKey(athleteId, weekStartDate) {
-  const weekKey =
-    typeof weekStartDate === "string"
-      ? weekStartDate
-      : toDateKey(weekStartDate);
-  return `week_confirmed_${athleteId}_${weekKey}`;
-}
-
-export function isWeekConfirmed(athleteId, weekStartDate) {
-  if (!athleteId) return false;
-  return (
-    localStorage.getItem(weekConfirmStorageKey(athleteId, weekStartDate)) ===
-    "true"
-  );
-}
-
-export function setWeekConfirmed(athleteId, weekStartDate) {
-  localStorage.setItem(
-    weekConfirmStorageKey(athleteId, weekStartDate),
-    "true"
-  );
-}
-
-/** Sunday or Monday before 12:00 local time */
-export function isWeekConfirmWindow(date = new Date()) {
-  const day = getDay(date);
-  const hour = getHours(date);
-  return (day === 0 || day === 1) && hour < 12;
-}
-
-/** Monday noon+ or Tuesday–Saturday */
-export function isLateUnconfirmedWeek(date = new Date()) {
-  const day = getDay(date);
-  const hour = getHours(date);
-  if (day >= 2) return true;
-  if (day === 1 && hour >= 12) return true;
-  return false;
-}
-
-export function getCurrentWeekStart(date = new Date()) {
-  return getWeekBounds(date).start;
-}
+import { format, subDays } from "date-fns";
+import { toDateKey } from "@/lib/scheduleUtils";
 
 export function todayKey(date = new Date()) {
   return toDateKey(date);
@@ -74,12 +31,7 @@ export function last7DayKeys() {
   return keys;
 }
 
-export const WEEK_CONFIRMED_EVENT = "skills:week-confirmed";
 export const GAMIFICATION_UPDATED_EVENT = "skills:gamification-updated";
-
-export function dispatchWeekConfirmed() {
-  window.dispatchEvent(new CustomEvent(WEEK_CONFIRMED_EVENT));
-}
 
 export function dispatchGamificationUpdated() {
   window.dispatchEvent(new CustomEvent(GAMIFICATION_UPDATED_EVENT));

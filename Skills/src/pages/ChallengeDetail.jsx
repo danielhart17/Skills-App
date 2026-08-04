@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Challenge, ChallengeRating, ChallengeProgress } from "@/api/entities";
+import { supabase } from "@/api/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +24,9 @@ import { toast } from "sonner";
 
 function getYouTubeId(url) {
   if (!url) return null;
-  const match = url.match(/(?:v=|youtu\.be\/)([^&?\s]+)/);
+  const match = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/
+  );
   return match ? match[1] : null;
 }
 
@@ -37,6 +40,7 @@ export default function ChallengeDetail() {
   const [userRating, setUserRating] = useState(null);
   const [averageRating, setAverageRating] = useState(0);
   const [ratingCount, setRatingCount] = useState(0);
+  const [completionCount, setCompletionCount] = useState(0);
   const [showRatingForm, setShowRatingForm] = useState(false);
   const [ratingForm, setRatingForm] = useState({
     rating: 5,
@@ -53,15 +57,25 @@ export default function ChallengeDetail() {
 
   const loadChallenge = async () => {
     try {
-      const [challengeData, progressData, ratingData] = await Promise.all([
-        Challenge.get(challengeId),
-        ChallengeProgress.getUserProgress(challengeId),
-        ChallengeRating.getUserRating(challengeId),
-      ]);
+      const [challengeData, progressData, ratingData, countResult] =
+        await Promise.all([
+          Challenge.get(challengeId),
+          ChallengeProgress.getUserProgress(challengeId),
+          ChallengeRating.getUserRating(challengeId),
+          supabase.rpc("get_challenge_completion_count", {
+            p_challenge_id: challengeId,
+          }),
+        ]);
 
       setChallenge(challengeData);
       setIsCompleted(progressData?.is_completed || false);
       setUserRating(ratingData);
+      if (countResult.error) {
+        console.warn("Completion count unavailable:", countResult.error);
+        setCompletionCount(0);
+      } else {
+        setCompletionCount(countResult.data ?? 0);
+      }
 
       // Get all ratings to calculate average
       const allRatings = await ChallengeRating.getByChallenge(challengeId);
@@ -105,6 +119,7 @@ export default function ChallengeDetail() {
         completionForm.notes
       );
       setIsCompleted(true);
+      setCompletionCount((prev) => prev + (isCompleted ? 0 : 1));
       toast.success("Workout marked as complete! Great job!");
     } catch (error) {
       console.error("Error marking challenge complete:", error);
@@ -260,12 +275,45 @@ export default function ChallengeDetail() {
               {challenge.space_required}
             </Badge>
           )}
+          <Badge variant="secondary">
+            <Users className="w-3 h-3 mr-1" />
+            {completionCount} completed
+          </Badge>
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Demo Video */}
+          {challenge.youtube_url && getYouTubeId(challenge.youtube_url) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Play className="w-5 h-5" />
+                  Demo Video
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div
+                  className="relative w-full rounded-xl overflow-hidden border border-gray-700 bg-black"
+                  style={{ paddingBottom: "56.25%", height: 0 }}
+                >
+                  <iframe
+                    src={`https://www.youtube.com/embed/${getYouTubeId(
+                      challenge.youtube_url
+                    )}?rel=0&modestbranding=1`}
+                    className="absolute top-0 left-0 w-full h-full"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    title={`${challenge.title} demo video`}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Purpose */}
           {challenge.purpose && (
             <Card>
@@ -308,21 +356,6 @@ export default function ChallengeDetail() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {challenge.youtube_url && getYouTubeId(challenge.youtube_url) && (
-                  <div
-                    className="relative w-full rounded-xl overflow-hidden border border-gray-700"
-                    style={{ paddingBottom: "56.25%", height: 0 }}
-                  >
-                    <iframe
-                      src={`https://www.youtube.com/embed/${getYouTubeId(challenge.youtube_url)}?rel=0&modestbranding=1`}
-                      className="absolute top-0 left-0 w-full h-full"
-                      frameBorder="0"
-                      allowFullScreen
-                      loading="lazy"
-                      title={challenge.title}
-                    />
-                  </div>
-                )}
                 <div className="text-muted-foreground whitespace-pre-line">
                   {challenge.instructions}
                 </div>
@@ -354,6 +387,14 @@ export default function ChallengeDetail() {
               <CardTitle>Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-lg bg-muted/40 p-3 text-center">
+                <p className="text-2xl font-bold">{completionCount}</p>
+                <p className="text-sm text-muted-foreground">
+                  athlete{completionCount === 1 ? "" : "s"} completed this
+                  workout
+                </p>
+              </div>
+
               {!isCompleted ? (
                 <>
                   <Button onClick={handleStartChallenge} className="w-full">

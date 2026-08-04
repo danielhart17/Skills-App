@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { readLocalAccessToken } from "@/utils/localAuthSession";
 
 // Get Supabase credentials from environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -11,14 +12,40 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error("VITE_SUPABASE_ANON_KEY=your_anon_key");
 }
 
-// Create Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    // Fail fast if another tab/operation holds the auth lock.
+    lockAcquireTimeout: 2000,
+  },
+  storage: {
+    // Routes large uploads through storage.supabase.co (avoids buffering/hangs).
+    useNewHostname: true,
   },
 });
+
+// Avoid hanging every API call on supabase.auth.getSession().
+const originalGetAccessToken = supabaseClient._getAccessToken.bind(supabaseClient);
+supabaseClient._getAccessToken = async () => {
+  const localToken = readLocalAccessToken({ allowExpired: true });
+  if (localToken) return localToken;
+
+  try {
+    return await Promise.race([
+      originalGetAccessToken(),
+      new Promise((_, reject) => {
+        window.setTimeout(() => reject(new Error("Auth token timeout")), 2000);
+      }),
+    ]);
+  } catch (error) {
+    console.warn("Falling back to anon key for Supabase request:", error);
+    return supabaseAnonKey;
+  }
+};
+
+export const supabase = supabaseClient;
 
 // Helper function to get current user
 export const getCurrentUser = async () => {

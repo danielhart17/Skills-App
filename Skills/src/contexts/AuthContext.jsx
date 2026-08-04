@@ -1,5 +1,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/api/supabaseClient";
+import {
+  buildMetadataProfile,
+  readLocalUser,
+} from "@/utils/localAuthSession";
 
 const AuthContext = createContext({});
 
@@ -12,125 +16,96 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const initialUser = readLocalUser();
+  const [user, setUser] = useState(initialUser);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState("user"); // Default role
-  const [profileLoaded, setProfileLoaded] = useState(false); // Track if profile was successfully fetched
+  const [role, setRole] = useState(() =>
+    initialUser
+      ? buildMetadataProfile(initialUser, initialUser.id).role
+      : "user"
+  );
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
-    let timeoutId = null;
 
-    // Set a maximum loading time of 10 seconds
-    timeoutId = setTimeout(() => {
+    const finishLoading = () => {
       if (isMounted) {
         setLoading(false);
       }
-    }, 10000);
-
-    // Check active sessions and sets the user
-    const getSession = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (!isMounted) return; // Component unmounted
-
-        setUser(session?.user ?? null);
-
-        if (session?.user) {
-          await fetchProfile(session.user.id);
-        } else {
-          setProfile(null);
-          setRole("user");
-        }
-
-        if (isMounted) {
-          setLoading(false);
-          if (timeoutId) clearTimeout(timeoutId);
-        }
-      } catch (error) {
-        console.error("Error getting session:", error);
-        if (isMounted) {
-          setUser(null);
-          setProfile(null);
-          setLoading(false);
-          if (timeoutId) clearTimeout(timeoutId);
-        }
-      }
     };
 
-    getSession();
+    const bootstrapProfile = async (authUser) => {
+      if (!authUser?.id) {
+        finishLoading();
+        return;
+      }
 
-    // Listen for auth changes
+      setUser(authUser);
+      await fetchProfile(authUser.id, authUser);
+      finishLoading();
+    };
+
+    const localUser = readLocalUser();
+    if (localUser) {
+      bootstrapProfile(localUser);
+    } else {
+      finishLoading();
+    }
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return; // Component unmounted
+      if (!isMounted) return;
 
-      // Only fetch profile on meaningful auth changes, not token refreshes
-      const meaningfulEvents = ['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED'];
-      
-      if (event === 'SIGNED_OUT') {
+      const meaningfulEvents = ["SIGNED_IN", "SIGNED_OUT", "USER_UPDATED", "INITIAL_SESSION"];
+
+      if (event === "SIGNED_OUT") {
         setUser(null);
         setProfile(null);
         setRole("user");
+        setProfileLoaded(false);
       } else if (meaningfulEvents.includes(event)) {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await fetchProfile(session.user.id);
+        const nextUser = session?.user ?? null;
+        setUser(nextUser);
+
+        if (nextUser) {
+          await fetchProfile(nextUser.id, nextUser);
+        } else {
+          setProfile(null);
+          setRole("user");
+          setProfileLoaded(false);
         }
       }
-      // Ignore TOKEN_REFRESHED and other events - no need to refetch profile
 
-      if (isMounted) {
-        setLoading(false);
-        if (timeoutId) clearTimeout(timeoutId);
-      }
+      finishLoading();
     });
+
+    const loadingTimeoutId = window.setTimeout(finishLoading, 3000);
 
     return () => {
       isMounted = false;
-      if (timeoutId) clearTimeout(timeoutId);
+      window.clearTimeout(loadingTimeoutId);
       subscription.unsubscribe();
     };
-  }, []); // Empty dependency array - only run once on mount
+  }, []);
 
-  const fetchProfile = async (userId, forceRefresh = false) => {
-    // Don't refetch if we already have a valid profile (unless forced)
+  const fetchProfile = async (userId, authUser = user, forceRefresh = false) => {
     if (profile && profile.id === userId && !forceRefresh) {
       return profile;
     }
 
-    const getMetadataProfile = async () => {
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-      const metadataRole = authUser?.user_metadata?.role;
-      const allowedRoles = ["user", "athlete", "parent", "trainer", "admin"];
-      const safeRole = allowedRoles.includes(metadataRole)
-        ? metadataRole
-        : "user";
-
-      return {
-        id: userId,
-        email: authUser?.email || null,
-        full_name: authUser?.user_metadata?.full_name || "User",
-        role: safeRole,
-        current_level: 1,
-        total_xp: 0,
-        current_streak: 0,
-        longest_streak: 0,
-        entry_exam_completed: safeRole !== "user" && safeRole !== "athlete",
-      };
+    const applyProfile = (profileData, loaded = true) => {
+      setProfile(profileData);
+      setRole(profileData?.role || "user");
+      setProfileLoaded(loaded);
+      return profileData;
     };
 
     try {
-      // Add a timeout to the profile fetch (increased to 15 seconds)
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Profile fetch timeout")), 15000)
+        window.setTimeout(() => reject(new Error("Profile fetch timeout")), 10000)
       );
 
       const fetchPromise = supabase
@@ -139,10 +114,7 @@ export const AuthProvider = ({ children }) => {
         .eq("id", userId)
         .single();
 
-      const { data, error } = await Promise.race([
-        fetchPromise,
-        timeoutPromise,
-      ]);
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (error) {
         if (error.code !== "PGRST116") {
@@ -162,7 +134,7 @@ export const AuthProvider = ({ children }) => {
         } else if (repairResult.data) {
           createdProfile = repairResult.data;
         } else {
-          const profileFromMetadata = await getMetadataProfile();
+          const profileFromMetadata = buildMetadataProfile(authUser, userId);
           const upsertResult = await supabase
             .from("profiles")
             .upsert(profileFromMetadata, { onConflict: "id" })
@@ -177,50 +149,33 @@ export const AuthProvider = ({ children }) => {
           throw createError;
         }
 
-        const normalizedProfile = {
+        return applyProfile({
           ...createdProfile,
           entry_exam_completed: createdProfile.entry_exam_completed ?? false,
-        };
-
-        setProfile(normalizedProfile);
-        setRole(normalizedProfile?.role || "user");
-        setProfileLoaded(true);
-        return normalizedProfile;
+        });
       }
 
-      // Ensure entry_exam_completed has a default value
-      const profileData = {
+      return applyProfile({
         ...data,
         entry_exam_completed: data.entry_exam_completed ?? false,
-      };
-
-      setProfile(profileData);
-      setRole(profileData?.role || "user");
-      setProfileLoaded(true); // Mark as successfully loaded
-      return profileData;
+      });
     } catch (error) {
       console.error("Error fetching profile:", error);
 
-      // On error, keep the role from auth metadata so routing does not
-      // temporarily send users to the wrong dashboard.
       if (!profile) {
-        const fallbackProfile = await getMetadataProfile();
-        setProfile(fallbackProfile);
-        setRole(fallbackProfile.role);
+        return applyProfile(buildMetadataProfile(authUser, userId), false);
       }
-      // Keep profileLoaded as false on error so we know fetch failed
+
       return profile;
     }
   };
 
-  // Helper functions to check roles
   const isAdmin = () => role === "admin";
   const isTrainer = () => role === "trainer" || role === "admin";
   const isUser = () => role === "user" || role === "athlete";
   const isParent = () => role === "parent";
   const isAthlete = () => role === "user" || role === "athlete";
 
-  // Auth functions
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -232,12 +187,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const signUp = async (email, password, fullName, selectedRole = "athlete") => {
-    // Map frontend role selection to database role.
     const allowedSignupRoles = ["athlete", "parent", "trainer"];
     const dbRole = allowedSignupRoles.includes(selectedRole)
       ? selectedRole
       : "athlete";
-    
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -253,15 +207,39 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+  const clearAuthState = () => {
+    setUser(null);
+    setProfile(null);
+    setRole("user");
+    setProfileLoaded(false);
   };
 
-  // Refresh profile data (useful after completing entry exam, etc.)
+  const signOut = async () => {
+    clearAuthState();
+
+    try {
+      const remoteSignOut = supabase.auth.signOut();
+      const timeout = new Promise((_, reject) => {
+        window.setTimeout(
+          () => reject(new Error("Sign out timed out")),
+          5000
+        );
+      });
+
+      await Promise.race([remoteSignOut, timeout]);
+    } catch (error) {
+      console.warn("Remote sign out failed, clearing local session:", error);
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } catch (localError) {
+        console.error("Local sign out failed:", localError);
+      }
+    }
+  };
+
   const refreshProfile = async () => {
     if (user?.id) {
-      return await fetchProfile(user.id, true);
+      return await fetchProfile(user.id, user, true);
     }
     return null;
   };
