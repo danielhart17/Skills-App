@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   MapPin,
   Star,
+  Clock,
   Calendar,
   CheckCircle,
   Play,
@@ -21,6 +22,9 @@ import {
   Images,
   Video,
   X,
+  UserPlus,
+  UserCheck,
+  Loader2,
 } from "lucide-react";
 import {
   Dialog,
@@ -28,6 +32,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { format } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  followTrainer,
+  unfollowTrainer,
+  isFollowingTrainer,
+  getTrainerAuthUserId,
+} from "@/api/followService";
+import { toast } from "sonner";
 
 // Helper to extract YouTube video ID
 const getYouTubeId = (url) => {
@@ -60,11 +72,14 @@ export default function TrainerProfile() {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const returnTo = searchParams.get("returnTo");
+  const { user, isAthlete } = useAuth();
   const [trainer, setTrainer] = useState(null);
   const [events, setEvents] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [services, setServices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [following, setFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
 
   const bookingHref = (trainerId, serviceId) => {
     const params = new URLSearchParams({ trainerId });
@@ -94,10 +109,49 @@ export default function TrainerProfile() {
       setEvents(eventsData);
       setReviews(reviewsData);
       setServices(servicesData);
+
+      const trainerUserId = getTrainerAuthUserId(trainerData);
+      if (user?.id && isAthlete?.() && trainerUserId) {
+        const follows = await isFollowingTrainer(user.id, trainerUserId);
+        setFollowing(follows);
+      } else {
+        setFollowing(false);
+      }
     } catch (error) {
       console.error("Error loading trainer profile:", error);
     }
     setIsLoading(false);
+  };
+
+  const handleToggleFollow = async () => {
+    const trainerUserId = getTrainerAuthUserId(trainer);
+    if (!trainerUserId || !user?.id) {
+      toast.error("Sign in as an athlete to follow trainers.");
+      return;
+    }
+
+    setFollowBusy(true);
+    try {
+      if (following) {
+        await unfollowTrainer(trainerUserId);
+        setFollowing(false);
+        toast.success(`Unfollowed ${trainer.name}`);
+      } else {
+        await followTrainer(trainerUserId);
+        setFollowing(true);
+        toast.success(
+          `Following ${trainer.name}. New workouts will show up in your notifications.`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error(
+        error.message ||
+          "Couldn't update follow. Run add_athlete_follow_trainers.sql in Supabase, then try again."
+      );
+    } finally {
+      setFollowBusy(false);
+    }
   };
 
   const getSpecializationColor = (specialization) => {
@@ -166,13 +220,35 @@ export default function TrainerProfile() {
                   {trainer.bio?.substring(0, 150)}
                   {trainer.bio?.length > 150 && "..."}
                 </p>
-                <div className="mt-6 flex justify-center md:justify-start gap-3">
+                <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-3">
                   <Link to={bookingHref(trainer.id)}>
                     <Button className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg">
                       <Calendar className="w-4 h-4 mr-2" />
                       Book a Session
                     </Button>
                   </Link>
+                  {isAthlete?.() && (
+                    <Button
+                      type="button"
+                      variant={following ? "outline" : "default"}
+                      className={
+                        following
+                          ? "border-brand-orange/50 text-brand-orange"
+                          : "bg-brand-orange hover:opacity-90 text-white"
+                      }
+                      disabled={followBusy || !getTrainerAuthUserId(trainer)}
+                      onClick={handleToggleFollow}
+                    >
+                      {followBusy ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : following ? (
+                        <UserCheck className="w-4 h-4 mr-2" />
+                      ) : (
+                        <UserPlus className="w-4 h-4 mr-2" />
+                      )}
+                      {following ? "Following" : "Follow"}
+                    </Button>
+                  )}
                   <Button variant="outline">
                     <Play className="w-4 h-4 mr-2" />
                     Watch Training
@@ -247,7 +323,7 @@ export default function TrainerProfile() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-white">
                   <Sparkles className="w-5 h-5 text-orange-400" />
-                  Training Services
+                  Training Sessions
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -272,20 +348,61 @@ export default function TrainerProfile() {
                           </Button>
                         </Link>
                       </div>
-                      <div className="flex items-center gap-4 text-sm mt-3 pt-3 border-t border-gray-700">
+                      <div className="flex flex-wrap items-center gap-3 text-sm mt-3 pt-3 border-t border-gray-700">
+                        <span className="text-gray-300">
+                          {service.skill_level === "beginner"
+                            ? "Beginner"
+                            : service.skill_level === "intermediate"
+                              ? "Intermediate"
+                              : service.skill_level === "advanced"
+                                ? "Advanced"
+                                : "All Levels"}
+                        </span>
+                        {service.is_recurring ? (
+                          <span className="text-gray-300 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-brand-orange" />
+                            Weekly
+                            {Array.isArray(service.recurrence_days) &&
+                            service.recurrence_days.length
+                              ? ` (${service.recurrence_days
+                                  .map((d) =>
+                                    String(d).slice(0, 3).toUpperCase()
+                                  )
+                                  .join(", ")})`
+                              : ""}
+                          </span>
+                        ) : service.session_date ? (
+                          <span className="text-gray-300 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-brand-orange" />
+                            {new Date(
+                              `${service.session_date}T00:00:00`
+                            ).toLocaleDateString()}
+                          </span>
+                        ) : null}
+                        {service.start_time && (
+                          <span className="text-gray-300 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-brand-orange" />
+                            {String(service.start_time).slice(0, 5)}
+                          </span>
+                        )}
+                        {service.location && (
+                          <span className="text-gray-300 flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-brand-orange" />
+                            {service.location}
+                          </span>
+                        )}
                         <span className="font-bold text-blue-400">
                           ${service.price}
                         </span>
                         <span className="text-gray-400">
                           {service.duration_minutes} min
                         </span>
-                        <Badge variant="secondary">{service.type}</Badge>
                       </div>
                     </div>
                   ))
                 ) : (
                   <p className="text-gray-400">
-                    No specific services listed. Contact trainer for details.
+                    No training sessions listed yet.
                   </p>
                 )}
               </CardContent>

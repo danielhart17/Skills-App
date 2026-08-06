@@ -18,7 +18,11 @@ serve(async (req) => {
 
   try {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    const webhookSecret = Deno.env.get("STRIPE_CONNECT_WEBHOOK_SECRET");
+    const accountWebhookSecret = Deno.env.get("STRIPE_ACCOUNT_WEBHOOK_SECRET");
+    const connectWebhookSecret = Deno.env.get("STRIPE_CONNECT_WEBHOOK_SECRET");
+    const webhookSecrets = [accountWebhookSecret, connectWebhookSecret].filter(
+      (secret): secret is string => Boolean(secret)
+    );
 
     if (!stripeKey) {
       console.error("STRIPE_SECRET_KEY not configured");
@@ -28,8 +32,10 @@ serve(async (req) => {
       );
     }
 
-    if (!webhookSecret) {
-      console.error("STRIPE_CONNECT_WEBHOOK_SECRET not configured — refusing to process webhook");
+    if (webhookSecrets.length === 0) {
+      console.error(
+        "Neither STRIPE_ACCOUNT_WEBHOOK_SECRET nor STRIPE_CONNECT_WEBHOOK_SECRET configured — refusing to process webhook"
+      );
       return new Response(
         JSON.stringify({ error: "Webhook secret not configured" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
@@ -55,12 +61,18 @@ serve(async (req) => {
       );
     }
 
-    // Verify webhook signature — required, no fallback.
-    let event: Stripe.Event;
-    try {
-      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
-    } catch (err) {
-      console.error("Webhook signature verification failed:", err);
+    // Verify webhook signature against either account or Connect secret.
+    let event: Stripe.Event | null = null;
+    for (const secret of webhookSecrets) {
+      try {
+        event = await stripe.webhooks.constructEventAsync(body, signature, secret);
+        break;
+      } catch {
+        // Try the next secret.
+      }
+    }
+    if (!event) {
+      console.error("Webhook signature verification failed for all configured secrets");
       return new Response(
         JSON.stringify({ error: "Invalid signature" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }

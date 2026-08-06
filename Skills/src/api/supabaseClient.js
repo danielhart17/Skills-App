@@ -12,13 +12,22 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error("VITE_SUPABASE_ANON_KEY=your_anon_key");
 }
 
+// Avoid Navigator LockManager "lock was released because another request stole it"
+// races (common on Vercel / multi-tab). Process-local lock is enough for SPA auth.
+let authLockChain = Promise.resolve();
+async function processAuthLock(_name, _acquireTimeout, fn) {
+  const run = authLockChain.then(() => fn());
+  // Keep the chain alive even if a lock holder rejects.
+  authLockChain = run.catch(() => {});
+  return run;
+}
+
 const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // Fail fast if another tab/operation holds the auth lock.
-    lockAcquireTimeout: 2000,
+    lock: processAuthLock,
   },
   storage: {
     // Routes large uploads through storage.supabase.co (avoids buffering/hangs).
@@ -26,7 +35,7 @@ const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// Avoid hanging every API call on supabase.auth.getSession().
+// Prefer the local persisted token so API calls don't contend on auth.getSession().
 const originalGetAccessToken = supabaseClient._getAccessToken.bind(supabaseClient);
 supabaseClient._getAccessToken = async () => {
   const localToken = readLocalAccessToken({ allowExpired: true });

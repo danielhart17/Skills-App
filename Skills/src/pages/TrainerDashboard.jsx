@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Card,
@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/api/supabaseClient";
 import { createConnectAccount, getTrainerStripeStatus } from "@/api/stripeService";
+import { fetchTrainerActiveConnections } from "@/api/messagingService";
+import { notifyFollowersOfWorkout } from "@/api/followService";
 import {
   Trophy,
   Calendar,
@@ -36,15 +38,22 @@ import {
   Upload,
   CreditCard,
   CheckCircle,
+  CheckCircle2,
   AlertCircle,
   ExternalLink,
   Loader2,
   ChevronLeft,
   ChevronRight,
   DollarSign,
+  MessageCircle,
 } from "lucide-react";
 import { ImageUpload } from "@/components/ImageUpload";
 import { toast } from "sonner";
+import {
+  SKILL_LEVEL_OPTIONS,
+  skillLevelLabel,
+  normalizeRecurrenceDays,
+} from "@/lib/sessionBooking";
 import {
   Dialog,
   DialogContent,
@@ -64,8 +73,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+const EMPTY_DASHBOARD_STATS = {
+  athletesRegistered: 0,
+  sessionsCompleted: 0,
+  upcomingBookings: 0,
+  avgRating: null,
+  reviewCount: 0,
+  workoutsCreated: 0,
+  activeSessions: 0,
+  upcomingEvents: 0,
+};
+
+const DAYS_OF_WEEK = [
+  { key: "monday", label: "Monday" },
+  { key: "tuesday", label: "Tuesday" },
+  { key: "wednesday", label: "Wednesday" },
+  { key: "thursday", label: "Thursday" },
+  { key: "friday", label: "Friday" },
+  { key: "saturday", label: "Saturday" },
+  { key: "sunday", label: "Sunday" },
+];
+
 export default function TrainerDashboard() {
-  const { isTrainer, profile } = useAuth();
+  const { isTrainer, profile, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("challenges");
@@ -79,6 +109,8 @@ export default function TrainerDashboard() {
   const [_loading, setLoading] = useState(true);
   const [stripeStatus, setStripeStatus] = useState(null);
   const [stripeLoading, setStripeLoading] = useState(false);
+  const [dashboardStats, setDashboardStats] = useState(EMPTY_DASHBOARD_STATS);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   // Redirect if not trainer or admin
   useEffect(() => {
@@ -122,6 +154,113 @@ export default function TrainerDashboard() {
       console.error("Error loading Stripe status:", error);
     }
   };
+
+  const loadDashboardOverview = useCallback(async () => {
+    if (!profile?.id) {
+      setStatsLoading(false);
+      return;
+    }
+
+    setStatsLoading(true);
+    try {
+      const { data: trainerData, error: trainerError } = await supabase
+        .from("trainers")
+        .select("*")
+        .eq("user_id", profile.id)
+        .maybeSingle();
+
+      if (trainerError && trainerError.code !== "PGRST116") {
+        throw trainerError;
+      }
+
+      if (trainerData) {
+        setTrainerProfile(trainerData);
+      }
+
+      const trainerId = trainerData?.id;
+      const nowIso = new Date().toISOString();
+      const today = nowIso.slice(0, 10);
+
+      const [
+        challengesResult,
+        sessionsResult,
+        bookingsResult,
+        reviewsResult,
+        eventsResult,
+        connections,
+      ] = await Promise.all([
+        supabase
+          .from("challenges")
+          .select("id", { count: "exact", head: true })
+          .eq("created_by", profile.id),
+        trainerId
+          ? supabase
+              .from("trainer_services")
+              .select("id", { count: "exact", head: true })
+              .eq("trainer_id", trainerId)
+          : Promise.resolve({ count: 0, error: null }),
+        trainerId
+          ? supabase
+              .from("bookings")
+              .select("id, status, booking_datetime")
+              .eq("trainer_id", trainerId)
+          : Promise.resolve({ data: [], error: null }),
+        trainerId
+          ? supabase
+              .from("reviews")
+              .select("rating")
+              .eq("trainer_id", trainerId)
+          : Promise.resolve({ data: [], error: null }),
+        trainerId
+          ? supabase
+              .from("training_events")
+              .select("id, date")
+              .eq("trainer_id", trainerId)
+              .gte("date", today)
+          : Promise.resolve({ data: [], error: null }),
+        user?.id
+          ? fetchTrainerActiveConnections(user.id).catch(() => [])
+          : Promise.resolve([]),
+      ]);
+
+      const bookingRows = bookingsResult.data || [];
+      const completedStatuses = new Set(["completed", "complete"]);
+      const cancelledStatuses = new Set(["cancelled", "canceled"]);
+      const sessionsCompleted = bookingRows.filter((b) =>
+        completedStatuses.has(String(b.status || "").toLowerCase())
+      ).length;
+      const upcomingBookings = bookingRows.filter((b) => {
+        const status = String(b.status || "").toLowerCase();
+        if (cancelledStatuses.has(status) || completedStatuses.has(status)) {
+          return false;
+        }
+        if (!b.booking_datetime) return true;
+        return new Date(b.booking_datetime) >= new Date(nowIso);
+      }).length;
+
+      const reviewRows = reviewsResult.data || [];
+      const avgRating =
+        reviewRows.length > 0
+          ? reviewRows.reduce((sum, r) => sum + (Number(r.rating) || 0), 0) /
+            reviewRows.length
+          : null;
+
+      setDashboardStats({
+        athletesRegistered: connections?.length || 0,
+        sessionsCompleted,
+        upcomingBookings,
+        avgRating,
+        reviewCount: reviewRows.length,
+        workoutsCreated: challengesResult.count || 0,
+        activeSessions: sessionsResult.count || 0,
+        upcomingEvents: (eventsResult.data || []).length,
+      });
+    } catch (error) {
+      console.error("Error loading trainer dashboard overview:", error);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [profile?.id, user?.id]);
 
   const loadData = useCallback(async () => {
     if (!profile) return; // Safety check
@@ -259,14 +398,81 @@ export default function TrainerDashboard() {
       toast.error("Failed to load data");
     } finally {
       setLoading(false);
+      loadDashboardOverview();
     }
-  }, [profile, activeTab]);
+  }, [profile, activeTab, loadDashboardOverview]);
 
   useEffect(() => {
     if (profile) {
       loadData();
     }
   }, [loadData, profile]);
+
+  const quickActions = useMemo(
+    () => [
+      {
+        key: "challenges",
+        label: "Workouts",
+        description: "Build & assign",
+        icon: Trophy,
+        count: dashboardStats.workoutsCreated,
+        countLabel: "created",
+        tone: "from-orange-500 to-red-500",
+        iconBg: "bg-orange-500/20 text-orange-300",
+      },
+      {
+        key: "sessions",
+        label: "Sessions",
+        description: "Bookable training",
+        icon: Calendar,
+        count: dashboardStats.activeSessions,
+        countLabel: "live",
+        tone: "from-blue-500 to-indigo-500",
+        iconBg: "bg-blue-500/20 text-blue-300",
+      },
+      {
+        key: "events",
+        label: "Events",
+        description: "Clinics & camps",
+        icon: CalendarPlus,
+        count: dashboardStats.upcomingEvents,
+        countLabel: "upcoming",
+        tone: "from-emerald-500 to-teal-500",
+        iconBg: "bg-emerald-500/20 text-emerald-300",
+      },
+      {
+        key: "reviews",
+        label: "Reviews",
+        description: "Athlete feedback",
+        icon: Star,
+        count: dashboardStats.reviewCount,
+        countLabel: "total",
+        tone: "from-yellow-500 to-amber-500",
+        iconBg: "bg-yellow-500/20 text-yellow-300",
+      },
+      {
+        key: "gallery",
+        label: "Gallery",
+        description: "Photos & clips",
+        icon: Images,
+        count: trainerProfile?.gallery?.length || 0,
+        countLabel: "items",
+        tone: "from-sky-500 to-cyan-600",
+        iconBg: "bg-sky-500/20 text-sky-300",
+      },
+      {
+        key: "profile",
+        label: "Profile",
+        description: "Bio & payments",
+        icon: User,
+        count: stripeStatus?.charges_enabled ? "Ready" : "Setup",
+        countLabel: "Stripe",
+        tone: "from-slate-500 to-slate-700",
+        iconBg: "bg-slate-500/20 text-slate-300",
+      },
+    ],
+    [dashboardStats, trainerProfile?.gallery?.length, stripeStatus?.charges_enabled]
+  );
 
   const handleDeleteChallenge = async (id) => {
     if (!confirm("Are you sure you want to delete this workout?")) return;
@@ -299,9 +505,25 @@ export default function TrainerDashboard() {
         if (error) throw error;
         toast.success("Workout updated successfully");
       } else {
-        const { error } = await supabase.from("challenges").insert([saveData]);
+        const { data: created, error } = await supabase
+          .from("challenges")
+          .insert([saveData])
+          .select()
+          .single();
         if (error) throw error;
-        toast.success("Workout created successfully");
+
+        const notified = await notifyFollowersOfWorkout({
+          workoutTitle: created?.title || saveData.title,
+          workoutId: created?.id || null,
+        });
+
+        if (notified > 0) {
+          toast.success(
+            `Workout created — ${notified} follower${notified === 1 ? "" : "s"} notified`
+          );
+        } else {
+          toast.success("Workout created successfully");
+        }
       }
 
       loadData();
@@ -436,41 +658,175 @@ export default function TrainerDashboard() {
     );
   };
 
-  const handleSaveTrainingSession = async (data, isEdit = false) => {
-    if (!trainerProfile?.id) {
-      toast.error("Create your trainer profile before adding training sessions.");
-      setActiveTab("profile");
-      return;
+  const ensureTrainerProfile = async () => {
+    if (trainerProfile?.id) return trainerProfile;
+
+    if (!profile?.id) {
+      throw new Error("Please sign in again, then try creating a session.");
     }
 
+    const { data, error } = await supabase
+      .from("trainers")
+      .select("*")
+      .eq("user_id", profile.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      setActiveTab("profile");
+      throw new Error(
+        "Create your trainer profile before adding training sessions."
+      );
+    }
+
+    setTrainerProfile(data);
+    return data;
+  };
+
+  const handleSaveTrainingSession = async (data, isEdit = false) => {
+    const recurrenceDays = Array.isArray(data.recurrence_days)
+      ? data.recurrence_days
+      : [];
+    const payload = {
+      p_name: data.name.trim(),
+      p_description: data.description?.trim() || null,
+      p_price: Number(data.price) || 0,
+      p_duration_minutes: Number(data.duration_minutes) || 60,
+      p_session_date: data.is_recurring ? null : data.session_date || null,
+      p_start_time: data.start_time || null,
+      p_location: data.location?.trim() || null,
+      p_skill_level: data.skill_level || "all_levels",
+      p_is_recurring: Boolean(data.is_recurring),
+      p_recurrence_days: data.is_recurring ? recurrenceDays : [],
+    };
+
     try {
-      const saveData = {
-        name: data.name.trim(),
-        description: data.description?.trim() || null,
-        price: Number(data.price) || 0,
-        duration_minutes: Number(data.duration_minutes) || 60,
-        trainer_id: trainerProfile.id,
-      };
+      let savedRow = null;
 
       if (isEdit) {
-        const { error } = await supabase
-          .from("trainer_services")
-          .update(saveData)
-          .eq("id", data.id);
-        if (error) throw error;
+        const { data: updated, error } = await supabase.rpc(
+          "update_trainer_service",
+          { p_id: data.id, ...payload }
+        );
+
+        if (error) {
+          // Fallback to direct update if RPC not deployed yet
+          const activeTrainer = await ensureTrainerProfile();
+          const saveData = {
+            name: payload.p_name,
+            description: payload.p_description,
+            price: payload.p_price,
+            duration_minutes: payload.p_duration_minutes,
+            trainer_id: activeTrainer.id,
+            session_date: payload.p_session_date,
+            start_time: payload.p_start_time,
+            location: payload.p_location,
+            skill_level: payload.p_skill_level,
+            is_recurring: payload.p_is_recurring,
+            recurrence_days: payload.p_recurrence_days,
+          };
+          const { data: directUpdated, error: directError } = await supabase
+            .from("trainer_services")
+            .update(saveData)
+            .eq("id", data.id)
+            .select()
+            .single();
+          if (directError) throw directError;
+          savedRow = directUpdated;
+        } else {
+          savedRow = updated;
+        }
+
         toast.success("Training session updated");
-        if (selectedSession?.id === data.id) {
-          setSelectedSession({ ...selectedSession, ...saveData, id: data.id });
+        if (selectedSession?.id === data.id && savedRow) {
+          setSelectedSession(savedRow);
         }
       } else {
-        const { error } = await supabase
-          .from("trainer_services")
-          .insert([saveData]);
-        if (error) throw error;
-        toast.success("Training session created — athletes can book it now");
+        const { data: created, error } = await supabase.rpc(
+          "create_trainer_service",
+          payload
+        );
+
+        if (error) {
+          // Fallback to direct insert if RPC not deployed yet
+          const activeTrainer = await ensureTrainerProfile();
+          const saveData = {
+            name: payload.p_name,
+            description: payload.p_description,
+            price: payload.p_price,
+            duration_minutes: payload.p_duration_minutes,
+            trainer_id: activeTrainer.id,
+            session_date: payload.p_session_date,
+            start_time: payload.p_start_time,
+            location: payload.p_location,
+            skill_level: payload.p_skill_level,
+            is_recurring: payload.p_is_recurring,
+            recurrence_days: payload.p_recurrence_days,
+          };
+
+          let { data: directCreated, error: directError } = await supabase
+            .from("trainer_services")
+            .insert([saveData])
+            .select()
+            .single();
+
+          if (
+            directError &&
+            (directError.message?.includes("skill_level") ||
+              directError.message?.includes("is_recurring") ||
+              directError.message?.includes("recurrence_days") ||
+              directError.message?.includes("session_date") ||
+              directError.message?.includes("start_time") ||
+              directError.message?.includes("location") ||
+              directError.code === "PGRST204")
+          ) {
+            const {
+              session_date,
+              start_time,
+              location,
+              skill_level,
+              is_recurring,
+              recurrence_days,
+              ...legacyData
+            } = saveData;
+            ({ data: directCreated, error: directError } = await supabase
+              .from("trainer_services")
+              .insert([
+                {
+                  ...legacyData,
+                  ...(session_date !== undefined ? { session_date } : {}),
+                  ...(start_time !== undefined ? { start_time } : {}),
+                  ...(location !== undefined ? { location } : {}),
+                },
+              ])
+              .select()
+              .single());
+          }
+
+          if (directError) {
+            if (
+              directError.code === "42501" ||
+              directError.message?.toLowerCase().includes("row-level security")
+            ) {
+              throw new Error(
+                "Permission denied. Run create_trainer_service_rpc.sql in Supabase SQL Editor, then try again."
+              );
+            }
+            throw directError;
+          }
+          savedRow = directCreated;
+        } else {
+          savedRow = created;
+        }
+
+        toast.success("Training session created");
+        if (savedRow) {
+          setTrainingSessions((prev) => [savedRow, ...prev]);
+        }
       }
 
       await loadData();
+      return savedRow;
     } catch (error) {
       console.error("Error saving training session:", error);
       toast.error(error.message || "Failed to save training session");
@@ -576,16 +932,181 @@ export default function TrainerDashboard() {
     );
   }
 
+  const firstName = profile?.full_name?.split(" ")[0] || "Coach";
+
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto overflow-x-hidden">
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-2">
-          <GraduationCap className="w-7 h-7 sm:w-8 sm:h-8 text-primary shrink-0" />
-          <h1 className="text-2xl sm:text-3xl font-bold">Trainer Dashboard</h1>
+    <div className="p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-12 h-12 rounded-2xl bg-brand-orange/20 flex items-center justify-center">
+              <GraduationCap className="w-7 h-7 text-brand-orange" />
+            </div>
+            <h1 className="text-3xl lg:text-4xl font-bold text-white">
+              Welcome back, {firstName}!
+            </h1>
+          </div>
+          <p className="text-brand-lightGray text-lg">
+            Manage your roster, sessions, and training content
+          </p>
         </div>
-        <p className="text-sm sm:text-base text-muted-foreground">
-          Manage your workouts, training sessions, and profile
-        </p>
+        <div className="flex flex-wrap gap-3">
+          <Link to="/trainer/athletes">
+            <Button className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white px-6 py-3 h-auto rounded-xl shadow-lg">
+              <Users className="w-5 h-5 mr-2" />
+              Athletes
+            </Button>
+          </Link>
+          <Link to="/trainer/messages">
+            <Button className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-6 py-3 h-auto rounded-xl shadow-lg">
+              <MessageCircle className="w-5 h-5 mr-2" />
+              Messages
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {!statsLoading && dashboardStats.activeSessions === 0 && (
+        <Card className="border-amber-500/40 bg-amber-500/10">
+          <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+            <div>
+              <p className="font-medium text-amber-100">
+                Publish at least one training session
+              </p>
+              <p className="text-sm text-amber-200/80">
+                Athletes book your session offerings (including recurring weekly
+                times) — not a separate availability calendar.
+              </p>
+            </div>
+            <Button
+              className="bg-brand-orange hover:opacity-90 shrink-0"
+              onClick={() => setActiveTab(trainerProfile ? "sessions" : "profile")}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {trainerProfile ? "Add Session" : "Finish Setup"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+        <Card className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-0 shadow-xl">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm font-medium">Athletes Registered</p>
+                <p className="text-3xl font-bold mt-1">
+                  {statsLoading ? "—" : dashboardStats.athletesRegistered}
+                </p>
+              </div>
+              <Users className="w-8 h-8 text-blue-200" />
+            </div>
+            <p className="text-blue-100 text-xs mt-3">Active connections on your roster</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-0 shadow-xl">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-emerald-100 text-sm font-medium">Sessions Completed</p>
+                <p className="text-3xl font-bold mt-1">
+                  {statsLoading ? "—" : dashboardStats.sessionsCompleted}
+                </p>
+              </div>
+              <CheckCircle2 className="w-8 h-8 text-emerald-200" />
+            </div>
+            <p className="text-emerald-100 text-xs mt-3">Finished bookings lifetime</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-orange-500 to-red-600 text-white border-0 shadow-xl">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-orange-100 text-sm font-medium">Upcoming Bookings</p>
+                <p className="text-3xl font-bold mt-1">
+                  {statsLoading ? "—" : dashboardStats.upcomingBookings}
+                </p>
+              </div>
+              <Calendar className="w-8 h-8 text-orange-200" />
+            </div>
+            <p className="text-orange-100 text-xs mt-3">Confirmed or pending sessions</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-yellow-500 to-amber-600 text-white border-0 shadow-xl">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-yellow-100 text-sm font-medium">Average Rating</p>
+                <p className="text-3xl font-bold mt-1">
+                  {statsLoading
+                    ? "—"
+                    : dashboardStats.avgRating != null
+                      ? dashboardStats.avgRating.toFixed(1)
+                      : "—"}
+                </p>
+              </div>
+              <Star className="w-8 h-8 text-yellow-100" />
+            </div>
+            <p className="text-yellow-100 text-xs mt-3">
+              {dashboardStats.reviewCount > 0
+                ? `From ${dashboardStats.reviewCount} review${dashboardStats.reviewCount === 1 ? "" : "s"}`
+                : "No reviews yet"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div>
+        <h2 className="text-xl font-semibold text-white mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            const isActive = activeTab === action.key;
+            return (
+              <button
+                key={action.key}
+                type="button"
+                onClick={() => {
+                  setSelectedSession(null);
+                  setActiveTab(action.key);
+                }}
+                className={`group relative aspect-square rounded-2xl border p-4 sm:p-5 text-left transition-all duration-200 shadow-lg hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange ${
+                  isActive
+                    ? "border-brand-orange bg-gradient-to-br from-gray-800 to-gray-900 ring-1 ring-brand-orange/60"
+                    : "border-gray-700/80 bg-card hover:border-gray-500"
+                }`}
+              >
+                <div
+                  className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center mb-3 sm:mb-4 ${action.iconBg}`}
+                >
+                  <Icon className="w-6 h-6 sm:w-7 sm:h-7" />
+                </div>
+                <p className="text-white font-semibold text-base sm:text-lg leading-tight">
+                  {action.label}
+                </p>
+                <p className="text-gray-400 text-xs sm:text-sm mt-1 line-clamp-2">
+                  {action.description}
+                </p>
+                <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4">
+                  <span
+                    className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-semibold text-white bg-gradient-to-r ${action.tone}`}
+                  >
+                    {statsLoading && typeof action.count === "number" ? "—" : action.count}
+                    {typeof action.count === "number" ? (
+                      <span className="ml-1 font-normal opacity-90 hidden sm:inline">
+                        {action.countLabel}
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <Tabs
@@ -597,28 +1118,28 @@ export default function TrainerDashboard() {
         className="space-y-6"
       >
         <div className="-mx-4 sm:mx-0 overflow-x-auto px-4 sm:px-0 pb-1">
-        <TabsList className="inline-flex w-max min-w-full gap-1 sm:grid sm:w-full sm:grid-cols-6">
-          <TabsTrigger value="challenges" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+        <TabsList className="inline-flex w-max min-w-full gap-1 sm:grid sm:w-full sm:grid-cols-6 bg-card p-1 rounded-xl border border-border h-auto">
+          <TabsTrigger value="challenges" className="shrink-0 px-3 py-2.5 text-xs sm:text-sm whitespace-nowrap data-[state=active]:bg-[#E85D04] data-[state=active]:text-white data-[state=active]:shadow-md">
             <Trophy className="w-4 h-4 mr-1.5 sm:mr-2" />
             Workouts
           </TabsTrigger>
-          <TabsTrigger value="events" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+          <TabsTrigger value="events" className="shrink-0 px-3 py-2.5 text-xs sm:text-sm whitespace-nowrap data-[state=active]:bg-[#E85D04] data-[state=active]:text-white data-[state=active]:shadow-md">
             <CalendarPlus className="w-4 h-4 mr-1.5 sm:mr-2" />
             Events
           </TabsTrigger>
-          <TabsTrigger value="sessions" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+          <TabsTrigger value="sessions" className="shrink-0 px-3 py-2.5 text-xs sm:text-sm whitespace-nowrap data-[state=active]:bg-[#E85D04] data-[state=active]:text-white data-[state=active]:shadow-md">
             <Calendar className="w-4 h-4 mr-1.5 sm:mr-2" />
             Training Sessions
           </TabsTrigger>
-          <TabsTrigger value="reviews" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+          <TabsTrigger value="reviews" className="shrink-0 px-3 py-2.5 text-xs sm:text-sm whitespace-nowrap data-[state=active]:bg-[#E85D04] data-[state=active]:text-white data-[state=active]:shadow-md">
             <Star className="w-4 h-4 mr-1.5 sm:mr-2" />
             Reviews
           </TabsTrigger>
-          <TabsTrigger value="gallery" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+          <TabsTrigger value="gallery" className="shrink-0 px-3 py-2.5 text-xs sm:text-sm whitespace-nowrap data-[state=active]:bg-[#E85D04] data-[state=active]:text-white data-[state=active]:shadow-md">
             <Images className="w-4 h-4 mr-1.5 sm:mr-2" />
             Gallery
           </TabsTrigger>
-          <TabsTrigger value="profile" className="shrink-0 px-3 py-2 text-xs sm:text-sm whitespace-nowrap">
+          <TabsTrigger value="profile" className="shrink-0 px-3 py-2.5 text-xs sm:text-sm whitespace-nowrap data-[state=active]:bg-[#E85D04] data-[state=active]:text-white data-[state=active]:shadow-md">
             <User className="w-4 h-4 mr-1.5 sm:mr-2" />
             Profile
           </TabsTrigger>
@@ -634,8 +1155,8 @@ export default function TrainerDashboard() {
             <ChallengeDialog
               onSave={(data) => handleSaveChallenge(data)}
               trigger={
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
+                <Button className="h-11 px-5 rounded-xl bg-brand-orange hover:opacity-90 text-white">
+                  <Plus className="w-5 h-5 mr-2" />
                   Create Workout
                 </Button>
               }
@@ -712,8 +1233,8 @@ export default function TrainerDashboard() {
               <EventDialog
                 onSave={(data) => handleSaveEvent(data)}
                 trigger={
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
+                  <Button className="h-11 px-5 rounded-xl bg-brand-orange hover:opacity-90 text-white">
+                    <Plus className="w-5 h-5 mr-2" />
                     Create Event
                   </Button>
                 }
@@ -846,6 +1367,24 @@ export default function TrainerDashboard() {
                       {selectedSession.description || "No description"}
                     </p>
                     <div className="flex flex-wrap gap-2 mt-3">
+                      {selectedSession.session_date && (
+                        <Badge variant="outline">
+                          <Calendar className="w-3 h-3 mr-1" />
+                          {formatSessionDate(selectedSession.session_date)}
+                        </Badge>
+                      )}
+                      {selectedSession.start_time && (
+                        <Badge variant="outline">
+                          <Clock className="w-3 h-3 mr-1" />
+                          {formatSessionTime(selectedSession.start_time)}
+                        </Badge>
+                      )}
+                      {selectedSession.location && (
+                        <Badge variant="outline">
+                          <MapPin className="w-3 h-3 mr-1" />
+                          {selectedSession.location}
+                        </Badge>
+                      )}
                       <Badge variant="secondary">
                         <DollarSign className="w-3 h-3 mr-1" />
                         ${selectedSession.price}
@@ -949,8 +1488,8 @@ export default function TrainerDashboard() {
                 <TrainingSessionDialog
                   onSave={(data) => handleSaveTrainingSession(data)}
                   trigger={
-                    <Button>
-                      <Plus className="w-4 h-4 mr-2" />
+                    <Button className="h-11 px-5 rounded-xl bg-brand-orange hover:opacity-90 text-white">
+                      <Plus className="w-5 h-5 mr-2" />
                       Add Training Session
                     </Button>
                   }
@@ -968,8 +1507,8 @@ export default function TrainerDashboard() {
                     <TrainingSessionDialog
                       onSave={(data) => handleSaveTrainingSession(data)}
                       trigger={
-                        <Button>
-                          <Plus className="w-4 h-4 mr-2" />
+                        <Button className="h-11 px-5 rounded-xl bg-brand-orange hover:opacity-90 text-white">
+                          <Plus className="w-5 h-5 mr-2" />
                           Add Training Session
                         </Button>
                       }
@@ -1026,6 +1565,37 @@ export default function TrainerDashboard() {
                         </CardHeader>
                         <CardContent>
                           <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="secondary">
+                              {skillLevelLabel(session.skill_level)}
+                            </Badge>
+                            {session.is_recurring ? (
+                              <Badge variant="outline">
+                                Weekly
+                                {normalizeRecurrenceDays(session.recurrence_days)
+                                  .length
+                                  ? ` · ${normalizeRecurrenceDays(session.recurrence_days)
+                                      .map((d) => d.slice(0, 3))
+                                      .join(", ")}`
+                                  : ""}
+                              </Badge>
+                            ) : session.session_date ? (
+                              <Badge variant="outline">
+                                <Calendar className="w-3 h-3 mr-1" />
+                                {formatSessionDate(session.session_date)}
+                              </Badge>
+                            ) : null}
+                            {session.start_time && (
+                              <Badge variant="outline">
+                                <Clock className="w-3 h-3 mr-1" />
+                                {formatSessionTime(session.start_time)}
+                              </Badge>
+                            )}
+                            {session.location && (
+                              <Badge variant="outline">
+                                <MapPin className="w-3 h-3 mr-1" />
+                                {session.location}
+                              </Badge>
+                            )}
                             <Badge variant="secondary">
                               <DollarSign className="w-3 h-3 mr-1" />$
                               {session.price}
@@ -1268,6 +1838,29 @@ export default function TrainerDashboard() {
         {/* Profile Tab */}
         <TabsContent value="profile" className="space-y-4">
           <h2 className="text-2xl font-semibold">Trainer Profile</h2>
+
+          {trainerProfile && dashboardStats.activeSessions === 0 && (
+            <Card className="border-amber-500/40 bg-amber-500/10">
+              <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                <div>
+                  <p className="font-medium text-amber-100">
+                    Add at least one training session
+                  </p>
+                  <p className="text-sm text-amber-200/80">
+                    Athletes can only book the sessions you publish — this
+                    replaces a general availability calendar.
+                  </p>
+                </div>
+                <Button
+                  className="bg-brand-orange hover:opacity-90"
+                  onClick={() => setActiveTab("sessions")}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Session
+                </Button>
+              </CardContent>
+            </Card>
+          )}
           
           {/* Stripe Connect Section */}
           {trainerProfile ? (
@@ -1283,7 +1876,7 @@ export default function TrainerDashboard() {
               <CardHeader>
                 <CardTitle className="text-lg">Payment Setup</CardTitle>
                 <CardDescription>
-                  Save your trainer profile first, then connect Stripe to receive payments.
+                  Save your trainer profile and first training session, then connect Stripe to receive payments.
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -1292,9 +1885,16 @@ export default function TrainerDashboard() {
           <TrainerProfileForm
             profile={trainerProfile}
             onSave={handleSaveProfile}
+            requireFirstSession={!trainerProfile}
+            onCreateFirstSession={(sessionData) =>
+              handleSaveTrainingSession(sessionData, false)
+            }
+            onNeedSession={() => setActiveTab("sessions")}
+            sessionCount={dashboardStats.activeSessions}
           />
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }
@@ -1477,61 +2077,147 @@ function StripeConnectCard({ trainerProfile, stripeStatus, onRefresh, loading, s
 }
 
 // Challenge Dialog Component
+function formatSessionDate(dateValue) {
+  if (!dateValue) return null;
+  try {
+    return new Date(`${dateValue}T00:00:00`).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return dateValue;
+  }
+}
+
+function formatSessionTime(timeValue) {
+  if (!timeValue) return null;
+  const [hours, minutes] = String(timeValue).split(":");
+  if (hours == null || minutes == null) return timeValue;
+  const date = new Date();
+  date.setHours(Number(hours), Number(minutes), 0, 0);
+  return date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function TrainingSessionDialog({ session, onSave, trigger }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
   const [formData, setFormData] = useState({
     id: session?.id,
     name: session?.name || "",
     description: session?.description || "",
     price: session?.price ?? 75,
     duration_minutes: session?.duration_minutes ?? 60,
+    session_date: session?.session_date || "",
+    start_time: session?.start_time ? String(session.start_time).slice(0, 5) : "",
+    location: session?.location || "",
+    skill_level: session?.skill_level || "all_levels",
+    is_recurring: Boolean(session?.is_recurring),
+    recurrence_days: normalizeRecurrenceDays(session?.recurrence_days),
   });
 
   useEffect(() => {
     if (open) {
+      setFormError("");
       setFormData({
         id: session?.id,
         name: session?.name || "",
         description: session?.description || "",
         price: session?.price ?? 75,
         duration_minutes: session?.duration_minutes ?? 60,
+        session_date: session?.session_date || "",
+        start_time: session?.start_time
+          ? String(session.start_time).slice(0, 5)
+          : "",
+        location: session?.location || "",
+        skill_level: session?.skill_level || "all_levels",
+        is_recurring: Boolean(session?.is_recurring),
+        recurrence_days: normalizeRecurrenceDays(session?.recurrence_days),
       });
     }
   }, [open, session]);
 
+  const toggleRecurrenceDay = (dayKey) => {
+    setFormData((prev) => {
+      const current = normalizeRecurrenceDays(prev.recurrence_days);
+      const next = current.includes(dayKey)
+        ? current.filter((d) => d !== dayKey)
+        : [...current, dayKey];
+      return { ...prev, recurrence_days: next };
+    });
+  };
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+
     if (!formData.name.trim()) {
+      setFormError("Session name is required");
       toast.error("Session name is required");
       return;
     }
+    if (!formData.start_time) {
+      setFormError("Start time is required");
+      toast.error("Start time is required");
+      return;
+    }
+    if (formData.is_recurring) {
+      if (!normalizeRecurrenceDays(formData.recurrence_days).length) {
+        setFormError("Pick at least one weekday for recurring sessions");
+        toast.error("Pick at least one weekday for recurring sessions");
+        return;
+      }
+    } else if (!formData.session_date) {
+      setFormError("Pick a date for one-time sessions");
+      toast.error("Pick a date for one-time sessions");
+      return;
+    }
+    if (saving) return;
+
+    setFormError("");
     setSaving(true);
     try {
-      await onSave(formData);
+      await onSave({
+        ...formData,
+        session_date: formData.is_recurring ? null : formData.session_date || null,
+        start_time: formData.start_time || null,
+        location: formData.location?.trim() || null,
+        skill_level: formData.skill_level || "all_levels",
+        is_recurring: Boolean(formData.is_recurring),
+        recurrence_days: formData.is_recurring
+          ? normalizeRecurrenceDays(formData.recurrence_days)
+          : [],
+      });
       setOpen(false);
-    } catch {
-      // Parent shows toast
+    } catch (error) {
+      setFormError(error?.message || "Could not save training session");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(next) => !saving && setOpen(next)}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-lg max-h-[90vh] overflow-y-auto"
+        onPointerDownOutside={(e) => saving && e.preventDefault()}
+        onEscapeKeyDown={(e) => saving && e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>
             {session ? "Edit Training Session" : "Add Training Session"}
           </DialogTitle>
           <DialogDescription>
-            {session
-              ? "Update this bookable session for athletes"
-              : "Athletes will see this on your profile and can book it"}
+            Athletes book these offerings — set skill level, time, and whether
+            it repeats weekly.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-4">
           <div>
             <Label htmlFor="session-name">Session Name</Label>
             <Input
@@ -1541,7 +2227,6 @@ function TrainingSessionDialog({ session, onSave, trigger }) {
                 setFormData({ ...formData, name: e.target.value })
               }
               placeholder="1-on-1 Shooting Session"
-              required
             />
           </div>
           <div>
@@ -1554,6 +2239,111 @@ function TrainingSessionDialog({ session, onSave, trigger }) {
               }
               placeholder="What athletes can expect from this session"
               rows={3}
+            />
+          </div>
+          <div>
+            <Label htmlFor="session-skill-level">Skill Level</Label>
+            <Select
+              value={formData.skill_level}
+              onValueChange={(value) =>
+                setFormData({ ...formData, skill_level: value })
+              }
+            >
+              <SelectTrigger id="session-skill-level">
+                <SelectValue placeholder="Select level" />
+              </SelectTrigger>
+              <SelectContent>
+                {SKILL_LEVEL_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="rounded-xl border border-border p-4 space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1 rounded"
+                checked={formData.is_recurring}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    is_recurring: e.target.checked,
+                    session_date: e.target.checked ? "" : formData.session_date,
+                  })
+                }
+              />
+              <div>
+                <p className="font-medium text-sm">Recurring weekly</p>
+                <p className="text-xs text-muted-foreground">
+                  Replaces a general availability calendar — athletes only see
+                  these days and this start time.
+                </p>
+              </div>
+            </label>
+
+            {formData.is_recurring ? (
+              <div className="space-y-2">
+                <Label>Days available</Label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {DAYS_OF_WEEK.map(({ key, label }) => {
+                    const checked = formData.recurrence_days.includes(key);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => toggleRecurrenceDay(key)}
+                        className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors ${
+                          checked
+                            ? "border-brand-orange bg-brand-orange/20 text-white"
+                            : "border-border text-muted-foreground hover:border-gray-500"
+                        }`}
+                      >
+                        {label.slice(0, 3)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div>
+                <Label htmlFor="session-date">Date</Label>
+                <Input
+                  id="session-date"
+                  type="date"
+                  value={formData.session_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, session_date: e.target.value })
+                  }
+                />
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="session-start-time">Start Time</Label>
+              <Input
+                id="session-start-time"
+                type="time"
+                value={formData.start_time}
+                onChange={(e) =>
+                  setFormData({ ...formData, start_time: e.target.value })
+                }
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="session-location">Location</Label>
+            <Input
+              id="session-location"
+              value={formData.location}
+              onChange={(e) =>
+                setFormData({ ...formData, location: e.target.value })
+              }
+              placeholder="Gym name, court, address..."
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -1571,7 +2361,6 @@ function TrainingSessionDialog({ session, onSave, trigger }) {
                     price: parseFloat(e.target.value) || 0,
                   })
                 }
-                required
               />
             </div>
             <div>
@@ -1588,10 +2377,16 @@ function TrainingSessionDialog({ session, onSave, trigger }) {
                     duration_minutes: parseInt(e.target.value, 10) || 60,
                   })
                 }
-                required
               />
             </div>
           </div>
+
+          {formError && (
+            <p className="text-sm text-red-400 bg-red-950/30 border border-red-500/30 rounded-lg p-3">
+              {formError}
+            </p>
+          )}
+
           <div className="flex justify-end gap-2 pt-2">
             <Button
               type="button"
@@ -1601,7 +2396,7 @@ function TrainingSessionDialog({ session, onSave, trigger }) {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="button" disabled={saving} onClick={handleSubmit}>
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -1614,7 +2409,7 @@ function TrainingSessionDialog({ session, onSave, trigger }) {
               )}
             </Button>
           </div>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -1914,16 +2709,6 @@ const DEFAULT_AVAILABILITY = {
   saturday: { start: "10:00", end: "14:00", enabled: false },
   sunday: { start: "10:00", end: "14:00", enabled: false },
 };
-
-const DAYS_OF_WEEK = [
-  { key: "monday", label: "Monday" },
-  { key: "tuesday", label: "Tuesday" },
-  { key: "wednesday", label: "Wednesday" },
-  { key: "thursday", label: "Thursday" },
-  { key: "friday", label: "Friday" },
-  { key: "saturday", label: "Saturday" },
-  { key: "sunday", label: "Sunday" },
-];
 
 // Event Dialog Component
 function EventDialog({ event, onSave, trigger }) {
@@ -2282,7 +3067,14 @@ function GalleryUploader({ onAdd }) {
 }
 
 // Trainer Profile Form Component
-function TrainerProfileForm({ profile, onSave }) {
+function TrainerProfileForm({
+  profile,
+  onSave,
+  requireFirstSession = false,
+  onCreateFirstSession,
+  onNeedSession,
+  sessionCount = 0,
+}) {
   const [formData, setFormData] = useState({
     name: "",
     bio: "",
@@ -2296,6 +3088,18 @@ function TrainerProfileForm({ profile, onSave }) {
     blocked_dates: [],
     session_buffer_minutes: 15,
     min_booking_notice_hours: 24,
+  });
+  const [firstSession, setFirstSession] = useState({
+    name: "",
+    description: "",
+    price: 75,
+    duration_minutes: 60,
+    session_date: "",
+    start_time: "10:00",
+    location: "",
+    skill_level: "all_levels",
+    is_recurring: true,
+    recurrence_days: ["monday", "wednesday", "friday"],
   });
   const [isEditing, setIsEditing] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -2339,19 +3143,6 @@ function TrainerProfileForm({ profile, onSave }) {
     });
   };
 
-  const updateDayAvailability = (day, field, value) => {
-    setFormData({
-      ...formData,
-      availability_schedule: {
-        ...formData.availability_schedule,
-        [day]: {
-          ...formData.availability_schedule[day],
-          [field]: value,
-        },
-      },
-    });
-  };
-
   const addBlockedDate = () => {
     if (newBlockedDate && !formData.blocked_dates.includes(newBlockedDate)) {
       setFormData({
@@ -2369,11 +3160,61 @@ function TrainerProfileForm({ profile, onSave }) {
     });
   };
 
+  const toggleFirstSessionDay = (dayKey) => {
+    setFirstSession((prev) => {
+      const current = normalizeRecurrenceDays(prev.recurrence_days);
+      const next = current.includes(dayKey)
+        ? current.filter((d) => d !== dayKey)
+        : [...current, dayKey];
+      return { ...prev, recurrence_days: next };
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (requireFirstSession) {
+      if (!firstSession.name.trim()) {
+        toast.error("Add a training session name to finish onboarding");
+        return;
+      }
+      if (!firstSession.start_time) {
+        toast.error("Set a start time for your first training session");
+        return;
+      }
+      if (firstSession.is_recurring) {
+        if (!normalizeRecurrenceDays(firstSession.recurrence_days).length) {
+          toast.error("Pick at least one weekday for your recurring session");
+          return;
+        }
+      } else if (!firstSession.session_date) {
+        toast.error("Pick a date for your first training session");
+        return;
+      }
+    }
+
     setIsSavingProfile(true);
     try {
       await onSave(formData);
+
+      if (requireFirstSession && onCreateFirstSession) {
+        await onCreateFirstSession({
+          ...firstSession,
+          name: firstSession.name.trim(),
+          description: firstSession.description?.trim() || "",
+          location: firstSession.location?.trim() || null,
+          skill_level: firstSession.skill_level || "all_levels",
+          is_recurring: Boolean(firstSession.is_recurring),
+          recurrence_days: firstSession.is_recurring
+            ? normalizeRecurrenceDays(firstSession.recurrence_days)
+            : [],
+          session_date: firstSession.is_recurring
+            ? null
+            : firstSession.session_date || null,
+        });
+        onNeedSession?.();
+      }
+
       setIsEditing(false);
     } catch (error) {
       // Keep the form open so the trainer can correct any validation/RLS issues.
@@ -2626,54 +3467,181 @@ function TrainerProfileForm({ profile, onSave }) {
               </div>
             </div>
 
-            {/* Availability Schedule Section */}
+            {/* Training schedule note — sessions replace availability calendar */}
             <div className="border-t pt-6 mt-6">
-              <h3 className="text-lg font-semibold mb-4">Availability Schedule</h3>
+              <h3 className="text-lg font-semibold mb-2">Booking Schedule</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Set your weekly availability for booking sessions.
+                Athletes book from your <strong>Training Sessions</strong> only
+                (one-time or recurring). The old weekly availability calendar is
+                no longer used.
               </p>
-              
-              <div className="space-y-3">
-                {DAYS_OF_WEEK.map(({ key, label }) => (
-                  <div key={key} className="flex flex-col gap-3 p-3 border rounded-lg sm:flex-row sm:items-center sm:gap-4">
-                    <div className="flex items-center gap-2 sm:w-32">
-                      <input
-                        type="checkbox"
-                        id={`day-${key}`}
-                        checked={formData.availability_schedule[key]?.enabled ?? false}
-                        onChange={(e) => updateDayAvailability(key, "enabled", e.target.checked)}
-                        className="rounded"
-                      />
-                      <Label htmlFor={`day-${key}`} className="font-medium cursor-pointer">
-                        {label}
-                      </Label>
-                    </div>
-                    
-                    {formData.availability_schedule[key]?.enabled && (
-                      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex sm:flex-1">
-                        <Input
-                          type="time"
-                          value={formData.availability_schedule[key]?.start || "09:00"}
-                          onChange={(e) => updateDayAvailability(key, "start", e.target.value)}
-                          className="w-full sm:w-32"
-                        />
-                        <span className="text-muted-foreground">to</span>
-                        <Input
-                          type="time"
-                          value={formData.availability_schedule[key]?.end || "17:00"}
-                          onChange={(e) => updateDayAvailability(key, "end", e.target.value)}
-                          className="w-full sm:w-32"
-                        />
-                      </div>
-                    )}
-                    
-                    {!formData.availability_schedule[key]?.enabled && (
-                      <span className="text-muted-foreground text-sm">Unavailable</span>
-                    )}
-                  </div>
-                ))}
-              </div>
+              {profile && sessionCount === 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onNeedSession?.()}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add a training session
+                </Button>
+              )}
             </div>
+
+            {requireFirstSession && (
+              <div className="border-t pt-6 mt-6 space-y-4 rounded-xl border border-brand-orange/40 bg-brand-orange/5 p-4">
+                <div>
+                  <h3 className="text-lg font-semibold">
+                    First Training Session <span className="text-red-400">*</span>
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Required to finish setup. Athletes will only see this
+                    offering and its available times.
+                  </p>
+                </div>
+                <div>
+                  <Label>Session Name</Label>
+                  <Input
+                    value={firstSession.name}
+                    onChange={(e) =>
+                      setFirstSession({ ...firstSession, name: e.target.value })
+                    }
+                    placeholder="1-on-1 Skills Session"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label>Skill Level</Label>
+                  <Select
+                    value={firstSession.skill_level}
+                    onValueChange={(value) =>
+                      setFirstSession({ ...firstSession, skill_level: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SKILL_LEVEL_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-1 rounded"
+                    checked={firstSession.is_recurring}
+                    onChange={(e) =>
+                      setFirstSession({
+                        ...firstSession,
+                        is_recurring: e.target.checked,
+                      })
+                    }
+                  />
+                  <div>
+                    <p className="font-medium text-sm">Recurring weekly</p>
+                    <p className="text-xs text-muted-foreground">
+                      Recommended for ongoing coaching availability
+                    </p>
+                  </div>
+                </label>
+                {firstSession.is_recurring ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {DAYS_OF_WEEK.map(({ key, label }) => {
+                      const checked = firstSession.recurrence_days.includes(key);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => toggleFirstSessionDay(key)}
+                          className={`rounded-lg border px-2 py-2 text-xs font-medium ${
+                            checked
+                              ? "border-brand-orange bg-brand-orange/20 text-white"
+                              : "border-border text-muted-foreground"
+                          }`}
+                        >
+                          {label.slice(0, 3)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div>
+                    <Label>Date</Label>
+                    <Input
+                      type="date"
+                      value={firstSession.session_date}
+                      onChange={(e) =>
+                        setFirstSession({
+                          ...firstSession,
+                          session_date: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <Label>Start Time</Label>
+                    <Input
+                      type="time"
+                      value={firstSession.start_time}
+                      onChange={(e) =>
+                        setFirstSession({
+                          ...firstSession,
+                          start_time: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Price ($)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={firstSession.price}
+                      onChange={(e) =>
+                        setFirstSession({
+                          ...firstSession,
+                          price: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Duration (min)</Label>
+                    <Input
+                      type="number"
+                      min="15"
+                      step="15"
+                      value={firstSession.duration_minutes}
+                      onChange={(e) =>
+                        setFirstSession({
+                          ...firstSession,
+                          duration_minutes: parseInt(e.target.value, 10) || 60,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Location (optional)</Label>
+                  <Input
+                    value={firstSession.location}
+                    onChange={(e) =>
+                      setFirstSession({
+                        ...firstSession,
+                        location: e.target.value,
+                      })
+                    }
+                    placeholder="Gym / court"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Booking Settings */}
             <div className="border-t pt-6 mt-6">
@@ -2880,42 +3848,19 @@ function TrainerProfileForm({ profile, onSave }) {
                 </div>
               )}
 
-            {/* Availability Display */}
+            {/* Booking schedule display */}
             <div className="border-t pt-6 mt-6">
               <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
                 <Clock className="w-5 h-5" />
-                Availability Schedule
+                How Athletes Book
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                {DAYS_OF_WEEK.map(({ key, label }) => {
-                  const daySchedule = formData.availability_schedule?.[key];
-                  return (
-                    <div
-                      key={key}
-                      className={`p-3 rounded-lg border ${
-                        daySchedule?.enabled
-                          ? "bg-green-900/30 border-green-700"
-                          : "bg-gray-800/50 border-gray-700"
-                      }`}
-                    >
-                      <div className={`font-medium text-sm ${
-                        daySchedule?.enabled ? "text-green-400" : "text-gray-400"
-                      }`}>
-                        {label}
-                      </div>
-                      {daySchedule?.enabled ? (
-                        <div className="text-xs text-green-300/80 mt-1">
-                          {daySchedule.start} - {daySchedule.end}
-                        </div>
-                      ) : (
-                        <div className="text-xs text-gray-500 mt-1">
-                          Unavailable
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Athletes choose one of your published Training Sessions and only
+                see the dates/times those offerings allow
+                {sessionCount > 0
+                  ? ` (${sessionCount} active).`
+                  : ". Add a session so athletes can book you."}
+              </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                 <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">

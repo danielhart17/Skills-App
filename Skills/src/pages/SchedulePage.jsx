@@ -32,12 +32,17 @@ import {
   formatEventTime,
   toDateKey,
 } from "@/lib/scheduleUtils";
+import {
+  fetchAthleteBookingsForRange,
+  mergeScheduleWithBookings,
+} from "@/lib/bookingSchedule";
 
 const EVENT_TYPE_LABELS = {
   game: "Game",
   practice: "Practice",
   workout: "Workout",
   rest: "Rest",
+  training: "Training",
 };
 
 export default function SchedulePage() {
@@ -93,21 +98,25 @@ export default function SchedulePage() {
     const endDate = format(end, "yyyy-MM-dd");
 
     try {
-      const { data, error } = await supabase
-        .from("athlete_events")
-        .select("*")
-        .eq("athlete_id", user.id)
-        .gte("event_date", startDate)
-        .lte("event_date", endDate)
-        .order("event_date")
-        .order("start_time", { ascending: true, nullsFirst: false });
+      const [{ data, error }, bookings] = await Promise.all([
+        supabase
+          .from("athlete_events")
+          .select("*")
+          .eq("athlete_id", user.id)
+          .gte("event_date", startDate)
+          .lte("event_date", endDate)
+          .order("event_date")
+          .order("start_time", { ascending: true, nullsFirst: false }),
+        fetchAthleteBookingsForRange(user.id, startDate, endDate),
+      ]);
 
       if (error) throw error;
 
-      setEvents(data || []);
+      const merged = mergeScheduleWithBookings(data || [], bookings);
+      setEvents(merged);
       setSelectedEvent((prev) => {
         if (!prev) return null;
-        return (data || []).find((e) => e.id === prev.id) || null;
+        return merged.find((e) => e.id === prev.id) || null;
       });
     } catch (err) {
       console.error("Error fetching schedule:", err);
@@ -174,7 +183,7 @@ export default function SchedulePage() {
             My Schedule
           </h1>
           <p className="text-brand-lightGray mt-1 text-sm sm:text-base">
-            Plan games, practices, workouts, and rest days for the week
+            Plan games, practices, workouts, trainer sessions, and rest days
           </p>
         </div>
         <Button
@@ -271,6 +280,12 @@ export default function SchedulePage() {
                             <span className="flex items-center gap-1">
                               <Users className="w-4 h-4 text-brand-orange" />
                               vs {event.opponent}
+                            </span>
+                          )}
+                          {event.event_type === "training" && event.opponent && (
+                            <span className="flex items-center gap-1">
+                              <Users className="w-4 h-4 text-brand-orange" />
+                              {event.opponent}
                             </span>
                           )}
                           {event.event_type === "workout" && (

@@ -8,6 +8,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useWorkoutStats } from "@/hooks/useWorkoutStats";
 import { toDateKey } from "@/lib/scheduleUtils";
 import { getScheduleEventHref } from "@/utils/scheduleLinks";
+import {
+  fetchAthleteBookingsForRange,
+  bookingsToScheduleEvents,
+} from "@/lib/bookingSchedule";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -28,12 +32,14 @@ import {
   ChevronRight,
 } from "lucide-react";
 import UnreadMessagesBadge from "@/components/UnreadMessagesBadge";
+import TrainerWorkoutNotifications from "@/components/TrainerWorkoutNotifications";
 
 const EVENT_TYPE_LABELS = {
   game: "Game",
   practice: "Practice",
   workout: "Workout",
   rest: "Rest",
+  training: "Training",
 };
 
 async function settledValue(promise, fallback) {
@@ -89,7 +95,7 @@ export default function Home() {
       // Local calendar day — matches Schedule page (not UTC via toISOString)
       const today = toDateKey(new Date());
 
-      const [lessons, allChallenges, completedIds, assignments, eventsResult] =
+      const [lessons, allChallenges, completedIds, assignments, eventsResult, todayBookings] =
         await Promise.all([
           settledValue(Lesson.list(), []),
           settledValue(Challenge.list(), []),
@@ -101,6 +107,7 @@ export default function Home() {
             .eq("athlete_id", user.id)
             .eq("event_date", today)
             .order("start_time", { ascending: true, nullsFirst: false }),
+          settledValue(fetchAthleteBookingsForRange(user.id, today, today), []),
         ]);
 
       if (eventsResult.error) {
@@ -117,8 +124,15 @@ export default function Home() {
       );
 
       const scheduleItems = [];
+      const bookingIdsOnEvents = new Set();
 
       (eventsResult.data || []).forEach((event) => {
+        const noteMatch = String(event.notes || "").match(
+          /booking_id:([0-9a-f-]{36})/i
+        );
+        if (event.booking_id) bookingIdsOnEvents.add(event.booking_id);
+        if (noteMatch?.[1]) bookingIdsOnEvents.add(noteMatch[1]);
+
         scheduleItems.push({
           id: `event-${event.id}`,
           title: event.title,
@@ -128,6 +142,19 @@ export default function Home() {
           href: getScheduleEventHref(event) || createPageUrl("Schedule"),
         });
       });
+
+      bookingsToScheduleEvents(todayBookings || [])
+        .filter((event) => !bookingIdsOnEvents.has(event.booking_id))
+        .forEach((event) => {
+          scheduleItems.push({
+            id: event.id,
+            title: event.title,
+            type: "Training",
+            category: "training",
+            completed: false,
+            href: createPageUrl("Schedule"),
+          });
+        });
 
       (assignments || [])
         .filter((a) => a.status !== "cancelled" && a.status !== "completed")
@@ -226,6 +253,7 @@ export default function Home() {
     <div className="p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-8">
         {isAthlete() && <UnreadMessagesBadge />}
+        {isAthlete() && <TrainerWorkoutNotifications />}
         {/* Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
           <div>

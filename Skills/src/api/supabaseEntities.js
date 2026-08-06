@@ -6,6 +6,7 @@ import {
   getCurrentUser,
   getCurrentUserProfile,
 } from "./supabaseClient";
+import { syncBookingToAthleteSchedule } from "@/lib/bookingSchedule";
 
 async function ensureCurrentUserProfileIfAvailable() {
   const { error } = await supabase.rpc("ensure_current_user_profile");
@@ -549,18 +550,49 @@ export const Booking = {
   },
 
   async create(bookingData) {
-    const user = await getCurrentUser();
+    let userId = bookingData.user_id;
+    if (!userId) {
+      const user = await getCurrentUser();
+      if (!user?.id) {
+        throw new Error("Please sign in to create a booking.");
+      }
+      userId = user.id;
+    }
+
+    const {
+      location,
+      trainer_name,
+      ...bookingRow
+    } = bookingData;
+
     const { data, error } = await supabase
       .from("bookings")
       .insert({
-        ...bookingData,
-        user_id: user.id,
+        ...bookingRow,
+        user_id: userId,
+        // Keep status compatible with older check constraints
+        status:
+          bookingRow.status === "pending_payment"
+            ? "pending"
+            : bookingRow.status || "pending",
         created_at: new Date().toISOString(),
       })
       .select()
       .single();
 
     if (error) throw error;
+
+    // Show on athlete My Schedule (best-effort; schedule also merges bookings)
+    try {
+      await syncBookingToAthleteSchedule(data, {
+        location: location || null,
+        trainerName: trainer_name || null,
+        serviceName: bookingRow.service_name || null,
+      });
+    } catch (scheduleError) {
+      console.warn("Booking saved but schedule sync failed:", scheduleError);
+    }
+
     return data;
   },
 

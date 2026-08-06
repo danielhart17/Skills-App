@@ -97,9 +97,12 @@ export default function TrainerAthletesPage() {
         <Card className="bg-brand-black border-brand-gray/30">
           <CardContent className="p-8 text-center space-y-4">
             <Users className="w-12 h-12 mx-auto text-brand-gray" />
-            <p className="text-brand-lightGray">No athletes connected</p>
+            <p className="text-brand-lightGray">No athletes connected yet</p>
+            <p className="text-brand-gray text-sm">
+              Athletes who follow you or message you will appear here.
+            </p>
             <Button variant="outline" className="border-brand-gray/30" disabled>
-              Find Athletes (coming soon)
+              Waiting for followers
             </Button>
           </CardContent>
         </Card>
