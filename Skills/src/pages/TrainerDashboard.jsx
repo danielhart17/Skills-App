@@ -18,6 +18,7 @@ import { notifyFollowersOfWorkout } from "@/api/followService";
 import {
   Trophy,
   Calendar,
+  CalendarDays,
   User,
   Plus,
   Edit,
@@ -54,6 +55,7 @@ import {
   skillLevelLabel,
   normalizeRecurrenceDays,
 } from "@/lib/sessionBooking";
+import TrainerScheduleTab from "@/components/trainers/TrainerScheduleTab";
 import {
   Dialog,
   DialogContent,
@@ -419,6 +421,16 @@ export default function TrainerDashboard() {
         countLabel: "created",
         tone: "from-orange-500 to-red-500",
         iconBg: "bg-orange-500/20 text-orange-300",
+      },
+      {
+        key: "schedule",
+        label: "Schedule",
+        description: "Upcoming bookings",
+        icon: CalendarDays,
+        count: dashboardStats.upcomingBookings,
+        countLabel: "soon",
+        tone: "from-violet-500 to-purple-600",
+        iconBg: "bg-violet-500/20 text-violet-300",
       },
       {
         key: "sessions",
@@ -1021,20 +1033,29 @@ export default function TrainerDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-orange-500 to-red-600 text-white border-0 shadow-xl">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-orange-100 text-sm font-medium">Upcoming Bookings</p>
-                <p className="text-3xl font-bold mt-1">
-                  {statsLoading ? "—" : dashboardStats.upcomingBookings}
-                </p>
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedSession(null);
+            setActiveTab("schedule");
+          }}
+          className="text-left rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange"
+        >
+          <Card className="bg-gradient-to-br from-orange-500 to-red-600 text-white border-0 shadow-xl h-full hover:opacity-95 transition-opacity">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-orange-100 text-sm font-medium">Upcoming Bookings</p>
+                  <p className="text-3xl font-bold mt-1">
+                    {statsLoading ? "—" : dashboardStats.upcomingBookings}
+                  </p>
+                </div>
+                <CalendarDays className="w-8 h-8 text-orange-200" />
               </div>
-              <Calendar className="w-8 h-8 text-orange-200" />
-            </div>
-            <p className="text-orange-100 text-xs mt-3">Confirmed or pending sessions</p>
-          </CardContent>
-        </Card>
+              <p className="text-orange-100 text-xs mt-3">Tap to open schedule</p>
+            </CardContent>
+          </Card>
+        </button>
 
         <Card className="bg-gradient-to-br from-yellow-500 to-amber-600 text-white border-0 shadow-xl">
           <CardContent className="p-6">
@@ -1062,7 +1083,7 @@ export default function TrainerDashboard() {
 
       <div>
         <h2 className="text-xl font-semibold text-white mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3 sm:gap-4">
           {quickActions.map((action) => {
             const Icon = action.icon;
             const isActive = activeTab === action.key;
@@ -1118,10 +1139,14 @@ export default function TrainerDashboard() {
         className="space-y-6"
       >
         <div className="-mx-4 sm:mx-0 overflow-x-auto px-4 sm:px-0 pb-1">
-        <TabsList className="inline-flex w-max min-w-full gap-1 sm:grid sm:w-full sm:grid-cols-6 bg-card p-1 rounded-xl border border-border h-auto">
+        <TabsList className="inline-flex w-max min-w-full gap-1 sm:grid sm:w-full sm:grid-cols-7 bg-card p-1 rounded-xl border border-border h-auto">
           <TabsTrigger value="challenges" className="shrink-0 px-3 py-2.5 text-xs sm:text-sm whitespace-nowrap data-[state=active]:bg-[#E85D04] data-[state=active]:text-white data-[state=active]:shadow-md">
             <Trophy className="w-4 h-4 mr-1.5 sm:mr-2" />
             Workouts
+          </TabsTrigger>
+          <TabsTrigger value="schedule" className="shrink-0 px-3 py-2.5 text-xs sm:text-sm whitespace-nowrap data-[state=active]:bg-[#E85D04] data-[state=active]:text-white data-[state=active]:shadow-md">
+            <CalendarDays className="w-4 h-4 mr-1.5 sm:mr-2" />
+            Schedule
           </TabsTrigger>
           <TabsTrigger value="events" className="shrink-0 px-3 py-2.5 text-xs sm:text-sm whitespace-nowrap data-[state=active]:bg-[#E85D04] data-[state=active]:text-white data-[state=active]:shadow-md">
             <CalendarPlus className="w-4 h-4 mr-1.5 sm:mr-2" />
@@ -1145,6 +1170,25 @@ export default function TrainerDashboard() {
           </TabsTrigger>
         </TabsList>
         </div>
+
+        {/* Schedule Tab — upcoming booked sessions + attendees */}
+        <TabsContent value="schedule" className="space-y-4">
+          {!trainerProfile ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <CalendarDays className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground mb-4">
+                  Set up your trainer profile to view your booking schedule
+                </p>
+                <Button onClick={() => setActiveTab("profile")}>
+                  Create Trainer Profile
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <TrainerScheduleTab trainerId={trainerProfile.id} />
+          )}
+        </TabsContent>
 
         {/* Workouts Tab */}
         <TabsContent value="challenges" className="space-y-4">

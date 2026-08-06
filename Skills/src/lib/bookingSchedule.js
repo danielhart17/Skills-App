@@ -174,6 +174,79 @@ export function bookingsToScheduleEvents(bookings = []) {
     });
 }
 
+/** Load non-cancelled bookings for a trainer in a local date range (inclusive). */
+export async function fetchTrainerBookingsForRange(
+  trainerId,
+  startDate,
+  endDate
+) {
+  if (!trainerId || !startDate || !endDate) return [];
+
+  const rangeStart = new Date(`${startDate}T00:00:00`);
+  const rangeEnd = new Date(`${endDate}T23:59:59.999`);
+
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(
+      "id, user_id, trainer_id, service_id, service_name, booking_datetime, duration_minutes, user_notes, status, payment_status, total_price, profiles:user_id(full_name, email), trainer_services:service_id(name, location)"
+    )
+    .eq("trainer_id", trainerId)
+    .neq("status", "cancelled")
+    .gte("booking_datetime", rangeStart.toISOString())
+    .lte("booking_datetime", rangeEnd.toISOString())
+    .order("booking_datetime", { ascending: true });
+
+  if (error) {
+    console.warn("Could not load trainer bookings for schedule:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
+/**
+ * Group trainer bookings into calendar session occurrences.
+ * Same service + same datetime = one session with multiple attendees.
+ */
+export function groupTrainerBookingsIntoSessions(bookings = []) {
+  const map = new Map();
+
+  for (const booking of bookings || []) {
+    if (String(booking.status || "").toLowerCase() === "cancelled") continue;
+    if (!booking.booking_datetime) continue;
+
+    const when = new Date(booking.booking_datetime);
+    if (Number.isNaN(when.getTime())) continue;
+
+    const key = `${booking.service_id || booking.service_name || "session"}|${booking.booking_datetime}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        id: key,
+        service_id: booking.service_id || null,
+        title:
+          booking.service_name ||
+          booking.trainer_services?.name ||
+          "Training Session",
+        event_type: "training",
+        event_date: format(when, "yyyy-MM-dd"),
+        start_time: format(when, "HH:mm:ss"),
+        booking_datetime: booking.booking_datetime,
+        location: booking.trainer_services?.location || null,
+        duration_minutes: booking.duration_minutes || null,
+        attendees: [],
+      });
+    }
+    map.get(key).attendees.push(booking);
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    if (a.event_date !== b.event_date) {
+      return String(a.event_date).localeCompare(String(b.event_date));
+    }
+    return String(a.start_time || "").localeCompare(String(b.start_time || ""));
+  });
+}
+
 /**
  * Merge athlete_events with bookings, skipping bookings already represented.
  */
