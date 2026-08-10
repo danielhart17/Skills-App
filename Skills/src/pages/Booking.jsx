@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Trainer } from "@/api/entities";
 import { TrainerService } from "@/api/entities";
@@ -34,6 +34,11 @@ import {
   toLocalDateKey,
 } from "@/lib/sessionBooking";
 import { syncBookingToAthleteSchedule } from "@/lib/bookingSchedule";
+import {
+  calculateBookingFees,
+  dollarsToCents,
+  formatUsdFromCents,
+} from "../../supabase/functions/_shared/bookingFees.ts";
 
 function safeReturnPath(returnTo) {
   if (!returnTo || typeof returnTo !== "string") return null;
@@ -125,6 +130,12 @@ export default function BookingPage() {
   const [trainerStripeStatus, setTrainerStripeStatus] = useState(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState(null);
+
+  // Same fee math as create-booking-checkout (shared bookingFees module).
+  const priceBreakdown = useMemo(() => {
+    if (!selectedService || !(Number(selectedService.price) > 0)) return null;
+    return calculateBookingFees(dollarsToCents(selectedService.price));
+  }, [selectedService]);
 
   useEffect(() => {
     const success = searchParams.get("success");
@@ -636,14 +647,33 @@ export default function BookingPage() {
                     </>
                   )}
                   <div className="border-t my-2"></div>
-                  <div className="flex justify-between items-center text-lg">
-                    <span className="text-gray-600">Total</span>
-                    <span className="font-bold text-blue-600">
-                      {selectedService.price > 0
-                        ? `$${selectedService.price}`
-                        : "Free"}
-                    </span>
-                  </div>
+                  {priceBreakdown ? (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">Session price</span>
+                        <span className="font-medium">
+                          {formatUsdFromCents(priceBreakdown.basePrice)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">Service fee</span>
+                        <span className="font-medium">
+                          {formatUsdFromCents(priceBreakdown.serviceFee)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-lg pt-1">
+                        <span className="text-gray-600">Total</span>
+                        <span className="font-bold text-blue-600">
+                          {formatUsdFromCents(priceBreakdown.totalCharged)}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center text-lg">
+                      <span className="text-gray-600">Total</span>
+                      <span className="font-bold text-blue-600">Free</span>
+                    </div>
+                  )}
 
                   {step >= 2 && selectedService.price > 0 && (
                     <div className="pt-2">
@@ -679,10 +709,10 @@ export default function BookingPage() {
                           Processing...
                         </>
                       ) : trainerStripeStatus?.chargesEnabled &&
-                        selectedService.price > 0 ? (
+                        priceBreakdown ? (
                         <>
                           <CreditCard className="w-5 h-5 mr-2" />
-                          Pay ${selectedService.price}
+                          Pay {formatUsdFromCents(priceBreakdown.totalCharged)}
                         </>
                       ) : (
                         <>

@@ -4,51 +4,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.10.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { calculateBookingFees } from "../_shared/bookingFees.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// Athlete pays base + service fee; trainer nets base - commission.
-const SERVICE_FEE_PERCENTAGE = 0.10; // 10% of basePrice (athlete-facing)
-const TRAINER_COMMISSION_PERCENTAGE = 0.03; // 3% of basePrice (from trainer payout)
-const PLATFORM_FLOOR_CENTS = 200; // $2.00 minimum combined platform take
-
-/**
- * Fee breakdown in whole cents.
- * Invariant: trainerPayout + platformTake === totalCharged
- * (Stripe card processing fees are separate and come out of the platform.)
- */
-function calculateBookingFees(basePrice: number) {
-  let serviceFee = Math.round(basePrice * SERVICE_FEE_PERCENTAGE);
-  const trainerCommission = Math.round(basePrice * TRAINER_COMMISSION_PERCENTAGE);
-
-  // Floor: bump athlete service fee so serviceFee + trainerCommission >= $2.
-  // Never touch trainerCommission — trainer payout stays basePrice - trainerCommission.
-  if (serviceFee + trainerCommission < PLATFORM_FLOOR_CENTS) {
-    serviceFee = PLATFORM_FLOOR_CENTS - trainerCommission;
-  }
-
-  const platformTake = serviceFee + trainerCommission;
-  const totalCharged = basePrice + serviceFee;
-  const trainerPayout = basePrice - trainerCommission;
-
-  if (trainerPayout + platformTake !== totalCharged) {
-    throw new Error(
-      `Fee reconciliation failed: payout(${trainerPayout}) + platform(${platformTake}) !== charged(${totalCharged})`
-    );
-  }
-
-  return {
-    basePrice,
-    serviceFee,
-    trainerCommission,
-    totalCharged,
-    trainerPayout,
-    platformTake,
-  };
-}
 
 // Append booking_id to a URL that may already contain query params.
 function appendBookingId(rawUrl: string, bookingId: string): string {
