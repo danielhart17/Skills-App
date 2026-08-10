@@ -9,6 +9,7 @@ import {
   ShootingSession,
 } from "@/api/entities";
 import TrainerBrowser from "@/components/trainers/TrainerBrowser";
+import AccountDeletionSection from "@/components/AccountDeletionSection";
 import { FEATURE_FLAGS } from "@/config/featureFlags";
 import {
   Card,
@@ -2016,6 +2017,10 @@ export default function ParentDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <div className="mt-10">
+        <AccountDeletionSection />
+      </div>
     </div>
   );
 }

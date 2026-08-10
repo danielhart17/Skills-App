@@ -56,6 +56,7 @@ import {
   normalizeRecurrenceDays,
 } from "@/lib/sessionBooking";
 import TrainerScheduleTab from "@/components/trainers/TrainerScheduleTab";
+import AccountDeletionSection from "@/components/AccountDeletionSection";
 import {
   Dialog,
   DialogContent,
@@ -1936,6 +1937,8 @@ export default function TrainerDashboard() {
             onNeedSession={() => setActiveTab("sessions")}
             sessionCount={dashboardStats.activeSessions}
           />
+
+          <AccountDeletionSection />
         </TabsContent>
       </Tabs>
       </div>

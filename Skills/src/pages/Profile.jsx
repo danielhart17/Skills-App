@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import AccountDeletionSection from "@/components/AccountDeletionSection";
 
 // Court zones configuration (matches ShootingSession.jsx exactly)
 const COURT_ZONES = [
@@ -932,6 +933,8 @@ export default function Profile() {
             </CardContent>
           </Card>
         )}
+
+        <AccountDeletionSection />
       </div>
 
       {/* Session Details Dialog */}
