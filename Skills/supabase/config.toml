@@ -24,3 +24,8 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/analyze-shooting-video/deno.json"
 entrypoint = "./functions/analyze-shooting-video/index.ts"
+
+[functions.delete-account]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/delete-account/index.ts"
