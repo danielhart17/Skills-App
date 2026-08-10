@@ -713,3 +713,66 @@ extension DateFormatter {
         return formatter
     }()
 }
+
+// MARK: - Athlete Schedule
+
+extension APIService {
+    func fetchAthleteEvents(athleteId: UUID, from startDate: String, to endDate: String) async throws -> [AthleteEvent] {
+        try await supabase.select(
+            from: "athlete_events",
+            filter: "athlete_id=eq.\(athleteId.uuidString)&event_date=gte.\(startDate)&event_date=lte.\(endDate)",
+            order: "event_date.asc,start_time.asc"
+        )
+    }
+
+    func createAthleteEvent(
+        athleteId: UUID,
+        title: String,
+        eventType: AthleteEvent.EventType,
+        eventDate: String,
+        startTime: String?,
+        opponent: String?,
+        location: String?,
+        notes: String?
+    ) async throws {
+        struct NewEvent: Encodable {
+            let athlete_id: UUID
+            let title: String
+            let event_type: String
+            let event_date: String
+            let start_time: String?
+            let opponent: String?
+            let location: String?
+            let notes: String?
+        }
+        try await supabase.insert(into: "athlete_events", values: NewEvent(
+            athlete_id: athleteId,
+            title: title,
+            event_type: eventType.rawValue,
+            event_date: eventDate,
+            start_time: startTime,
+            opponent: opponent,
+            location: location,
+            notes: notes
+        ))
+    }
+
+    func rescheduleAthleteEvent(id: UUID, athleteId: UUID, eventDate: String, startTime: String?) async throws {
+        struct Reschedule: Encodable {
+            let event_date: String
+            let start_time: String?
+        }
+        try await supabase.update(
+            table: "athlete_events",
+            values: Reschedule(event_date: eventDate, start_time: startTime),
+            filter: "id=eq.\(id.uuidString)&athlete_id=eq.\(athleteId.uuidString)"
+        )
+    }
+
+    func deleteAthleteEvent(id: UUID, athleteId: UUID) async throws {
+        try await supabase.delete(
+            from: "athlete_events",
+            filter: "id=eq.\(id.uuidString)&athlete_id=eq.\(athleteId.uuidString)"
+        )
+    }
+}
