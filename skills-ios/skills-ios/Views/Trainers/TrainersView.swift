@@ -57,10 +57,12 @@ struct TrainersView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink(destination: ProfileView()) {
-                        Image(systemName: "person.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.orange)
+                    if AuthService.shared.currentUser != nil {
+                        NavigationLink(destination: ProfileView()) {
+                            Image(systemName: "person.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.orange)
+                        }
                     }
                 }
             }

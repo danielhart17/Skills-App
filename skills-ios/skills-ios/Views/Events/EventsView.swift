@@ -53,7 +53,9 @@ struct EventsView: View {
                         Image(systemName: "calendar.badge.exclamationmark")
                             .font(.system(size: 50))
                             .foregroundColor(.secondary)
-                        Text("No events found")
+                        Text(selectedFilter == .myEvents && AuthService.shared.currentUser == nil
+                             ? "Sign in to see your events"
+                             : "No events found")
                             .font(.headline)
                             .foregroundColor(.secondary)
                     }
@@ -76,10 +78,12 @@ struct EventsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink(destination: ProfileView()) {
-                        Image(systemName: "person.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.orange)
+                    if AuthService.shared.currentUser != nil {
+                        NavigationLink(destination: ProfileView()) {
+                            Image(systemName: "person.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.orange)
+                        }
                     }
                 }
             }
@@ -101,13 +105,15 @@ struct EventsView: View {
     private func loadDataAsync() async {
         do {
             events = try await APIService.shared.fetchEvents()
-            let regs = try await APIService.shared.fetchUserRegistrations()
-            
-            var regMap: [UUID: EventRegistration] = [:]
-            for reg in regs {
-                regMap[reg.eventId] = reg
+            if AuthService.shared.currentUser != nil {
+                let regs = try await APIService.shared.fetchUserRegistrations()
+
+                var regMap: [UUID: EventRegistration] = [:]
+                for reg in regs {
+                    regMap[reg.eventId] = reg
+                }
+                registrations = regMap
             }
-            registrations = regMap
         } catch {
             print("Error loading events: \(error)")
         }
@@ -235,6 +241,7 @@ struct EventDetailView: View {
     @State private var isRegistering = false
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var showSignIn = false
     @Environment(\.presentationMode) var presentationMode
     
     private var isPast: Bool {
@@ -368,9 +375,17 @@ struct EventDetailView: View {
         } message: {
             Text(errorMessage)
         }
+        .sheet(isPresented: $showSignIn) {
+            AuthView()
+        }
     }
-    
+
     private func registerForEvent() {
+        // Guests must sign in before registering (App Store 5.1.1: browse free, act with account)
+        guard AuthService.shared.currentUser != nil else {
+            showSignIn = true
+            return
+        }
         isRegistering = true
         Task {
             do {

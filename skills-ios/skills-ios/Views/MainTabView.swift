@@ -32,8 +32,25 @@ struct MainTabView: View {
     
     var body: some View {
         TabView {
+            // Guests: browse-only tabs + sign in (App Store Guideline 5.1.1)
+            if !authService.isAuthenticated {
+                TrainersView()
+                    .tabItem {
+                        Label("Trainers", systemImage: "person.3.fill")
+                    }
+
+                EventsView()
+                    .tabItem {
+                        Label("Events", systemImage: "calendar")
+                    }
+
+                AuthView()
+                    .tabItem {
+                        Label("Sign In", systemImage: "person.circle.fill")
+                    }
+            }
             // Admin Dashboard (admins only)
-            if authService.isAdmin() {
+            else if authService.isAdmin() {
                 AdminDashboardView()
                     .tabItem {
                         Label("Admin", systemImage: "shield.fill")

@@ -33,7 +33,8 @@ struct skills_iosApp: App {
                         MainTabView()
                     }
                 } else {
-                    AuthView()
+                    // Guests browse Trainers/Events (App Store 5.1.1); MainTabView shows the guest tabs
+                    MainTabView()
                 }
             }
             .preferredColorScheme(.dark)

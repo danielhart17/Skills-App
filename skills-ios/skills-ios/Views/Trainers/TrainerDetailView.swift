@@ -15,6 +15,7 @@ struct TrainerDetailView: View {
     @State private var isLoadingChallenges = true
     @State private var selectedServiceForBooking: TrainerService? = nil
     @State private var showingBooking = false
+    @State private var showSignIn = false
     
     var body: some View {
         ScrollView {
@@ -129,6 +130,11 @@ struct TrainerDetailView: View {
                             ServiceCard(
                                 service: service,
                                 onBook: {
+                                    // Guests must sign in before booking (App Store 5.1.1)
+                                    guard AuthService.shared.currentUser != nil else {
+                                        showSignIn = true
+                                        return
+                                    }
                                     selectedServiceForBooking = service
                                     showingBooking = true
                                 }
@@ -169,6 +175,9 @@ struct TrainerDetailView: View {
             if let service = selectedServiceForBooking {
                 BookingView(trainer: trainer, service: service)
             }
+        }
+        .sheet(isPresented: $showSignIn) {
+            AuthView()
         }
     }
     
