@@ -9,7 +9,8 @@ import SwiftUI
 
 struct MainTabView: View {
     @StateObject private var authService = AuthService.shared
-    
+    @StateObject private var unreadStore = UnreadCountStore.shared
+
     init() {
         // Configure tab bar appearance to match web version
         let appearance = UITabBarAppearance()
@@ -83,7 +84,18 @@ struct MainTabView: View {
                     .tabItem {
                         Label("Dashboard", systemImage: "chart.bar.fill")
                     }
-                
+
+                TrainerAthletesView()
+                    .tabItem {
+                        Label("Athletes", systemImage: "person.2.fill")
+                    }
+
+                ConversationsListView()
+                    .tabItem {
+                        Label("Messages", systemImage: "message.fill")
+                    }
+                    .badge(unreadStore.total)
+
                 NavigationView {
                     ProfileView()
                 }
@@ -97,17 +109,28 @@ struct MainTabView: View {
                     .tabItem {
                         Label("Learn", systemImage: "book.fill")
                     }
-                
+
+                ScheduleView()
+                    .tabItem {
+                        Label("Schedule", systemImage: "calendar.badge.checkmark")
+                    }
+
+                ConversationsListView()
+                    .tabItem {
+                        Label("Messages", systemImage: "message.fill")
+                    }
+                    .badge(unreadStore.total)
+
                 ChallengesView()
                     .tabItem {
                         Label("Challenges", systemImage: "target")
                     }
-                
+
                 TrainersView()
                     .tabItem {
                         Label("Trainers", systemImage: "person.3.fill")
                     }
-                
+
                 EventsView()
                     .tabItem {
                         Label("Events", systemImage: "calendar")
@@ -115,6 +138,11 @@ struct MainTabView: View {
             }
         }
         .accentColor(.brandOrange)
+        .task {
+            if authService.isAuthenticated {
+                await unreadStore.refresh()
+            }
+        }
     }
 }
 
