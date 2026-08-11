@@ -154,7 +154,10 @@ struct ConversationView: View {
             try await APIService.shared.markConversationRead(conversationId: conversation.id, receiverId: myId)
             await UnreadCountStore.shared.refresh()
         } catch {
-            print("Error loading messages: \(error)")
+            // Task cancellation (leaving the thread mid-fetch) is normal, not an error.
+            if !(error is CancellationError), (error as? URLError)?.code != .cancelled {
+                print("Error loading messages: \(error)")
+            }
         }
     }
 

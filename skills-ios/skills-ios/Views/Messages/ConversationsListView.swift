@@ -123,7 +123,10 @@ struct ConversationsListView: View {
             }
             await unreadStore.refresh()
         } catch {
-            print("Error loading conversations: \(error)")
+            // Task cancellation (tab switch mid-fetch) is normal, not an error.
+            if !(error is CancellationError), (error as? URLError)?.code != .cancelled {
+                print("Error loading conversations: \(error)")
+            }
         }
         isLoading = false
     }
