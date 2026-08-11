@@ -46,13 +46,19 @@ export const getCurrentUserProfile = async () => {
 };
 
 // Auth helpers
-export const signUp = async (email, password, fullName) => {
+export const signUp = async (email, password, fullName, selectedRole = "athlete") => {
+  const allowedSignupRoles = ["athlete", "parent", "trainer"];
+  const role = allowedSignupRoles.includes(selectedRole)
+    ? selectedRole
+    : "athlete";
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: {
         full_name: fullName,
+        role,
       },
     },
   });

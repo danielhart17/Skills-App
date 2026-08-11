@@ -13,7 +13,12 @@ import {
   GraduationCap,
   Target,
   Calendar,
+  CalendarDays,
+  UserPlus,
+  MessageCircle,
 } from "lucide-react";
+import AthleteBottomNav from "@/components/AthleteBottomNav";
+import { useUnreadMessageCount } from "@/hooks/useUnreadMessageCount";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -39,6 +44,12 @@ const navigationItems = [
     description: "Practice & Test Your Skills",
   },
   {
+    title: "Schedule",
+    url: createPageUrl("Schedule"),
+    icon: CalendarDays,
+    description: "Weekly Calendar",
+  },
+  {
     title: "Trainers",
     url: createPageUrl("Trainers"),
     icon: Users,
@@ -61,7 +72,9 @@ const navigationItems = [
 export default function Layout({ children }) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const { signOut, profile, role, isAdmin, isTrainer, isParent } = useAuth();
+  const { signOut, profile, role, isAdmin, isTrainer, isParent, isAthlete, user } =
+    useAuth();
+  const { count: unreadMessages } = useUnreadMessageCount(user?.id);
 
   // Build navigation items based on user role
   const getRoleSpecificNavItems = () => {
@@ -87,6 +100,12 @@ export default function Layout({ children }) {
           description: "Browse Workouts",
         },
         {
+          title: "Schedule",
+          url: createPageUrl("Schedule"),
+          icon: CalendarDays,
+          description: "Weekly Calendar",
+        },
+        {
           title: "Profile",
           url: createPageUrl("Profile"),
           icon: User,
@@ -104,11 +123,34 @@ export default function Layout({ children }) {
           icon: GraduationCap,
           description: "Manage Content",
         },
+        {
+          title: "Messages",
+          url: "/trainer/messages",
+          icon: MessageCircle,
+          description: "Athlete conversations",
+          badge: unreadMessages,
+        },
+        {
+          title: "Athletes",
+          url: "/trainer/athletes",
+          icon: Users,
+          description: "Your roster",
+          badge: unreadMessages,
+        },
       ];
     }
 
     // For admins, show all items plus admin dashboard
-    const items = [...navigationItems];
+    const items = [
+      ...navigationItems,
+      {
+        title: "Messages",
+        url: "/messages",
+        icon: MessageCircle,
+        description: "Trainer chat",
+        badge: unreadMessages,
+      },
+    ];
     if (isAdmin()) {
       items.unshift({
         title: "Admin Dashboard",
@@ -168,7 +210,14 @@ export default function Layout({ children }) {
                 }`}
               />
               <div className="flex-1">
-                <div className="font-semibold">{item.title}</div>
+                <div className="font-semibold flex items-center gap-2">
+                  {item.title}
+                  {item.badge > 0 && (
+                    <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">
+                      {item.badge > 9 ? "9+" : item.badge}
+                    </span>
+                  )}
+                </div>
                 <div
                   className={`text-xs opacity-75 ${
                     location.pathname === item.url
@@ -265,8 +314,11 @@ export default function Layout({ children }) {
       </div>
 
       {/* Main Content */}
-      <main className="lg:pl-80">
+      <main
+        className={`lg:pl-80 ${isAthlete() && !isParent() ? "pb-20 lg:pb-0" : ""}`}
+      >
         <div className="min-h-screen bg-brand-charcoal">{children}</div>
+        <AthleteBottomNav />
       </main>
     </div>
   );

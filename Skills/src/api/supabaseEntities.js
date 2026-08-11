@@ -7,6 +7,57 @@ import {
   getCurrentUserProfile,
 } from "./supabaseClient";
 
+async function ensureCurrentUserProfileIfAvailable() {
+  const { error } = await supabase.rpc("ensure_current_user_profile");
+
+  // This helper is only a repair step. It should never block the real action.
+  if (error && !error.message?.includes("Could not find the function")) {
+    console.warn("Could not repair current user profile:", error);
+  }
+}
+
+function generateInviteCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+}
+
+async function createInviteCodeDirectly(userId) {
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = generateInviteCode();
+    const { error } = await supabase
+      .from("child_invite_codes")
+      .insert({
+        child_id: userId,
+        code,
+        expires_at: expiresAt,
+      });
+
+    if (!error) return { code, expires_at: expiresAt };
+
+    lastError = error;
+    if (error.code !== "23505") break;
+  }
+
+  if (lastError?.code === "42P01") {
+    throw new Error(
+      "Invite codes table is missing in Supabase. Run the parent-child migrations first."
+    );
+  }
+
+  if (lastError?.code === "42501" || lastError?.message?.includes("row-level security")) {
+    throw new Error(
+      "Supabase is blocking invite-code creation. Run repair_child_invite_code_rls.sql, then refresh and try again."
+    );
+  }
+
+  throw lastError || new Error("Failed to create invite code");
+}
+
 // =============================================
 // CHAPTER ENTITY
 // =============================================
@@ -1274,19 +1325,52 @@ export const PlayerGameStats = {
 export const ParentChild = {
   // Create an invite code for child to share with parent
   async createInviteCode() {
-    const { data, error } = await supabase.rpc("create_child_invite_code");
+    await ensureCurrentUserProfileIfAvailable();
 
-    if (error) throw error;
-    return data?.[0] || data;
+    const user = await getCurrentUser();
+    return await createInviteCodeDirectly(user.id);
   },
 
   // Link parent to child using invite code
   async linkByCode(code) {
-    const { data, error } = await supabase.rpc("link_parent_to_child_by_code", {
-      p_code: code.toUpperCase(),
+    await ensureCurrentUserProfileIfAvailable();
+
+    const normalizedCode = (code || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "");
+
+    if (!normalizedCode) {
+      throw new Error("Please enter a valid invite code");
+    }
+
+    let { data, error } = await supabase.rpc("link_child_invite_code", {
+      p_code: normalizedCode,
     });
 
-    if (error) throw error;
+    if (error?.message?.includes("Could not find the function")) {
+      const retry = await supabase.rpc("link_parent_to_child_by_code", {
+        p_code: normalizedCode,
+      });
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error?.message?.includes("Could not find the function")) {
+      const retry = await supabase.rpc("link_parent_to_child_by_code", {
+        code: normalizedCode,
+      });
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      if (error.message?.includes("Could not find the function")) {
+        throw new Error(
+          "Parent linking is not installed in Supabase yet. Run the parent-child SQL migrations, then try again."
+        );
+      }
+      throw error;
+    }
     return data?.[0] || data;
   },
 

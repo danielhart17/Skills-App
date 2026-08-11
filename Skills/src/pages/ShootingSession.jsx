@@ -249,7 +249,7 @@ export default function ShootingSessionPage() {
     setShowSummary(false);
     setSessionSummary(null);
     resetSession();
-    navigate("/Home");
+    navigate("/home");
   };
 
   const resetSession = () => {

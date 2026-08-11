@@ -87,7 +87,7 @@ export default function WorkoutSession() {
       toast.success("Workout completed! Great job!");
       
       if (isParent()) {
-        navigate("/ParentDashboard");
+        navigate("/parentdashboard");
       } else {
         navigate("/workouts");
       }

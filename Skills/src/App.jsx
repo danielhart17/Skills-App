@@ -1,13 +1,23 @@
+import { useEffect } from "react";
 import "./App.css";
 import Pages from "@/pages/index.jsx";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Auth from "@/pages/Auth";
 import EntryExam from "@/pages/EntryExam";
+import DailyCheckin from "@/components/DailyCheckin";
 import { BrowserRouter } from "react-router-dom";
+import { requestNotificationPermission } from "@/utils/notificationScheduler";
+import { GAMIFICATION_UPDATED_EVENT } from "@/utils/accountabilityUtils";
 
 function AppContent() {
   const { user, loading, profile, profileLoaded } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      requestNotificationPermission();
+    }
+  }, [user]);
 
   if (loading) {
     return (
@@ -38,6 +48,12 @@ function AppContent() {
 
   return (
     <>
+      <DailyCheckin
+        athleteId={user?.id}
+        onGamificationUpdate={() =>
+          window.dispatchEvent(new CustomEvent(GAMIFICATION_UPDATED_EVENT))
+        }
+      />
       <Pages />
       <Toaster />
     </>

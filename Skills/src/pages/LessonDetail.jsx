@@ -4,7 +4,15 @@ import { Lesson, UserProgress } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Clock, Star, CheckCircle, Play, Brain } from "lucide-react";
+import {
+  ArrowLeft,
+  Clock,
+  Star,
+  CheckCircle,
+  Play,
+  Brain,
+  RotateCcw,
+} from "lucide-react";
 
 export default function LessonDetail() {
   const { lessonId } = useParams();
@@ -161,14 +169,31 @@ export default function LessonDetail() {
             {/* Action Button */}
             <div className="flex justify-center pt-6">
               {isCompleted ? (
-                <Button
-                  size="lg"
-                  className="bg-green-500 hover:bg-green-600 text-white px-8 py-6 text-lg"
-                  disabled
-                >
-                  <CheckCircle className="w-6 h-6 mr-2" />
-                  Lesson Completed!
-                </Button>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <div className="flex items-center gap-2 px-5 py-3 rounded-lg bg-green-500/15 border border-green-500/40 text-green-300 font-semibold">
+                    <CheckCircle className="w-5 h-5" />
+                    Lesson Completed
+                  </div>
+                  {lesson.mode === "iq" ? (
+                    <Button
+                      size="lg"
+                      className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-6 text-lg shadow-xl"
+                      onClick={handleStartLesson}
+                    >
+                      <RotateCcw className="w-6 h-6 mr-2" />
+                      Redo Lesson
+                    </Button>
+                  ) : (
+                    <Button
+                      size="lg"
+                      className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-6 text-lg shadow-xl"
+                      onClick={handleStartLesson}
+                    >
+                      <Play className="w-6 h-6 mr-2" />
+                      Review Lesson
+                    </Button>
+                  )}
+                </div>
               ) : (
                 <Button
                   size="lg"
