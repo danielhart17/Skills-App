@@ -509,3 +509,270 @@ extension APIService {
         )
     }
 }
+
+// MARK: - Messaging
+// All ids are auth.users ids (AuthService.currentUser.id) — never User.trainerId.
+
+extension APIService {
+    func fetchActiveConnections(userId: UUID, isTrainer: Bool) async throws -> [TrainerAthleteConnection] {
+        let column = isTrainer ? "trainer_id" : "athlete_id"
+        return try await supabase.select(
+            from: "trainer_athlete_connections",
+            filter: "\(column)=eq.\(userId.uuidString)&status=eq.active"
+        )
+    }
+
+    func fetchProfiles(ids: [UUID]) async throws -> [PublicProfile] {
+        guard !ids.isEmpty else { return [] }
+        let list = ids.map(\.uuidString).joined(separator: ",")
+        return try await supabase.select(
+            from: "profiles",
+            columns: "id,full_name,avatar_url",
+            filter: "id=in.(\(list))"
+        )
+    }
+
+    func getOrCreateConversation(trainerId: UUID, athleteId: UUID) async throws -> Conversation {
+        let filter = "trainer_id=eq.\(trainerId.uuidString)&athlete_id=eq.\(athleteId.uuidString)"
+        let existing: [Conversation] = try await supabase.select(from: "conversations", filter: filter)
+        if let conversation = existing.first { return conversation }
+
+        struct NewConversation: Encodable {
+            let trainer_id: UUID
+            let athlete_id: UUID
+        }
+        do {
+            return try await supabase.insertReturning(
+                into: "conversations",
+                values: NewConversation(trainer_id: trainerId, athlete_id: athleteId)
+            )
+        } catch {
+            // Unique race: someone else created it between select and insert.
+            let retry: [Conversation] = try await supabase.select(from: "conversations", filter: filter)
+            guard let conversation = retry.first else { throw error }
+            return conversation
+        }
+    }
+
+    func fetchMessages(conversationId: UUID) async throws -> [Message] {
+        try await supabase.select(
+            from: "messages",
+            filter: "conversation_id=eq.\(conversationId.uuidString)",
+            order: "created_at.asc"
+        )
+    }
+
+    func fetchAttachments(messageIds: [UUID]) async throws -> [MessageAttachment] {
+        guard !messageIds.isEmpty else { return [] }
+        let list = messageIds.map(\.uuidString).joined(separator: ",")
+        return try await supabase.select(
+            from: "message_attachments",
+            filter: "message_id=in.(\(list))"
+        )
+    }
+
+    func sendMessage(
+        conversationId: UUID,
+        senderId: UUID,
+        receiverId: UUID,
+        body: String?,
+        messageType: String = "text",
+        workoutPayload: WorkoutPayload? = nil,
+        attachments: [NewAttachment] = []
+    ) async throws -> Message {
+        struct NewMessage: Encodable {
+            let conversation_id: UUID
+            let sender_id: UUID
+            let receiver_id: UUID
+            let body: String?
+            let message_type: String
+            let workout_payload: WorkoutPayload?
+        }
+
+        let resolvedType = attachments.isEmpty ? messageType : "media"
+        let message: Message = try await supabase.insertReturning(
+            into: "messages",
+            values: NewMessage(
+                conversation_id: conversationId,
+                sender_id: senderId,
+                receiver_id: receiverId,
+                body: body,
+                message_type: resolvedType,
+                workout_payload: workoutPayload
+            )
+        )
+
+        for attachment in attachments {
+            struct NewAttachmentRow: Encodable {
+                let message_id: UUID
+                let file_url: String
+                let file_type: String
+                let file_name: String
+                let file_size_bytes: Int
+            }
+            try await supabase.insert(into: "message_attachments", values: NewAttachmentRow(
+                message_id: message.id,
+                file_url: attachment.fileUrl,
+                file_type: attachment.fileType,
+                file_name: attachment.fileName,
+                file_size_bytes: attachment.fileSizeBytes
+            ))
+        }
+
+        struct Bump: Encodable { let last_message_at: String }
+        try await supabase.update(
+            table: "conversations",
+            values: Bump(last_message_at: ISO8601DateFormatter().string(from: Date())),
+            filter: "id=eq.\(conversationId.uuidString)"
+        )
+
+        return message
+    }
+
+    func markConversationRead(conversationId: UUID, receiverId: UUID) async throws {
+        struct ReadUpdate: Encodable { let read_at: String }
+        try await supabase.update(
+            table: "messages",
+            values: ReadUpdate(read_at: ISO8601DateFormatter().string(from: Date())),
+            filter: "conversation_id=eq.\(conversationId.uuidString)&receiver_id=eq.\(receiverId.uuidString)&read_at=is.null"
+        )
+    }
+
+    /// Unread message rows (id + conversation) — total and per-conversation counts derive client-side.
+    struct UnreadMessageRow: Decodable {
+        let id: UUID
+        let conversationId: UUID
+        enum CodingKeys: String, CodingKey {
+            case id
+            case conversationId = "conversation_id"
+        }
+    }
+
+    func fetchUnreadMessages(receiverId: UUID) async throws -> [UnreadMessageRow] {
+        try await supabase.select(
+            from: "messages",
+            columns: "id,conversation_id",
+            filter: "receiver_id=eq.\(receiverId.uuidString)&read_at=is.null"
+        )
+    }
+
+    func uploadMessageMedia(data: Data, senderId: UUID, fileName: String, isVideo: Bool) async throws -> NewAttachment {
+        let safeName = fileName.replacingOccurrences(of: "[^a-zA-Z0-9._-]", with: "_", options: .regularExpression)
+        let path = "\(senderId.uuidString)/\(UUID().uuidString)-\(safeName)"
+        try await supabase.uploadFile(
+            bucket: "message-media",
+            path: path,
+            data: data,
+            contentType: isVideo ? "video/mp4" : "image/jpeg"
+        )
+        return NewAttachment(
+            fileUrl: path,
+            fileType: isVideo ? "video" : "image",
+            fileName: safeName,
+            fileSizeBytes: data.count
+        )
+    }
+
+    /// Mirrors web addWorkoutToCalendar: workout message → athlete_events row.
+    func addWorkoutToCalendar(athleteId: UUID, payload: WorkoutPayload) async throws {
+        let drillsText = (payload.drills ?? []).enumerated().map { index, drill in
+            "\(index + 1). \(drill.name) — \(drill.sets ?? "")\(drill.notes.map { " (\($0))" } ?? "")"
+        }.joined(separator: "\n")
+
+        let notes = [
+            payload.trainerNotes,
+            payload.intensity.map { "Intensity: \($0)" },
+            "Drills:",
+            drillsText
+        ].compactMap { $0 }.joined(separator: "\n")
+
+        struct NewEvent: Encodable {
+            let athlete_id: UUID
+            let title: String
+            let event_type: String
+            let event_date: String
+            let start_time: String?
+            let notes: String
+        }
+        try await supabase.insert(into: "athlete_events", values: NewEvent(
+            athlete_id: athleteId,
+            title: payload.title,
+            event_type: "workout",
+            event_date: payload.scheduledDate ?? DateFormatter.yyyyMMdd.string(from: Date()),
+            start_time: payload.scheduledTime,
+            notes: notes
+        ))
+    }
+}
+
+extension DateFormatter {
+    /// Device-local yyyy-MM-dd, matching web behavior for event/check-in dates.
+    static let yyyyMMdd: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+}
+
+// MARK: - Athlete Schedule
+
+extension APIService {
+    func fetchAthleteEvents(athleteId: UUID, from startDate: String, to endDate: String) async throws -> [AthleteEvent] {
+        try await supabase.select(
+            from: "athlete_events",
+            filter: "athlete_id=eq.\(athleteId.uuidString)&event_date=gte.\(startDate)&event_date=lte.\(endDate)",
+            order: "event_date.asc,start_time.asc"
+        )
+    }
+
+    func createAthleteEvent(
+        athleteId: UUID,
+        title: String,
+        eventType: AthleteEvent.EventType,
+        eventDate: String,
+        startTime: String?,
+        opponent: String?,
+        location: String?,
+        notes: String?
+    ) async throws {
+        struct NewEvent: Encodable {
+            let athlete_id: UUID
+            let title: String
+            let event_type: String
+            let event_date: String
+            let start_time: String?
+            let opponent: String?
+            let location: String?
+            let notes: String?
+        }
+        try await supabase.insert(into: "athlete_events", values: NewEvent(
+            athlete_id: athleteId,
+            title: title,
+            event_type: eventType.rawValue,
+            event_date: eventDate,
+            start_time: startTime,
+            opponent: opponent,
+            location: location,
+            notes: notes
+        ))
+    }
+
+    func rescheduleAthleteEvent(id: UUID, athleteId: UUID, eventDate: String, startTime: String?) async throws {
+        struct Reschedule: Encodable {
+            let event_date: String
+            let start_time: String?
+        }
+        try await supabase.update(
+            table: "athlete_events",
+            values: Reschedule(event_date: eventDate, start_time: startTime),
+            filter: "id=eq.\(id.uuidString)&athlete_id=eq.\(athleteId.uuidString)"
+        )
+    }
+
+    func deleteAthleteEvent(id: UUID, athleteId: UUID) async throws {
+        try await supabase.delete(
+            from: "athlete_events",
+            filter: "id=eq.\(id.uuidString)&athlete_id=eq.\(athleteId.uuidString)"
+        )
+    }
+}

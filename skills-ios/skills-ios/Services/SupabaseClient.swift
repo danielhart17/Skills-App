@@ -9,6 +9,25 @@ import Foundation
 
 class SupabaseClient {
     static let shared = SupabaseClient()
+
+    /// Postgres TIMESTAMPTZ DEFAULT NOW() emits fractional seconds, which
+    /// plain .iso8601 rejects. Try fractional first, fall back to plain.
+    static let postgrestDecoder: JSONDecoder = {
+        let withFractional = ISO8601DateFormatter()
+        withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let string = try container.decode(String.self)
+            if let date = withFractional.date(from: string) ?? plain.date(from: string) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unparseable date: \(string)")
+        }
+        return decoder
+    }()
     
     private let baseURL: String
     private let anonKey: String
@@ -180,11 +199,9 @@ class SupabaseClient {
             throw SupabaseError.requestFailed
         }
         
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode([T].self, from: data)
+        return try SupabaseClient.postgrestDecoder.decode([T].self, from: data)
     }
-    
+
     func insert<T: Encodable>(into table: String, values: T) async throws {
         guard let url = URL(string: "\(baseURL)/rest/v1/\(table)") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
@@ -206,7 +223,35 @@ class SupabaseClient {
             throw SupabaseError.insertFailed
         }
     }
-    
+
+    /// Like insert, but returns the inserted row (Prefer: return=representation).
+    func insertReturning<T: Encodable, R: Decodable>(into table: String, values: T) async throws -> R {
+        guard let url = URL(string: "\(baseURL)/rest/v1/\(table)") else { throw SupabaseError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        if let token = accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        request.httpBody = try encoder.encode(values)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 201 else {
+            throw SupabaseError.insertFailed
+        }
+
+        let rows = try SupabaseClient.postgrestDecoder.decode([R].self, from: data)
+        guard let row = rows.first else { throw SupabaseError.insertFailed }
+        return row
+    }
+
+
     func update<T: Encodable>(table: String, values: T, filter: String) async throws {
         guard let url = URL(string: "\(baseURL)/rest/v1/\(table)?\(filter)") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
@@ -293,10 +338,8 @@ class SupabaseClient {
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw SupabaseError.rpcFailed
         }
-        
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(T.self, from: data)
+
+        return try SupabaseClient.postgrestDecoder.decode(T.self, from: data)
     }
     
     // MARK: - Account deletion
@@ -334,18 +377,16 @@ class SupabaseClient {
             throw SupabaseError.functionFailed
         }
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(T.self, from: data)
+        return try SupabaseClient.postgrestDecoder.decode(T.self, from: data)
     }
 
     // MARK: - Storage Operations
     
-    func uploadFile(bucket: String, path: String, data: Data) async throws {
+    func uploadFile(bucket: String, path: String, data: Data, contentType: String = "image/jpeg") async throws {
         guard let url = URL(string: "\(baseURL)/storage/v1/object/\(bucket)/\(path)") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
         if let token = accessToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -362,6 +403,29 @@ class SupabaseClient {
     
     func getPublicUrl(bucket: String, path: String) -> String {
         return "\(baseURL)/storage/v1/object/public/\(bucket)/\(path)"
+    }
+
+    /// Signed URL for an object in a private bucket.
+    func createSignedURL(bucket: String, path: String, expiresIn: Int = 3600) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/storage/v1/object/sign/\(bucket)/\(path)") else { throw SupabaseError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        if let token = accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["expiresIn": expiresIn])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode),
+              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let signedPath = json["signedURL"] as? String else {
+            throw SupabaseError.requestFailed
+        }
+
+        return "\(baseURL)/storage/v1\(signedPath)"
     }
 }
 
