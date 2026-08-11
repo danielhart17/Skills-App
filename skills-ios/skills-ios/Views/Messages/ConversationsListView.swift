@@ -194,7 +194,7 @@ struct ConversationRow: View {
                     .font(.headline)
                     .foregroundColor(.textPrimary)
                 if let lastMessageAt = conversation?.lastMessageAt {
-                    Text(lastMessageAt, style: .relative)
+                    Text(lastMessageAt, format: .relative(presentation: .named))
                         .font(.caption)
                         .foregroundColor(.textSecondary)
                 }
