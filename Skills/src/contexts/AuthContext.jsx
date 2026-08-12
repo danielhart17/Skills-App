@@ -186,20 +186,40 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
-  const signUp = async (email, password, fullName, selectedRole = "athlete") => {
+  const signUp = async (
+    email,
+    password,
+    fullName,
+    selectedRole = "athlete",
+    trainerDetails = null
+  ) => {
     const allowedSignupRoles = ["athlete", "parent", "trainer"];
     const dbRole = allowedSignupRoles.includes(selectedRole)
       ? selectedRole
       : "athlete";
 
+    const metadata = {
+      full_name: fullName,
+      role: dbRole,
+    };
+
+    if (dbRole === "trainer" && trainerDetails) {
+      metadata.phone = trainerDetails.phone || "";
+      metadata.instagram_url = trainerDetails.instagram_url || "";
+      metadata.social_media = trainerDetails.social_media || "";
+      metadata.website = trainerDetails.website || "";
+      metadata.trainer_experience_summary =
+        trainerDetails.trainer_experience_summary || "";
+      metadata.trainer_safety_affirmed = Boolean(
+        trainerDetails.trainer_safety_affirmed
+      );
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          full_name: fullName,
-          role: dbRole,
-        },
+        data: metadata,
       },
     });
 

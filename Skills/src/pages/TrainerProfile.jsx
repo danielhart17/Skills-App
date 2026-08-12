@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { useLocation, Link } from "react-router-dom";
+import { useLocation, Link, useNavigate } from "react-router-dom";
 import { Trainer } from "@/api/entities";
 import { TrainingEvent } from "@/api/entities";
 import { Review } from "@/api/entities";
 import { TrainerService } from "@/api/entities";
+import { Challenge } from "@/api/entities";
+import { supabase } from "@/api/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   MapPin,
   Star,
@@ -25,6 +28,7 @@ import {
   UserPlus,
   UserCheck,
   Loader2,
+  Trophy,
 } from "lucide-react";
 import {
   Dialog,
@@ -43,10 +47,64 @@ import { toast } from "sonner";
 
 // Helper to extract YouTube video ID
 const getYouTubeId = (url) => {
+  if (!url) return null;
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
   const match = url.match(regExp);
   return match && match[2].length === 11 ? match[2] : null;
 };
+
+function getWorkoutThumbnail(workout) {
+  if (workout?.thumbnail_url) return workout.thumbnail_url;
+  const ytId = getYouTubeId(workout?.youtube_url);
+  if (ytId) return `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+  return null;
+}
+
+function getDifficultyColor(difficulty) {
+  switch (String(difficulty || "").toLowerCase()) {
+    case "beginner":
+      return "bg-green-100 text-green-800 border-green-200";
+    case "intermediate":
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "advanced":
+      return "bg-red-100 text-red-800 border-red-200";
+    default:
+      return "bg-gray-100 text-gray-800 border-gray-200";
+  }
+}
+
+async function fetchTrainerWorkouts(trainerId, trainerUserId) {
+  let query = supabase
+    .from("challenges")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (trainerUserId) {
+    query = query.or(
+      `trainer_id.eq.${trainerId},created_by.eq.${trainerUserId}`
+    );
+  } else {
+    query = query.eq("trainer_id", trainerId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.warn("Trainer workouts query failed, falling back:", error);
+    const byTrainer = await Challenge.filter({ trainer_id: trainerId });
+    if (!trainerUserId) return byTrainer || [];
+    const byCreator = await Challenge.filter({ created_by: trainerUserId });
+    const map = new Map();
+    for (const row of [...(byTrainer || []), ...(byCreator || [])]) {
+      map.set(row.id, row);
+    }
+    return Array.from(map.values()).sort(
+      (a, b) =>
+        new Date(b.created_at || 0).getTime() -
+        new Date(a.created_at || 0).getTime()
+    );
+  }
+  return data || [];
+}
 
 const StarRating = ({ rating, count }) => (
   <div className="flex items-center gap-2">
@@ -70,6 +128,7 @@ const StarRating = ({ rating, count }) => (
 
 export default function TrainerProfile() {
   const location = useLocation();
+  const navigate = useNavigate();
   const searchParams = new URLSearchParams(location.search);
   const returnTo = searchParams.get("returnTo");
   const { user, isAthlete } = useAuth();
@@ -77,6 +136,8 @@ export default function TrainerProfile() {
   const [events, setEvents] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [services, setServices] = useState([]);
+  const [workouts, setWorkouts] = useState([]);
+  const [profileTab, setProfileTab] = useState("sessions");
   const [isLoading, setIsLoading] = useState(true);
   const [following, setFollowing] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
@@ -111,6 +172,9 @@ export default function TrainerProfile() {
       setServices(servicesData);
 
       const trainerUserId = getTrainerAuthUserId(trainerData);
+      const workoutsData = await fetchTrainerWorkouts(trainerId, trainerUserId);
+      setWorkouts(workoutsData);
+
       if (user?.id && isAthlete?.() && trainerUserId) {
         const follows = await isFollowingTrainer(user.id, trainerUserId);
         setFollowing(follows);
@@ -249,9 +313,12 @@ export default function TrainerProfile() {
                       {following ? "Following" : "Follow"}
                     </Button>
                   )}
-                  <Button variant="outline">
+                  <Button
+                    variant="outline"
+                    onClick={() => setProfileTab("workouts")}
+                  >
                     <Play className="w-4 h-4 mr-2" />
-                    Watch Training
+                    View Workouts
                   </Button>
                 </div>
               </div>
@@ -317,8 +384,43 @@ export default function TrainerProfile() {
             </Card>
           </div>
 
-          {/* Right Column (Services, Specializations, Events, Reviews) */}
-          <div className="lg:col-span-2 space-y-8">
+          {/* Right Column — Sessions / Workouts / Reviews */}
+          <div className="lg:col-span-2 space-y-6">
+            <Tabs
+              value={profileTab}
+              onValueChange={setProfileTab}
+              className="space-y-6"
+            >
+              <TabsList className="grid w-full grid-cols-3 bg-card border border-border h-auto p-1 rounded-xl">
+                <TabsTrigger
+                  value="sessions"
+                  className="data-[state=active]:bg-[#E85D04] data-[state=active]:text-white"
+                >
+                  <Sparkles className="w-4 h-4 mr-1.5" />
+                  Sessions
+                </TabsTrigger>
+                <TabsTrigger
+                  value="workouts"
+                  className="data-[state=active]:bg-[#E85D04] data-[state=active]:text-white"
+                >
+                  <Trophy className="w-4 h-4 mr-1.5" />
+                  Workouts
+                  {workouts.length > 0 ? (
+                    <span className="ml-1.5 text-xs opacity-80">
+                      ({workouts.length})
+                    </span>
+                  ) : null}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="reviews"
+                  className="data-[state=active]:bg-[#E85D04] data-[state=active]:text-white"
+                >
+                  <MessageSquare className="w-4 h-4 mr-1.5" />
+                  Reviews
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="sessions" className="space-y-8 mt-0">
             <Card className="border-0 shadow-xl bg-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-white">
@@ -547,7 +649,99 @@ export default function TrainerProfile() {
                 </CardContent>
               </Card>
             )}
+              </TabsContent>
 
+              <TabsContent value="workouts" className="space-y-4 mt-0">
+                <Card className="border-0 shadow-xl bg-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-white">
+                      <Trophy className="w-5 h-5 text-yellow-400" />
+                      Workouts by {trainer.name.split(" ")[0]}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {workouts.length === 0 ? (
+                      <div className="py-10 text-center">
+                        <Trophy className="w-12 h-12 mx-auto mb-3 text-gray-500" />
+                        <p className="text-gray-400">
+                          This trainer hasn&apos;t posted any workouts yet.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {workouts.map((workout) => {
+                          const thumbnailUrl = getWorkoutThumbnail(workout);
+                          return (
+                            <button
+                              key={workout.id}
+                              type="button"
+                              onClick={() =>
+                                navigate(`/workouts/${workout.id}`)
+                              }
+                              className="text-left rounded-xl border border-gray-700 bg-brand-gray/40 overflow-hidden hover:border-brand-orange/50 transition-colors group"
+                            >
+                              <div className="relative w-full aspect-video bg-black/40">
+                                {thumbnailUrl ? (
+                                  <img
+                                    src={thumbnailUrl}
+                                    alt={`${workout.title} thumbnail`}
+                                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+                                    <Play className="w-8 h-8 text-gray-500" />
+                                  </div>
+                                )}
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="w-10 h-10 rounded-full bg-black/55 border border-white/30 flex items-center justify-center group-hover:bg-brand-orange/90 transition-colors">
+                                    <Play className="w-4 h-4 text-white fill-white ml-0.5" />
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="p-4 space-y-2">
+                                <h4 className="font-semibold text-white group-hover:text-yellow-400 transition-colors line-clamp-2">
+                                  {workout.title}
+                                </h4>
+                                {workout.description ? (
+                                  <p className="text-sm text-gray-400 line-clamp-2">
+                                    {workout.description}
+                                  </p>
+                                ) : null}
+                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                                  {workout.difficulty ? (
+                                    <Badge
+                                      className={`${getDifficultyColor(
+                                        workout.difficulty
+                                      )} capitalize`}
+                                    >
+                                      {workout.difficulty}
+                                    </Badge>
+                                  ) : null}
+                                  {workout.duration_minutes ? (
+                                    <span className="flex items-center gap-1 text-xs text-gray-400">
+                                      <Clock className="w-3.5 h-3.5" />
+                                      {workout.duration_minutes} min
+                                    </span>
+                                  ) : null}
+                                  {workout.xp_reward ? (
+                                    <span className="flex items-center gap-1 text-xs text-gray-400">
+                                      <Star className="w-3.5 h-3.5" />+
+                                      {workout.xp_reward} XP
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="reviews" className="space-y-4 mt-0">
             <Card className="border-0 shadow-xl bg-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-white">
@@ -588,6 +782,8 @@ export default function TrainerProfile() {
                 </div>
               </CardContent>
             </Card>
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       </div>
