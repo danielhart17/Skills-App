@@ -16,6 +16,8 @@ struct TrainerDetailView: View {
     @State private var selectedServiceForBooking: TrainerService? = nil
     @State private var showingBooking = false
     @State private var showSignIn = false
+    @State private var isFollowing = false
+    @State private var isTogglingFollow = false
     
     var body: some View {
         ScrollView {
@@ -69,6 +71,25 @@ struct TrainerDetailView: View {
                         Label(location, systemImage: "location.fill")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
+                    }
+
+                    // Follow (keyed on trainers.user_id — the auth id the RPCs expect)
+                    if trainer.userId != nil {
+                        Button(action: toggleFollow) {
+                            Label(isFollowing ? "Following" : "Follow",
+                                  systemImage: isFollowing ? "checkmark" : "plus")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 8)
+                                .background(isFollowing ? Color.cardBackground : Color.brandOrange)
+                                .foregroundColor(isFollowing ? .brandOrange : .white)
+                                .overlay(
+                                    Capsule().stroke(Color.brandOrange, lineWidth: isFollowing ? 1 : 0)
+                                )
+                                .clipShape(Capsule())
+                        }
+                        .disabled(isTogglingFollow)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -170,6 +191,7 @@ struct TrainerDetailView: View {
         .onAppear {
             loadServices()
             loadChallenges()
+            loadFollowState()
         }
         .sheet(isPresented: $showingBooking) {
             if let service = selectedServiceForBooking {
@@ -203,6 +225,36 @@ struct TrainerDetailView: View {
             isLoadingChallenges = false
         }
     }
+
+    private func loadFollowState() {
+        guard let trainerUserId = trainer.userId, AuthService.shared.currentUser != nil else { return }
+        Task {
+            isFollowing = (try? await APIService.shared.isFollowingTrainer(trainerUserId: trainerUserId)) ?? false
+        }
+    }
+
+    private func toggleFollow() {
+        guard AuthService.shared.currentUser != nil else {
+            showSignIn = true
+            return
+        }
+        guard let trainerUserId = trainer.userId else { return }
+        isTogglingFollow = true
+        Task {
+            do {
+                if isFollowing {
+                    try await APIService.shared.unfollowTrainer(trainerUserId: trainerUserId)
+                    isFollowing = false
+                } else {
+                    try await APIService.shared.followTrainer(trainerUserId: trainerUserId)
+                    isFollowing = true
+                }
+            } catch {
+                print("Follow toggle failed: \(error)")
+            }
+            isTogglingFollow = false
+        }
+    }
 }
 
 struct ServiceCard: View {
@@ -226,7 +278,30 @@ struct ServiceCard: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            
+
+            if service.isScheduledSession {
+                HStack(spacing: 8) {
+                    if service.isRecurring == true, let days = service.recurrenceDays, !days.isEmpty {
+                        Label(days.map { $0.prefix(3).capitalized }.joined(separator: " "), systemImage: "repeat")
+                    } else if let date = service.sessionDate {
+                        Label(date, systemImage: "calendar")
+                    }
+                    if let time = service.startTime {
+                        Text(String(time.prefix(5)))
+                    }
+                    if let level = service.skillLevel, level != "all_levels" {
+                        Text(level.capitalized)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color.orange.opacity(0.2))
+                            .foregroundColor(.orange)
+                            .cornerRadius(8)
+                    }
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+            }
+
             HStack {
                 Label("\(service.durationMinutes) minutes", systemImage: "clock")
                     .font(.caption)

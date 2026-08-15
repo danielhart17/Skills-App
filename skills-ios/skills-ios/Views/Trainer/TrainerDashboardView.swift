@@ -12,8 +12,11 @@ struct TrainerDashboardView: View {
     @State private var selectedTab = 0
     @State private var bookings: [Booking] = []
     @State private var challenges: [Challenge] = []
+    @State private var services: [TrainerService] = []
     @State private var isLoading = true
     @State private var trainer: Trainer? = nil
+    @State private var sessionSheetService: TrainerService? = nil
+    @State private var showNewSessionSheet = false
     @State private var stripeOnboardingURL: URL? = nil
     @State private var stripeError: String? = nil
     @State private var isOnboarding = false
@@ -34,7 +37,8 @@ struct TrainerDashboardView: View {
                 Picker("", selection: $selectedTab) {
                     Text("Overview").tag(0)
                     Text("Bookings").tag(1)
-                    Text("Challenges").tag(2)
+                    Text("Sessions").tag(2)
+                    Text("Challenges").tag(3)
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .padding()
@@ -46,8 +50,15 @@ struct TrainerDashboardView: View {
                     TrainerBookingsView(bookings: bookings)
                         .tag(1)
 
+                    TrainerSessionsView(
+                        services: services,
+                        onAdd: { showNewSessionSheet = true },
+                        onEdit: { sessionSheetService = $0 }
+                    )
+                    .tag(2)
+
                     TrainerChallengesView(challenges: challenges)
-                        .tag(2)
+                        .tag(3)
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
             }
@@ -64,6 +75,18 @@ struct TrainerDashboardView: View {
             }
             .onAppear {
                 loadData()
+            }
+            .sheet(isPresented: $showNewSessionSheet) {
+                TrainerSessionSheet { saved in
+                    services.append(saved)
+                }
+            }
+            .sheet(item: $sessionSheetService) { service in
+                TrainerSessionSheet(existing: service) { saved in
+                    if let index = services.firstIndex(where: { $0.id == saved.id }) {
+                        services[index] = saved
+                    }
+                }
             }
             .sheet(isPresented: Binding(
                 get: { stripeOnboardingURL != nil },
@@ -96,6 +119,7 @@ struct TrainerDashboardView: View {
         guard let trainerId = authService.currentUser?.trainerId else { return }
         do {
             trainer = try await APIService.shared.fetchTrainer(id: trainerId)
+            services = try await APIService.shared.fetchTrainerServices(trainerId: trainerId)
         } catch {
             print("Error fetching trainer: \(error)")
         }
@@ -318,6 +342,83 @@ struct TrainerBookingsView: View {
                 }
                 .padding()
             }
+        }
+    }
+}
+
+struct TrainerSessionsView: View {
+    let services: [TrainerService]
+    var onAdd: () -> Void
+    var onEdit: (TrainerService) -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                Button(action: onAdd) {
+                    Label("New Session", systemImage: "plus.circle.fill")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.brandOrange)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                }
+
+                if services.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "calendar.badge.plus")
+                            .font(.system(size: 40))
+                            .foregroundColor(.secondary)
+                        Text("No sessions yet")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 40)
+                } else {
+                    ForEach(services) { service in
+                        Button {
+                            onEdit(service)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(service.name)
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Text("$\(NSDecimalNumber(decimal: service.price).stringValue)")
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.brandOrange)
+                                }
+                                HStack(spacing: 8) {
+                                    if service.isRecurring == true {
+                                        Label(
+                                            (service.recurrenceDays ?? []).map { $0.prefix(3).capitalized }.joined(separator: " "),
+                                            systemImage: "repeat"
+                                        )
+                                    } else if let date = service.sessionDate {
+                                        Label(date, systemImage: "calendar")
+                                    }
+                                    if let time = service.startTime {
+                                        Text(String(time.prefix(5)))
+                                    }
+                                    if let level = service.skillLevel, level != "all_levels" {
+                                        Text(level.capitalized)
+                                            .foregroundColor(.brandOrange)
+                                    }
+                                }
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            }
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                        }
+                    }
+                }
+            }
+            .padding()
         }
     }
 }

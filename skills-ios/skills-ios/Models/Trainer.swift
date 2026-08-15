@@ -56,8 +56,19 @@ struct TrainerService: Codable, Identifiable, Hashable {
     var description: String?
     var durationMinutes: Int
     var price: Decimal
+    var sessionDate: String?      // "yyyy-MM-dd" for one-time sessions
+    var startTime: String?        // "HH:mm:ss"
+    var location: String?
+    var skillLevel: String?       // all_levels | beginner | intermediate | advanced
+    var isRecurring: Bool?
+    var recurrenceDays: [String]? // lowercase day names, sunday-first
     let createdAt: Date
-    
+
+    /// True when the trainer scheduled this as a session (fixed date/time or recurring).
+    var isScheduledSession: Bool {
+        sessionDate != nil || isRecurring == true
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case trainerId = "trainer_id"
@@ -65,6 +76,12 @@ struct TrainerService: Codable, Identifiable, Hashable {
         case description
         case durationMinutes = "duration_minutes"
         case price
+        case sessionDate = "session_date"
+        case startTime = "start_time"
+        case location
+        case skillLevel = "skill_level"
+        case isRecurring = "is_recurring"
+        case recurrenceDays = "recurrence_days"
         case createdAt = "created_at"
     }
 }

@@ -776,3 +776,141 @@ extension APIService {
         )
     }
 }
+
+// MARK: - Trainer Sessions
+
+extension APIService {
+    struct BookedSlot: Decodable {
+        let bookingDatetime: Date
+        let durationMinutes: Int
+        enum CodingKeys: String, CodingKey {
+            case bookingDatetime = "booking_datetime"
+            case durationMinutes = "duration_minutes"
+        }
+    }
+
+    /// Slots already booked for a trainer on a given day (UTC-bucketed server-side, web parity).
+    func fetchTrainerBookedSlots(trainerId: UUID, day: String) async throws -> [BookedSlot] {
+        try await supabase.rpc(
+            function: "get_trainer_booked_slots",
+            params: ["p_trainer_id": trainerId.uuidString, "p_day": day]
+        )
+    }
+
+    func createTrainerService(
+        name: String,
+        description: String?,
+        price: Double,
+        durationMinutes: Int,
+        sessionDate: String?,
+        startTime: String?,
+        location: String?,
+        skillLevel: String,
+        isRecurring: Bool,
+        recurrenceDays: [String]
+    ) async throws -> TrainerService {
+        try await supabase.rpc(function: "create_trainer_service", params: [
+            "p_name": name,
+            "p_description": description as Any,
+            "p_price": price,
+            "p_duration_minutes": durationMinutes,
+            "p_session_date": sessionDate as Any,
+            "p_start_time": startTime as Any,
+            "p_location": location as Any,
+            "p_skill_level": skillLevel,
+            "p_is_recurring": isRecurring,
+            "p_recurrence_days": recurrenceDays
+        ])
+    }
+
+    func updateTrainerService(
+        id: UUID,
+        name: String,
+        description: String?,
+        price: Double,
+        durationMinutes: Int,
+        sessionDate: String?,
+        startTime: String?,
+        location: String?,
+        skillLevel: String,
+        isRecurring: Bool,
+        recurrenceDays: [String]
+    ) async throws -> TrainerService {
+        try await supabase.rpc(function: "update_trainer_service", params: [
+            "p_id": id.uuidString,
+            "p_name": name,
+            "p_description": description as Any,
+            "p_price": price,
+            "p_duration_minutes": durationMinutes,
+            "p_session_date": sessionDate as Any,
+            "p_start_time": startTime as Any,
+            "p_location": location as Any,
+            "p_skill_level": skillLevel,
+            "p_is_recurring": isRecurring,
+            "p_recurrence_days": recurrenceDays
+        ])
+    }
+}
+
+// MARK: - Follows & Notifications
+// trainer ids here are AUTH user ids (trainers.user_id), matching web followService.
+
+extension APIService {
+    func isFollowingTrainer(trainerUserId: UUID) async throws -> Bool {
+        guard let me = AuthService.shared.currentUser?.id else { return false }
+        let rows: [TrainerAthleteConnection] = try await supabase.select(
+            from: "trainer_athlete_connections",
+            filter: "trainer_id=eq.\(trainerUserId.uuidString)&athlete_id=eq.\(me.uuidString)&status=eq.active"
+        )
+        return !rows.isEmpty
+    }
+
+    @discardableResult
+    func followTrainer(trainerUserId: UUID) async throws -> TrainerAthleteConnection {
+        try await supabase.rpc(
+            function: "follow_trainer",
+            params: ["p_trainer_user_id": trainerUserId.uuidString]
+        )
+    }
+
+    @discardableResult
+    func unfollowTrainer(trainerUserId: UUID) async throws -> Bool {
+        try await supabase.rpc(
+            function: "unfollow_trainer",
+            params: ["p_trainer_user_id": trainerUserId.uuidString]
+        )
+    }
+
+    func fetchNotifications() async throws -> [AppNotification] {
+        guard let me = AuthService.shared.currentUser?.id else {
+            throw APIError.notAuthenticated
+        }
+        return try await supabase.select(
+            from: "notifications",
+            filter: "user_id=eq.\(me.uuidString)",
+            order: "created_at.desc",
+            limit: 50
+        )
+    }
+
+    func markNotificationRead(id: UUID) async throws {
+        struct ReadUpdate: Encodable { let read_at: String }
+        try await supabase.update(
+            table: "notifications",
+            values: ReadUpdate(read_at: ISO8601DateFormatter().string(from: Date())),
+            filter: "id=eq.\(id.uuidString)"
+        )
+    }
+
+    /// Bookings for the signed-in athlete within a datetime range (for schedule display).
+    func fetchUserBookings(fromISO: String, toISO: String) async throws -> [Booking] {
+        guard let me = AuthService.shared.currentUser?.id else {
+            throw APIError.notAuthenticated
+        }
+        return try await supabase.select(
+            from: "bookings",
+            filter: "user_id=eq.\(me.uuidString)&status=neq.cancelled&booking_datetime=gte.\(fromISO)&booking_datetime=lte.\(toISO)",
+            order: "booking_datetime.asc"
+        )
+    }
+}

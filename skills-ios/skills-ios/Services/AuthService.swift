@@ -44,8 +44,8 @@ class AuthService: ObservableObject {
         isAuthenticated = true
     }
     
-    func signUp(email: String, password: String, fullName: String) async throws {
-        let authResponse = try await supabase.signUp(email: email, password: password, fullName: fullName)
+    func signUp(email: String, password: String, fullName: String, metadata: [String: Any] = [:]) async throws {
+        let authResponse = try await supabase.signUp(email: email, password: password, fullName: fullName, metadata: metadata)
         supabase.setAccessToken(authResponse.accessToken)
         currentUser = try await supabase.getCurrentUser()
         isAuthenticated = true

@@ -71,6 +71,12 @@ struct ScheduleView: View {
             .navigationTitle("Schedule")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    NavigationLink(destination: NotificationsView()) {
+                        Image(systemName: "bell")
+                            .foregroundColor(.brandOrange)
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         showAddEvent = true
@@ -155,11 +161,38 @@ struct ScheduleView: View {
     private func loadEvents() async {
         guard let userId = authService.currentUser?.id, let first = weekDays.first, let last = weekDays.last else { return }
         do {
-            events = try await APIService.shared.fetchAthleteEvents(
+            var loaded = try await APIService.shared.fetchAthleteEvents(
                 athleteId: userId,
                 from: DateFormatter.yyyyMMdd.string(from: first),
                 to: DateFormatter.yyyyMMdd.string(from: last)
             )
+
+            // Merge trainer bookings as display-only training events. Web owns
+            // the real athlete_events sync; skip bookings it already inserted.
+            let iso = ISO8601DateFormatter()
+            let syncedIds = Set(loaded.compactMap(\.bookingId))
+            if let bookings = try? await APIService.shared.fetchUserBookings(
+                fromISO: iso.string(from: Calendar.current.startOfDay(for: first)),
+                toISO: iso.string(from: Calendar.current.startOfDay(for: last).addingTimeInterval(86400))
+            ) {
+                let timeFormatter = DateFormatter()
+                timeFormatter.dateFormat = "HH:mm:ss"
+                for booking in bookings where !syncedIds.contains(booking.id) {
+                    loaded.append(AthleteEvent(
+                        id: booking.id,
+                        athleteId: userId,
+                        title: booking.serviceName ?? "Training Session",
+                        eventType: .training,
+                        eventDate: DateFormatter.yyyyMMdd.string(from: booking.bookingDatetime),
+                        startTime: timeFormatter.string(from: booking.bookingDatetime),
+                        opponent: nil,
+                        location: nil,
+                        notes: booking.userNotes,
+                        bookingId: booking.id
+                    ))
+                }
+            }
+            events = loaded
             streak = try? await GamificationService.shared.ensureStreakRow(athleteId: userId)
         } catch {
             print("Error loading schedule: \(error)")
@@ -273,14 +306,17 @@ struct AthleteEventRow: View {
 
             Spacer()
 
-            Menu {
-                Button(role: .destructive, action: onDelete) {
-                    Label("Delete", systemImage: "trash")
+            // Booking-derived events are managed through the booking, not deletable here
+            if event.bookingId == nil {
+                Menu {
+                    Button(role: .destructive, action: onDelete) {
+                        Label("Delete", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundColor(.textMuted)
+                        .padding(8)
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .foregroundColor(.textMuted)
-                    .padding(8)
             }
         }
         .padding()
