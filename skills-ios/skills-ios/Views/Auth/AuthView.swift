@@ -48,8 +48,10 @@ struct AuthView: View {
             VStack(spacing: 30) {
                 // Logo and Title
                 VStack(spacing: 10) {
-                    Image(systemName: "basketball.fill")
-                        .font(.system(size: 80))
+                    Image("skills-logo")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 90, height: 90)
                         .foregroundColor(.orange)
                     
                     Text("Skills")
