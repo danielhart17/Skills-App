@@ -224,6 +224,7 @@ extension AthleteEvent.EventType {
         case .practice: return .successGreen
         case .workout: return .brandBlue
         case .rest: return .textMuted
+        case .training: return .infoBlue
         }
     }
 
@@ -233,6 +234,7 @@ extension AthleteEvent.EventType {
         case .practice: return "figure.basketball"
         case .workout: return "dumbbell.fill"
         case .rest: return "moon.zzz.fill"
+        case .training: return "figure.run"
         }
     }
 }
@@ -314,7 +316,8 @@ struct AddEventSheet: View {
             Form {
                 TextField("Title", text: $title)
                 Picker("Type", selection: $eventType) {
-                    ForEach(AthleteEvent.EventType.allCases, id: \.self) { type in
+                    // training is booking-derived, never hand-added
+                    ForEach(AthleteEvent.EventType.allCases.filter { $0 != .training }, id: \.self) { type in
                         Text(type.rawValue.capitalized).tag(type)
                     }
                 }

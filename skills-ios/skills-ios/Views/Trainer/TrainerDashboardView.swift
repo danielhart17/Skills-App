@@ -420,7 +420,7 @@ struct BookingRow: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 
-                Text(booking.status.rawValue.capitalized)
+                Text(booking.status.displayName)
                     .font(.caption)
                     .foregroundColor(statusColor)
             }
@@ -429,12 +429,12 @@ struct BookingRow: View {
         .background(Color(.systemGray6))
         .cornerRadius(10)
     }
-    
+
     private var statusColor: Color {
         switch booking.status {
         case .confirmed:
             return .green
-        case .pending:
+        case .pending, .pendingPayment:
             return .orange
         case .completed:
             return .blue

@@ -166,7 +166,7 @@ struct BookingView: View {
                                                     .tint(.white)
                                             } else {
                                                 Image(systemName: "lock.fill")
-                                                Text("Pay $\(formatPrice(service.price))")
+                                                Text("Pay $\(formatCents(feeEstimate.total))")
                                                     .fontWeight(.semibold)
                                             }
                                         }
@@ -399,20 +399,23 @@ struct BookingView: View {
             VStack(spacing: 12) {
                 summaryRow(label: "Trainer", value: trainer.name)
                 summaryRow(label: "Service", value: service.name)
-                
+
                 if let time = selectedTime {
                     summaryRow(label: "Date", value: formatDate(time))
                     summaryRow(label: "Time", value: formatTime(time))
                 }
-                
+
                 Divider()
-                
+
+                summaryRow(label: "Session", value: "$\(formatPrice(service.price))")
+                summaryRow(label: "Service fee", value: "$\(formatCents(feeEstimate.serviceFee))")
+
                 HStack {
                     Text("Total")
                         .font(.headline)
                         .foregroundColor(.textSecondary)
                     Spacer()
-                    Text("$\(formatPrice(service.price))")
+                    Text("$\(formatCents(feeEstimate.total))")
                         .font(.title3)
                         .fontWeight(.bold)
                         .foregroundColor(.brandOrange)
@@ -634,6 +637,16 @@ struct BookingView: View {
         }
     }
     
+    /// Local estimate of what checkout will charge; server breakdown is authoritative.
+    private var feeEstimate: (serviceFee: Int, total: Int) {
+        let baseCents = NSDecimalNumber(decimal: service.price * 100).intValue
+        return estimatedBookingFees(basePriceCents: baseCents)
+    }
+
+    private func formatCents(_ cents: Int) -> String {
+        String(format: "%.2f", Double(cents) / 100.0)
+    }
+
     private func formatPrice(_ price: Decimal) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal

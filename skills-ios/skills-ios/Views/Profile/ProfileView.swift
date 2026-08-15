@@ -938,16 +938,15 @@ struct DeleteAccountConfirmSheet: View {
                         Text("This is permanent")
                             .font(.headline)
                     }
-                    Text("Deleting your account will remove:")
+                    Text("Deleting your account will:")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     VStack(alignment: .leading, spacing: 6) {
-                        BulletRow(text: "Your profile, avatar, and personal info")
-                        BulletRow(text: "Your XP, level, and streaks")
-                        BulletRow(text: "Your shooting sessions and drill progress")
-                        BulletRow(text: "Your bookings and event registrations")
+                        BulletRow(text: "Permanently remove your login and personal info (name, email, photo)")
+                        BulletRow(text: "Remove your XP, level, and streaks")
+                        BulletRow(text: "Keep past bookings on record, anonymized, for payment history")
                     }
-                    Text("This action cannot be undone. You will need to create a new account to use Skills again.")
+                    Text("If you have upcoming confirmed sessions, cancel them first — deletion is blocked while any remain. This cannot be undone.")
                         .font(.footnote)
                         .foregroundColor(.secondary)
                         .padding(.top, 4)
@@ -1014,7 +1013,11 @@ struct DeleteAccountConfirmSheet: View {
                 // Auth state changed; the app's root will swap to the auth screen.
             } catch {
                 await MainActor.run {
-                    errorMessage = "Couldn't delete your account. Please check your connection and try again."
+                    if case SupabaseError.functionRejected(let message) = error {
+                        errorMessage = message
+                    } else {
+                        errorMessage = "Couldn't delete your account. Please check your connection and try again."
+                    }
                     isDeleting = false
                 }
             }

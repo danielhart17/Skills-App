@@ -2,7 +2,7 @@
 //  CheckinSection.swift
 //  skills-ios
 //
-//  Week confirm banner, morning check-in, post-event energy rating, stats row.
+//  Morning check-in, post-event energy rating, stats row.
 //  Composed into ScheduleView, which supplies this week's events.
 //
 
@@ -15,7 +15,6 @@ struct CheckinSection: View {
 
     @StateObject private var authService = AuthService.shared
     @State private var todayCheckins: [DailyCheckin] = []
-    @State private var weekConfirmed = false
     @State private var showMorningSheet = false
     @State private var toastText: String?
 
@@ -50,11 +49,7 @@ struct CheckinSection: View {
         VStack(spacing: 12) {
             statsRow
 
-            if !weekConfirmed {
-                weekConfirmBanner
-            }
-
-            if weekConfirmed, !todayEvents.isEmpty, todayCheckins.isEmpty {
+            if !todayEvents.isEmpty, todayCheckins.isEmpty {
                 morningPromptCard
             }
 
@@ -76,7 +71,6 @@ struct CheckinSection: View {
             }
         }
         .task {
-            loadState()
             await loadCheckins()
         }
         .sheet(isPresented: $showMorningSheet) {
@@ -114,32 +108,6 @@ struct CheckinSection: View {
         }
     }
 
-    private var weekConfirmBanner: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Confirm your week", systemImage: "calendar.badge.checkmark")
-                .font(.headline)
-                .foregroundColor(.textPrimary)
-            Text("Lock in this week's schedule to start earning check-in XP. +\(GamificationService.XP.weekConfirm) XP")
-                .font(.caption)
-                .foregroundColor(.textSecondary)
-            Button {
-                confirmWeek()
-            } label: {
-                Text("Confirm Week")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .padding(10)
-                    .background(Color.brandOrange)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-            }
-        }
-        .padding()
-        .background(Color.cardBackground)
-        .cornerRadius(12)
-    }
-
     private var morningPromptCard: some View {
         Button {
             showMorningSheet = true
@@ -174,31 +142,12 @@ struct CheckinSection: View {
 
     // MARK: - Actions
 
-    private func loadState() {
-        guard let athleteId else { return }
-        weekConfirmed = GamificationService.shared.isWeekConfirmed(athleteId: athleteId)
-    }
-
     private func loadCheckins() async {
         guard let athleteId else { return }
         todayCheckins = (try? await GamificationService.shared.fetchCheckins(
             athleteId: athleteId,
             date: GamificationService.todayKey()
         )) ?? []
-    }
-
-    private func confirmWeek() {
-        guard let athleteId else { return }
-        Task {
-            GamificationService.shared.setWeekConfirmed(athleteId: athleteId)
-            weekConfirmed = true
-            streak = try? await GamificationService.shared.processAction(
-                athleteId: athleteId,
-                xpAmount: GamificationService.XP.weekConfirm,
-                updateStreakFlag: false
-            )
-            showToast("Week confirmed! +\(GamificationService.XP.weekConfirm) XP")
-        }
     }
 
     private func handleMorningResponse(status: String, rescheduleDate: String?, rescheduleTime: String?) {
