@@ -43,6 +43,69 @@ class SupabaseClient {
             }
         }
     }
+
+    private var refreshToken: String? {
+        get {
+            return UserDefaults.standard.string(forKey: "supabase_refresh_token")
+        }
+        set {
+            if let token = newValue {
+                UserDefaults.standard.set(token, forKey: "supabase_refresh_token")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "supabase_refresh_token")
+            }
+        }
+    }
+
+    // MARK: - Request pipeline with token refresh
+
+    /// Access tokens live ~1 hour. On 401/403 with a token attached, refresh
+    /// once and retry; if refresh fails, clear the dead session so requests
+    /// fall back to anon instead of sending a stale Bearer forever.
+    private func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 401 || httpResponse.statusCode == 403,
+              request.value(forHTTPHeaderField: "Authorization") != nil else {
+            return (data, response)
+        }
+
+        guard await refreshSession(), let token = accessToken else {
+            // Session is dead; retry anonymously so public reads still work.
+            var anonRequest = request
+            anonRequest.setValue(nil, forHTTPHeaderField: "Authorization")
+            return try await URLSession.shared.data(for: anonRequest)
+        }
+
+        var retried = request
+        retried.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try await URLSession.shared.data(for: retried)
+    }
+
+    private func refreshSession() async -> Bool {
+        guard let refreshToken,
+              let url = URL(string: "\(baseURL)/auth/v1/token?grant_type=refresh_token") else {
+            self.accessToken = nil
+            self.refreshToken = nil
+            return false
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.httpBody = try? JSONEncoder().encode(["refresh_token": refreshToken])
+
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200,
+              let authResponse = try? JSONDecoder().decode(AuthResponse.self, from: data) else {
+            self.accessToken = nil
+            self.refreshToken = nil
+            return false
+        }
+        self.accessToken = authResponse.accessToken
+        self.refreshToken = authResponse.refreshToken
+        return true
+    }
     
     private init() {
         self.baseURL = Config.supabaseURL
@@ -51,6 +114,9 @@ class SupabaseClient {
     
     func setAccessToken(_ token: String?) {
         self.accessToken = token
+        if token == nil {
+            self.refreshToken = nil
+        }
     }
     
     // MARK: - Authentication
@@ -77,10 +143,13 @@ class SupabaseClient {
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw SupabaseError.authenticationFailed
         }
-        
-        return try JSONDecoder().decode(AuthResponse.self, from: data)
+
+        let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+        self.accessToken = authResponse.accessToken
+        self.refreshToken = authResponse.refreshToken
+        return authResponse
     }
-    
+
     func signIn(email: String, password: String) async throws -> AuthResponse {
         guard let url = URL(string: "\(baseURL)/auth/v1/token?grant_type=password") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
@@ -102,9 +171,10 @@ class SupabaseClient {
         
         let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
         self.accessToken = authResponse.accessToken
+        self.refreshToken = authResponse.refreshToken
         return authResponse
     }
-    
+
     func signOut() async throws {
         guard let url = URL(string: "\(baseURL)/auth/v1/logout") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
@@ -119,8 +189,9 @@ class SupabaseClient {
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 204 else {
             throw SupabaseError.logoutFailed
         }
-        
+
         self.accessToken = nil
+        self.refreshToken = nil
     }
     
     func getCurrentUser() async throws -> User? {
@@ -135,7 +206,7 @@ class SupabaseClient {
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await send(request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             if let httpResponse = response as? HTTPURLResponse {
@@ -190,7 +261,7 @@ class SupabaseClient {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await send(request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             if let httpResponse = response as? HTTPURLResponse {
@@ -220,7 +291,7 @@ class SupabaseClient {
         encoder.dateEncodingStrategy = .iso8601
         request.httpBody = try encoder.encode(values)
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await send(request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 201 else {
             throw SupabaseError.insertFailed
@@ -243,7 +314,7 @@ class SupabaseClient {
         encoder.dateEncodingStrategy = .iso8601
         request.httpBody = try encoder.encode(values)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await send(request)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 201 else {
             throw SupabaseError.insertFailed
@@ -270,7 +341,7 @@ class SupabaseClient {
         encoder.dateEncodingStrategy = .iso8601
         request.httpBody = try encoder.encode(values)
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await send(request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 204 else {
             throw SupabaseError.updateFailed
@@ -287,7 +358,7 @@ class SupabaseClient {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await send(request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 204 else {
             throw SupabaseError.deleteFailed
@@ -309,7 +380,7 @@ class SupabaseClient {
         encoder.dateEncodingStrategy = .iso8601
         request.httpBody = try encoder.encode(values)
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await send(request)
         
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             if let httpResponse = response as? HTTPURLResponse {
@@ -336,7 +407,7 @@ class SupabaseClient {
             request.httpBody = try JSONSerialization.data(withJSONObject: params)
         }
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await send(request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw SupabaseError.rpcFailed
@@ -358,6 +429,7 @@ class SupabaseClient {
         let response: DeleteResponse = try await invokeFunction("delete-account", body: [:])
         guard response.success else { throw SupabaseError.deleteFailed }
         self.accessToken = nil
+        self.refreshToken = nil
     }
 
     // MARK: - Edge Functions
@@ -373,7 +445,7 @@ class SupabaseClient {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await send(request)
 
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             if let httpResponse = response as? HTTPURLResponse,
@@ -404,7 +476,7 @@ class SupabaseClient {
         }
         request.httpBody = data
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await send(request)
         
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -428,7 +500,7 @@ class SupabaseClient {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: ["expiresIn": expiresIn])
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await send(request)
 
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode),
               let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
