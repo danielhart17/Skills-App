@@ -50,7 +50,13 @@ struct ChallengeDetailView: View {
                     .padding()
                 }
                 .cornerRadius(0)
-                
+
+                // Workout video
+                if let youtubeUrl = challenge.youtubeUrl, !youtubeUrl.isEmpty {
+                    VideoPlayerView(videoURL: youtubeUrl)
+                        .padding(.horizontal)
+                }
+
                 VStack(alignment: .leading, spacing: 20) {
                     // Status Badge
                     if isCompleted {

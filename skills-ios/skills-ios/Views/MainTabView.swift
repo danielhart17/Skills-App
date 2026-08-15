@@ -65,14 +65,14 @@ struct MainTabView: View {
                 
                 ChallengesView()
                     .tabItem {
-                        Label("Challenges", systemImage: "target")
+                        Label("Workouts", systemImage: "target")
                     }
-                
+
                 TrainersView()
                     .tabItem {
                         Label("Trainers", systemImage: "person.3.fill")
                     }
-                
+
                 EventsView()
                     .tabItem {
                         Label("Events", systemImage: "calendar")
@@ -103,27 +103,22 @@ struct MainTabView: View {
                     Label("Profile", systemImage: "person.circle.fill")
                 }
             }
-            // Regular users see all standard tabs
+            // Regular users: Schedule, Workouts, Learn, Trainers visible;
+            // Events + Messages land under the system More tab.
             else {
-                LearnView()
-                    .tabItem {
-                        Label("Learn", systemImage: "book.fill")
-                    }
-
                 ScheduleView()
                     .tabItem {
                         Label("Schedule", systemImage: "calendar.badge.checkmark")
                     }
 
-                ConversationsListView()
-                    .tabItem {
-                        Label("Messages", systemImage: "message.fill")
-                    }
-                    .badge(unreadStore.total)
-
                 ChallengesView()
                     .tabItem {
-                        Label("Challenges", systemImage: "target")
+                        Label("Workouts", systemImage: "target")
+                    }
+
+                LearnView()
+                    .tabItem {
+                        Label("Learn", systemImage: "book.fill")
                     }
 
                 TrainersView()
@@ -135,6 +130,12 @@ struct MainTabView: View {
                     .tabItem {
                         Label("Events", systemImage: "calendar")
                     }
+
+                ConversationsListView()
+                    .tabItem {
+                        Label("Messages", systemImage: "message.fill")
+                    }
+                    .badge(unreadStore.total)
             }
         }
         .accentColor(.brandOrange)

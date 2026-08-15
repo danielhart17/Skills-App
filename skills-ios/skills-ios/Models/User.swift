@@ -49,7 +49,9 @@ struct User: Codable, Identifiable {
 }
 
 enum UserRole: String, Codable {
-    case user
+    case user      // legacy athlete role
+    case athlete   // web signups use this
+    case parent
     case trainer
     case admin
 }

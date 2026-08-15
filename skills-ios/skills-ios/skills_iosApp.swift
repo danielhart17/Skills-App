@@ -25,7 +25,7 @@ struct skills_iosApp: App {
                 } else if authService.isAuthenticated {
                     // Check if user needs to complete entry exam (only for regular users)
                     if let user = authService.currentUser,
-                       user.role == .user,
+                       user.role == .user || user.role == .athlete,
                        !user.entryExamCompleted,
                        !entryExamCompleted {
                         EntryExamView(isExamCompleted: $entryExamCompleted)

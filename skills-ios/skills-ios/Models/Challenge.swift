@@ -18,6 +18,7 @@ struct Challenge: Codable, Identifiable {
     var isFeatured: Bool
     var createdBy: UUID?
     var thumbnailUrl: String?
+    var youtubeUrl: String?
     var setup: String?
     var instructions: String?
     var spaceRequired: String?
@@ -38,6 +39,7 @@ struct Challenge: Codable, Identifiable {
         case isFeatured = "is_featured"
         case createdBy = "created_by"
         case thumbnailUrl = "thumbnail_url"
+        case youtubeUrl = "youtube_url"
         case setup
         case instructions
         case spaceRequired = "space_required"

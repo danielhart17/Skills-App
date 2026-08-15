@@ -181,7 +181,7 @@ struct ChallengesView: View {
                 }
             }
             .background(Color.appBackground)
-            .navigationTitle("Challenges")
+            .navigationTitle("Workouts")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

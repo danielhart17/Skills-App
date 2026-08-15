@@ -16,8 +16,9 @@ struct AuthView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
 
-    // Trainer signup (mirrors web Auth.jsx; keys must match handle_new_user())
-    @State private var signUpAsTrainer = false
+    // Signup role (mirrors web Auth.jsx; keys must match handle_new_user())
+    @State private var signUpRole = "athlete"  // athlete | trainer | parent
+    private var signUpAsTrainer: Bool { signUpRole == "trainer" }
     @State private var phone = ""
     @State private var experienceSummary = ""
     @State private var instagramUrl = ""
@@ -64,11 +65,17 @@ struct AuthView: View {
                 // Auth Form
                 VStack(spacing: 20) {
                     if isSignUp {
-                        Picker("Account type", selection: $signUpAsTrainer) {
-                            Text("Athlete").tag(false)
-                            Text("Trainer").tag(true)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("I am a...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Picker("Account type", selection: $signUpRole) {
+                                Text("Athlete").tag("athlete")
+                                Text("Trainer").tag("trainer")
+                                Text("Parent").tag("parent")
+                            }
+                            .pickerStyle(.segmented)
                         }
-                        .pickerStyle(.segmented)
 
                         TextField("Full Name", text: $fullName)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -174,7 +181,7 @@ struct AuthView: View {
         Task {
             do {
                 if isSignUp {
-                    var metadata: [String: Any] = [:]
+                    var metadata: [String: Any] = ["role": signUpRole]
                     if signUpAsTrainer {
                         metadata = [
                             "role": "trainer",
