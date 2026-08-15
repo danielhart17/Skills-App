@@ -262,51 +262,18 @@ struct YouTubePlayerView: UIViewRepresentable {
     }
     
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // Extract YouTube video ID and create embed URL
-        if let embedURL = getYouTubeEmbedURL(from: videoURL) {
-            print("🎬 Loading YouTube embed: \(embedURL)")
-            
-            // Create HTML with YouTube iframe
-            let html = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                <style>
-                    * { margin: 0; padding: 0; }
-                    body { background-color: #000; }
-                    .video-container {
-                        position: relative;
-                        padding-bottom: 56.25%;
-                        height: 0;
-                        overflow: hidden;
-                    }
-                    .video-container iframe {
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
-                        border: 0;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="video-container">
-                    <iframe src="\(embedURL)" 
-                            frameborder="0" 
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                            allowfullscreen>
-                    </iframe>
-                </div>
-            </body>
-            </html>
-            """
-            
-            webView.loadHTMLString(html, baseURL: URL(string: "https://www.youtube.com"))
-        } else {
+        // Load the embed URL directly: iframe-in-HTML loads get rejected by
+        // YouTube with "video unavailable" (error 152) despite a baseURL,
+        // while direct navigation runs with a youtube.com origin and plays.
+        guard let embedURL = getYouTubeEmbedURL(from: videoURL),
+              let url = URL(string: embedURL) else {
             print("❌ Could not extract YouTube video ID from: \(videoURL)")
+            return
         }
+        // updateUIView fires on every SwiftUI refresh; don't restart playback.
+        guard webView.url?.path != url.path else { return }
+        print("🎬 Loading YouTube embed: \(embedURL)")
+        webView.load(URLRequest(url: url))
     }
     
     private func getYouTubeEmbedURL(from urlString: String) -> String? {
