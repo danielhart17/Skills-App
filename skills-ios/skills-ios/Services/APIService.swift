@@ -315,26 +315,27 @@ class APIService {
             throw APIError.notAuthenticated
         }
         
+        // Columns must match prod: shots_data (not shots), no missed_shots column.
         struct SessionData: Encodable {
             let user_id: String
             let date: String
             let total_shots: Int
             let made_shots: Int
-            let missed_shots: Int
+            let shooting_percentage: Double
             let duration_seconds: Int
-            let shots: [Shot]
+            let shots_data: [Shot]
         }
-        
+
         let session = SessionData(
             user_id: userId.uuidString,
             date: ISO8601DateFormatter().string(from: Date()),
             total_shots: totalShots,
             made_shots: madeShots,
-            missed_shots: totalShots - madeShots,
+            shooting_percentage: totalShots > 0 ? Double(madeShots) / Double(totalShots) * 100 : 0,
             duration_seconds: durationSeconds,
-            shots: shots
+            shots_data: shots
         )
-        
+
         try await supabase.insert(into: "shooting_sessions", values: session)
     }
     

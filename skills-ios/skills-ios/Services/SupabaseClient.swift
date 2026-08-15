@@ -291,9 +291,13 @@ class SupabaseClient {
         encoder.dateEncodingStrategy = .iso8601
         request.httpBody = try encoder.encode(values)
         
-        let (_, response) = try await send(request)
-        
+        let (data, response) = try await send(request)
+
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 201 else {
+            if let httpResponse = response as? HTTPURLResponse,
+               let responseString = String(data: data, encoding: .utf8) {
+                print("Insert into \(table) failed (\(httpResponse.statusCode)): \(responseString)")
+            }
             throw SupabaseError.insertFailed
         }
     }
@@ -317,6 +321,10 @@ class SupabaseClient {
         let (data, response) = try await send(request)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 201 else {
+            if let httpResponse = response as? HTTPURLResponse,
+               let responseString = String(data: data, encoding: .utf8) {
+                print("Insert into \(table) failed (\(httpResponse.statusCode)): \(responseString)")
+            }
             throw SupabaseError.insertFailed
         }
 
