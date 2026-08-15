@@ -29,3 +29,18 @@ entrypoint = "./functions/analyze-shooting-video/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/delete-account/index.ts"
+
+[functions.create-checkout-session]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/create-checkout-session/index.ts"
+
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/stripe-webhook/index.ts"
+
+[functions.verify-payment]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/verify-payment/index.ts"

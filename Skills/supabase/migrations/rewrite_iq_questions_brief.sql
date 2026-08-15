@@ -1,6 +1,9 @@
 -- Rewrite IQ lesson questions: briefer, easier to digest
 -- Keeps 'What is this action called?' question text unchanged
--- Run in Supabase SQL Editor
+--
+-- ⚠️ ALREADY EXECUTED ON PROD (prior to Aug 2026 repo consolidation).
+-- NEVER RE-RUN: these are destructive, environment-specific UPDATEs with
+-- hardcoded UUIDs and no backup of the original wording.
 
 UPDATE public.questions SET question_text = 'Why is good spacing important?', updated_at = NOW() WHERE id = '3e4dd58a-115b-4197-ac9a-757ab05d02f1';
 UPDATE public.questions SET question_text = 'What happens to the defense when spacing is good?', updated_at = NOW() WHERE id = '77666706-f4a6-4e7b-89f2-ab948cfd1e13';
