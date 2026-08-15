@@ -262,18 +262,45 @@ struct YouTubePlayerView: UIViewRepresentable {
     }
     
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // Load the embed URL directly: iframe-in-HTML loads get rejected by
-        // YouTube with "video unavailable" (error 152) despite a baseURL,
-        // while direct navigation runs with a youtube.com origin and plays.
-        guard let embedURL = getYouTubeEmbedURL(from: videoURL),
-              let url = URL(string: embedURL) else {
+        guard let embedURL = getYouTubeEmbedURL(from: videoURL) else {
             print("❌ Could not extract YouTube video ID from: \(videoURL)")
             return
         }
         // updateUIView fires on every SwiftUI refresh; don't restart playback.
-        guard webView.url?.path != url.path else { return }
+        guard context.coordinator.loadedURL != embedURL else { return }
+        context.coordinator.loadedURL = embedURL
         print("🎬 Loading YouTube embed: \(embedURL)")
-        webView.load(URLRequest(url: url))
+
+        // The embed needs a real, non-YouTube page origin: with baseURL
+        // youtube.com the player rejects it (152), with no referer at all it
+        // rejects it too (153). Serving from the app's own web domain is a
+        // valid embed context.
+        let html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <style>
+                * { margin: 0; padding: 0; }
+                html, body { height: 100%; background-color: #000; }
+                iframe { width: 100%; height: 100%; border: 0; }
+            </style>
+        </head>
+        <body>
+            <iframe src="\(embedURL)"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen>
+            </iframe>
+        </body>
+        </html>
+        """
+        webView.loadHTMLString(html, baseURL: URL(string: Config.webAppURL))
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var loadedURL: String?
     }
     
     private func getYouTubeEmbedURL(from urlString: String) -> String? {
@@ -308,8 +335,8 @@ struct YouTubePlayerView: UIViewRepresentable {
         
         guard let id = videoID else { return nil }
         
-        // Return embed URL
-        return "https://www.youtube.com/embed/\(id)?playsinline=1&rel=0&modestbranding=1"
+        // origin must match the loadHTMLString baseURL
+        return "https://www.youtube.com/embed/\(id)?playsinline=1&rel=0&origin=\(Config.webAppURL)"
     }
 }
 
