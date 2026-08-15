@@ -52,7 +52,6 @@ struct AuthView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 90, height: 90)
-                        .foregroundColor(.orange)
                     
                     Text("Skills")
                         .font(.largeTitle)
