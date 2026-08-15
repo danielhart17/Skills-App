@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { User, ParentChild } from "@/api/entities";
 import { ShootingSession } from "@/api/entities";
 import { useAuth } from "@/contexts/AuthContext";
+import { useWorkoutStats } from "@/hooks/useWorkoutStats";
 import { supabase } from "@/api/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import {
   User as UserIcon,
   Star,
   Flame,
+  Dumbbell,
   Trophy,
   Target,
   TrendingUp,
@@ -49,6 +51,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import AccountDeletionSection from "@/components/AccountDeletionSection";
 
 // Court zones configuration (matches ShootingSession.jsx exactly)
 const COURT_ZONES = [
@@ -174,7 +177,11 @@ const POSITIONS = [
 ];
 
 export default function Profile() {
-  const { isTrainer, isAthlete, refreshProfile, signOut } = useAuth();
+  const { isTrainer, isAthlete, refreshProfile, signOut, user: authUser } =
+    useAuth();
+  const { workoutsCompleted, loading: workoutsLoading } = useWorkoutStats(
+    authUser?.id
+  );
   const [user, setUser] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -528,7 +535,7 @@ export default function Profile() {
                 <p className="text-purple-100 mb-4">{user?.email}</p>
 
                 {!isTrainer() ? (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <div>
                       <div className="text-2xl font-bold">
                         {user?.current_level || 1}
@@ -546,6 +553,14 @@ export default function Profile() {
                         {user?.current_streak || 0}
                       </div>
                       <div className="text-purple-100 text-sm">Day Streak</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold">
+                        {workoutsLoading ? "—" : workoutsCompleted}
+                      </div>
+                      <div className="text-purple-100 text-sm">
+                        Workouts Done
+                      </div>
                     </div>
                     <div>
                       <div className="text-2xl font-bold">
@@ -666,6 +681,15 @@ export default function Profile() {
                     </span>
                     <span className="font-semibold">
                       {user?.completed_lessons?.length || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 flex items-center gap-1.5">
+                      <Dumbbell className="w-3.5 h-3.5" />
+                      Workouts Completed
+                    </span>
+                    <span className="font-semibold">
+                      {workoutsLoading ? "—" : workoutsCompleted}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -909,6 +933,8 @@ export default function Profile() {
             </CardContent>
           </Card>
         )}
+
+        <AccountDeletionSection />
       </div>
 
       {/* Session Details Dialog */}

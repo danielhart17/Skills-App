@@ -5,7 +5,6 @@ import { todayKey } from "@/utils/accountabilityUtils";
 export const XP_REWARDS = {
   MORNING_CONFIRM: 25,
   ENERGY_RATING: 50,
-  WEEK_CONFIRM: 100,
   PERFECT_WEEK: 200,
   ACHIEVEMENT: 75,
 };

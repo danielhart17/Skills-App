@@ -130,6 +130,36 @@ export async function registerForFreeEvent(eventId, userId) {
 // STRIPE CONNECT - TRAINER PAYMENTS
 // ============================================
 
+const STRIPE_CONNECT_NOT_DEPLOYED_MESSAGE =
+  "The Stripe Connect edge function is not deployed yet. In Supabase Dashboard go to Edge Functions and deploy create-connect-account, or run: npx supabase functions deploy create-connect-account --project-ref dadyciqoypfdeotuspms";
+
+async function parseFunctionInvokeError(error, data) {
+  if (data?.error) return data.error;
+
+  let message = error?.message || "Edge function request failed";
+
+  try {
+    if (error?.context?.json) {
+      const body = await error.context.json();
+      if (body?.error) return body.error;
+      if (body?.message) return body.message;
+    }
+  } catch {
+    // Ignore JSON parse failures.
+  }
+
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("failed to send a request to the edge function") ||
+    lower.includes("not_found") ||
+    lower.includes("requested function was not found")
+  ) {
+    return STRIPE_CONNECT_NOT_DEPLOYED_MESSAGE;
+  }
+
+  return message;
+}
+
 /**
  * Create a Stripe Connect account for a trainer and get onboarding link
  * @param {string} trainerId - Trainer ID
@@ -137,23 +167,24 @@ export async function registerForFreeEvent(eventId, userId) {
  */
 export async function createConnectAccount(trainerId) {
   try {
+    const baseUrl = globalThis.location.origin;
     const { data, error } = await supabase.functions.invoke(
       "create-connect-account",
       {
         body: {
           trainerId,
-          refreshUrl: `${globalThis.location.origin}/TrainerDashboard?stripe_refresh=true`,
-          returnUrl: `${globalThis.location.origin}/TrainerDashboard?stripe_onboarding=complete`,
+          refreshUrl: `${baseUrl}/trainerdashboard?stripe_refresh=true`,
+          returnUrl: `${baseUrl}/trainerdashboard?stripe_onboarding=complete`,
         },
       }
     );
 
     if (error) {
-      throw new Error(`Failed to create Connect account: ${error.message}`);
+      throw new Error(await parseFunctionInvokeError(error, data));
     }
 
-    if (!data || !data.url) {
-      throw new Error("Edge Function did not return an onboarding URL");
+    if (!data?.url) {
+      throw new Error(STRIPE_CONNECT_NOT_DEPLOYED_MESSAGE);
     }
 
     return data;
@@ -172,11 +203,20 @@ export async function getTrainerStripeStatus(trainerId) {
   try {
     const { data, error } = await supabase
       .from("trainers")
-      .select("stripe_account_id, stripe_onboarding_complete, stripe_charges_enabled, stripe_payouts_enabled")
+      .select(
+        "stripe_account_id, stripe_onboarding_complete, stripe_charges_enabled, stripe_payouts_enabled"
+      )
       .eq("id", trainerId)
       .single();
 
-    if (error) throw error;
+    if (error) {
+      if (error.message?.includes("stripe_account_id")) {
+        throw new Error(
+          "Stripe columns are missing on trainers. Run add_trainer_stripe_connect.sql in Supabase."
+        );
+      }
+      throw error;
+    }
 
     return {
       hasAccount: !!data?.stripe_account_id,

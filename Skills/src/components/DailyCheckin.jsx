@@ -16,12 +16,8 @@ import {
   todayKey,
   combineEventDateTime,
   isPostEventDue,
-  WEEK_CONFIRMED_EVENT,
-  isWeekConfirmed,
-  getCurrentWeekStart,
   dispatchGamificationUpdated,
 } from "@/utils/accountabilityUtils";
-import { toDateKey } from "@/lib/scheduleUtils";
 import { formatEventTime, EVENT_TYPE_BADGE_STYLES } from "@/lib/scheduleUtils";
 import {
   processGamificationAction,
@@ -91,11 +87,7 @@ export default function DailyCheckin({ athleteId, onGamificationUpdate }) {
           c.status === "rescheduled"
       );
 
-      const weekLocked =
-        athleteId &&
-        isWeekConfirmed(athleteId, toDateKey(getCurrentWeekStart()));
-
-      if (activeEvents.length > 0 && !morningDone && weekLocked) {
+      if (activeEvents.length > 0 && !morningDone) {
         setFirstEvent(activeEvents[0]);
         setMorningOpen(true);
       } else {
@@ -137,19 +129,6 @@ export default function DailyCheckin({ athleteId, onGamificationUpdate }) {
     const id = setInterval(loadTodayData, 60 * 1000);
     return () => clearInterval(id);
   }, [onSchedulePage, loadTodayData]);
-
-  useEffect(() => {
-    const onWeekConfirmed = () => {
-      loadTodayData();
-      if (todayEvents.length > 0) {
-        setFirstEvent(todayEvents[0]);
-        setMorningOpen(true);
-      }
-    };
-    window.addEventListener(WEEK_CONFIRMED_EVENT, onWeekConfirmed);
-    return () =>
-      window.removeEventListener(WEEK_CONFIRMED_EVENT, onWeekConfirmed);
-  }, [loadTodayData, todayEvents]);
 
   const insertCheckin = async (event, status, extra = {}) => {
     const { error } = await supabase

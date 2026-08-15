@@ -6,8 +6,8 @@ import { createPageUrl } from "@/utils";
 
 const tabs = [
   { label: "Home", icon: Home, path: createPageUrl("Home") },
-  { label: "Messages", icon: MessageCircle, path: "/messages" },
   { label: "Schedule", icon: CalendarDays, path: createPageUrl("Schedule") },
+  { label: "Messages", icon: MessageCircle, path: "/messages" },
   { label: "Profile", icon: User, path: createPageUrl("Profile") },
 ];
 

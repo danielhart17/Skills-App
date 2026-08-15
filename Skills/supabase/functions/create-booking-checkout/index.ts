@@ -4,14 +4,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.10.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { calculateBookingFees } from "../_shared/bookingFees.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// Platform fee percentage (e.g., 0.15 = 15%)
-const PLATFORM_FEE_PERCENTAGE = 0.15;
 
 // Append booking_id to a URL that may already contain query params.
 function appendBookingId(rawUrl: string, bookingId: string): string {
@@ -163,16 +161,20 @@ serve(async (req) => {
       );
     }
 
-    // Calculate amounts (convert to cents)
-    const priceInCents = Math.round(servicePrice * 100);
-    const platformFeeInCents = Math.round(priceInCents * PLATFORM_FEE_PERCENTAGE);
-    const trainerPayoutInCents = priceInCents - platformFeeInCents;
+    // Authoritative session price from DB (cents). Fall back to client servicePrice.
+    const basePrice = Math.round(Number(service.price ?? servicePrice) * 100);
+    if (!Number.isFinite(basePrice) || basePrice < 0) {
+      return new Response(
+        JSON.stringify({ error: "Invalid service price" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
+    }
 
-    console.log(`Price: $${servicePrice} (${priceInCents} cents)`);
-    console.log(`Platform fee: ${PLATFORM_FEE_PERCENTAGE * 100}% = ${platformFeeInCents} cents`);
-    console.log(`Trainer payout: ${trainerPayoutInCents} cents`);
+    const fees = calculateBookingFees(basePrice);
 
-    // Create a pending booking record
+    console.log("Booking fee breakdown (cents):", fees);
+
+    // Create a pending booking record (dollar amounts for existing columns)
     const { data: booking, error: bookingError } = await supabase
       .from("bookings")
       .insert({
@@ -182,9 +184,9 @@ serve(async (req) => {
         service_name: serviceName,
         booking_datetime: bookingDatetime,
         duration_minutes: serviceDuration || 60,
-        total_price: servicePrice,
-        platform_fee: platformFeeInCents / 100,
-        trainer_payout: trainerPayoutInCents / 100,
+        total_price: fees.totalCharged / 100,
+        platform_fee: fees.platformTake / 100,
+        trainer_payout: fees.trainerPayout / 100,
         user_notes: userNotes || "",
         status: "pending",
         payment_status: "pending",
@@ -203,7 +205,8 @@ serve(async (req) => {
       );
     }
 
-    // Create Stripe Checkout session with Connect
+    // Destination charge: athlete pays totalCharged; platform keeps application_fee;
+    // connected account receives totalCharged - application_fee (= trainerPayout).
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [
@@ -214,7 +217,7 @@ serve(async (req) => {
               name: serviceName,
               description: `Training session with ${trainer.name}`,
             },
-            unit_amount: priceInCents,
+            unit_amount: fees.totalCharged,
           },
           quantity: 1,
         },
@@ -223,7 +226,7 @@ serve(async (req) => {
       success_url: appendBookingId(successUrl, booking.id),
       cancel_url: appendBookingId(cancelUrl, booking.id),
       payment_intent_data: {
-        application_fee_amount: platformFeeInCents,
+        application_fee_amount: fees.platformTake,
         transfer_data: {
           destination: trainer.stripe_account_id,
         },
@@ -233,6 +236,11 @@ serve(async (req) => {
         trainer_id: trainerId,
         user_id: userId,
         service_id: serviceId,
+        base_price: String(fees.basePrice),
+        service_fee: String(fees.serviceFee),
+        trainer_commission: String(fees.trainerCommission),
+        platform_take: String(fees.platformTake),
+        trainer_payout: String(fees.trainerPayout),
       },
     });
 
@@ -249,6 +257,14 @@ serve(async (req) => {
         sessionId: session.id,
         bookingId: booking.id,
         url: session.url,
+        breakdown: {
+          basePrice: fees.basePrice,
+          serviceFee: fees.serviceFee,
+          trainerCommission: fees.trainerCommission,
+          totalCharged: fees.totalCharged,
+          trainerPayout: fees.trainerPayout,
+          platformTake: fees.platformTake,
+        },
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

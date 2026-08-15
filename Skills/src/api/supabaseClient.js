@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { readLocalAccessToken } from "@/utils/localAuthSession";
 
 // Get Supabase credentials from environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -11,14 +12,49 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error("VITE_SUPABASE_ANON_KEY=your_anon_key");
 }
 
-// Create Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Avoid Navigator LockManager "lock was released because another request stole it"
+// races (common on Vercel / multi-tab). Process-local lock is enough for SPA auth.
+let authLockChain = Promise.resolve();
+async function processAuthLock(_name, _acquireTimeout, fn) {
+  const run = authLockChain.then(() => fn());
+  // Keep the chain alive even if a lock holder rejects.
+  authLockChain = run.catch(() => {});
+  return run;
+}
+
+const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    lock: processAuthLock,
+  },
+  storage: {
+    // Routes large uploads through storage.supabase.co (avoids buffering/hangs).
+    useNewHostname: true,
   },
 });
+
+// Prefer the local persisted token so API calls don't contend on auth.getSession().
+const originalGetAccessToken = supabaseClient._getAccessToken.bind(supabaseClient);
+supabaseClient._getAccessToken = async () => {
+  const localToken = readLocalAccessToken({ allowExpired: true });
+  if (localToken) return localToken;
+
+  try {
+    return await Promise.race([
+      originalGetAccessToken(),
+      new Promise((_, reject) => {
+        window.setTimeout(() => reject(new Error("Auth token timeout")), 2000);
+      }),
+    ]);
+  } catch (error) {
+    console.warn("Falling back to anon key for Supabase request:", error);
+    return supabaseAnonKey;
+  }
+};
+
+export const supabase = supabaseClient;
 
 // Helper function to get current user
 export const getCurrentUser = async () => {
@@ -46,20 +82,40 @@ export const getCurrentUserProfile = async () => {
 };
 
 // Auth helpers
-export const signUp = async (email, password, fullName, selectedRole = "athlete") => {
+export const signUp = async (
+  email,
+  password,
+  fullName,
+  selectedRole = "athlete",
+  trainerDetails = null
+) => {
   const allowedSignupRoles = ["athlete", "parent", "trainer"];
   const role = allowedSignupRoles.includes(selectedRole)
     ? selectedRole
     : "athlete";
 
+  const metadata = {
+    full_name: fullName,
+    role,
+  };
+
+  if (role === "trainer" && trainerDetails) {
+    metadata.phone = trainerDetails.phone || "";
+    metadata.instagram_url = trainerDetails.instagram_url || "";
+    metadata.social_media = trainerDetails.social_media || "";
+    metadata.website = trainerDetails.website || "";
+    metadata.trainer_experience_summary =
+      trainerDetails.trainer_experience_summary || "";
+    metadata.trainer_safety_affirmed = Boolean(
+      trainerDetails.trainer_safety_affirmed
+    );
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      data: {
-        full_name: fullName,
-        role,
-      },
+      data: metadata,
     },
   });
 
