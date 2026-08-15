@@ -168,7 +168,7 @@ struct TrainerDetailView: View {
                         Divider()
                             .padding(.top)
                         
-                        Text("Challenges Created")
+                        Text("Workouts Created")
                             .font(.headline)
                         
                         if isLoadingChallenges {

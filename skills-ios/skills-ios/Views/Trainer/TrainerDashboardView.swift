@@ -38,7 +38,7 @@ struct TrainerDashboardView: View {
                     Text("Overview").tag(0)
                     Text("Bookings").tag(1)
                     Text("Sessions").tag(2)
-                    Text("Challenges").tag(3)
+                    Text("Workouts").tag(3)
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .padding()
@@ -294,7 +294,7 @@ struct TrainerOverviewView: View {
                     
                     VStack(spacing: 10) {
                         TrainerActionButton(
-                            title: "Create Challenge",
+                            title: "Create Workout",
                             icon: "plus.circle.fill",
                             color: .orange
                         ) {}
@@ -431,7 +431,7 @@ struct TrainerChallengesView: View {
             VStack(spacing: 15) {
                 // Header
                 HStack {
-                    Text("My Challenges")
+                    Text("My Workouts")
                         .font(.headline)
                     Spacer()
                     Button(action: {}) {
@@ -450,10 +450,10 @@ struct TrainerChallengesView: View {
                         Image(systemName: "target")
                             .font(.system(size: 50))
                             .foregroundColor(.secondary)
-                        Text("No challenges created")
+                        Text("No workouts created")
                             .font(.headline)
                             .foregroundColor(.secondary)
-                        Text("Create challenges for your students")
+                        Text("Create workouts for your students")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

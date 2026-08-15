@@ -212,7 +212,7 @@ struct ChallengeDetailView: View {
                             }) {
                                 HStack {
                                     Image(systemName: "play.fill")
-                                    Text("Start Challenge")
+                                    Text("Start Workout")
                                         .fontWeight(.semibold)
                                 }
                                 .foregroundColor(.white)
@@ -427,7 +427,7 @@ struct CompletionSheet: View {
                 }
                 .padding(.top, 30)
                 
-                Text("Complete Challenge")
+                Text("Complete Workout")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
@@ -478,7 +478,7 @@ struct CompletionSheet: View {
                 }) {
                     HStack {
                         Image(systemName: "checkmark.circle.fill")
-                        Text("Complete Challenge")
+                        Text("Complete Workout")
                             .fontWeight(.semibold)
                     }
                     .foregroundColor(.white)

@@ -78,9 +78,10 @@ struct LoadingView: View {
             Color.appBackground.ignoresSafeArea()
             
             VStack(spacing: 20) {
-                Image(systemName: "basketball.fill")
-                    .font(.system(size: 60))
-                    .foregroundColor(.brandOrange)
+                Image("skills-logo")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 70, height: 70)
                 
                 ProgressView()
                     .scaleEffect(1.5)

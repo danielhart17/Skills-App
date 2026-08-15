@@ -60,7 +60,7 @@ struct ChallengesView: View {
                                             .foregroundColor(.white)
                                     }
                                     
-                                    Text("Challenge Library")
+                                    Text("Workout Library")
                                         .font(.title)
                                         .fontWeight(.bold)
                                         .foregroundColor(.white)
@@ -68,7 +68,7 @@ struct ChallengesView: View {
                                     Spacer()
                                 }
                                 
-                                Text("Push your limits with specialized drills and shooting challenges")
+                                Text("Push your limits with specialized drills and shooting workouts")
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
                             }
@@ -82,7 +82,7 @@ struct ChallengesView: View {
                                         Image(systemName: "star.fill")
                                             .foregroundColor(.yellow)
                                             .font(.title3)
-                                        Text("Featured Trainer Challenge")
+                                        Text("Featured Trainer Workout")
                                             .font(.title3)
                                             .fontWeight(.bold)
                                             .foregroundColor(.white)
@@ -181,9 +181,14 @@ struct ChallengesView: View {
                 }
             }
             .background(Color.appBackground)
-            .navigationTitle("Workouts")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Image("skills-logo")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 28)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink(destination: ProfileView()) {
                         Image(systemName: "person.circle.fill")
@@ -284,7 +289,7 @@ struct FeaturedChallengeCard: View {
             // Start Button
             HStack {
                 Image(systemName: "play.fill")
-                Text("Start Challenge")
+                Text("Start Workout")
                     .fontWeight(.semibold)
             }
             .foregroundColor(Color(red: 0.4, green: 0.3, blue: 0.8))

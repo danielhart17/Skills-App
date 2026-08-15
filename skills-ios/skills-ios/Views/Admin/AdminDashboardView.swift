@@ -84,7 +84,7 @@ struct AdminOverviewView: View {
                     )
                     
                     AdminStatCard(
-                        title: "Challenges",
+                        title: "Workouts",
                         value: "\(stats?.totalChallenges ?? 0)",
                         icon: "target",
                         color: .orange

@@ -98,7 +98,7 @@ struct HomeView: View {
                                 
                                 NavigationLink(destination: ChallengesView()) {
                                     QuickActionCard(
-                                        title: "Challenges",
+                                        title: "Workouts",
                                         icon: "target",
                                         color: .green
                                     )
