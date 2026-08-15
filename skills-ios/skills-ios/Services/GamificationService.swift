@@ -16,7 +16,6 @@ final class GamificationService {
     enum XP {
         static let morningConfirm = 25
         static let energyRating = 50
-        static let weekConfirm = 100
         static let perfectWeek = 200
         static let achievement = 75
     }
@@ -273,22 +272,6 @@ final class GamificationService {
         )
     }
 
-    // MARK: - Week confirm (UserDefaults, parity with web localStorage)
-
-    private func weekConfirmKey(athleteId: UUID) -> String {
-        var calendar = Calendar.current
-        calendar.firstWeekday = 1  // Sunday, web parity
-        let start = calendar.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
-        return "week_confirmed_\(athleteId.uuidString)_\(DateFormatter.yyyyMMdd.string(from: start))"
-    }
-
-    func isWeekConfirmed(athleteId: UUID) -> Bool {
-        UserDefaults.standard.bool(forKey: weekConfirmKey(athleteId: athleteId))
-    }
-
-    func setWeekConfirmed(athleteId: UUID) {
-        UserDefaults.standard.set(true, forKey: weekConfirmKey(athleteId: athleteId))
-    }
 }
 
 #if DEBUG

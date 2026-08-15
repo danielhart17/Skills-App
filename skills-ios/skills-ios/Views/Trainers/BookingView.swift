@@ -166,7 +166,7 @@ struct BookingView: View {
                                                     .tint(.white)
                                             } else {
                                                 Image(systemName: "lock.fill")
-                                                Text("Pay $\(formatPrice(service.price))")
+                                                Text("Pay $\(formatCents(feeEstimate.total))")
                                                     .fontWeight(.semibold)
                                             }
                                         }
@@ -325,7 +325,7 @@ struct BookingView: View {
             // Time Slots
             let slots = generateTimeSlots()
             if slots.isEmpty {
-                Text("No available slots for this date")
+                Text(sessionEmptyText)
                     .font(.subheadline)
                     .foregroundColor(.textSecondary)
                     .padding()
@@ -399,20 +399,23 @@ struct BookingView: View {
             VStack(spacing: 12) {
                 summaryRow(label: "Trainer", value: trainer.name)
                 summaryRow(label: "Service", value: service.name)
-                
+
                 if let time = selectedTime {
                     summaryRow(label: "Date", value: formatDate(time))
                     summaryRow(label: "Time", value: formatTime(time))
                 }
-                
+
                 Divider()
-                
+
+                summaryRow(label: "Session", value: "$\(formatPrice(service.price))")
+                summaryRow(label: "Service fee", value: "$\(formatCents(feeEstimate.serviceFee))")
+
                 HStack {
                     Text("Total")
                         .font(.headline)
                         .foregroundColor(.textSecondary)
                     Spacer()
-                    Text("$\(formatPrice(service.price))")
+                    Text("$\(formatCents(feeEstimate.total))")
                         .font(.title3)
                         .fontWeight(.bold)
                         .foregroundColor(.brandOrange)
@@ -506,26 +509,64 @@ struct BookingView: View {
     private func loadBookedTimes() {
         Task {
             do {
-                let calendar = Calendar.current
-                let startOfDay = calendar.startOfDay(for: selectedDate)
-                guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return }
-                
-                // Fetch bookings for this trainer on this date
-                let bookings = try await APIService.shared.fetchBookings()
-                    .filter { booking in
-                        booking.trainerId == trainer.id &&
-                        booking.bookingDatetime >= startOfDay &&
-                        booking.bookingDatetime < endOfDay
-                    }
-                
-                bookedTimes = bookings.map { $0.bookingDatetime }
+                // RPC sees ALL bookings for the trainer (RLS hides other
+                // athletes' rows from a direct bookings select).
+                let slots = try await APIService.shared.fetchTrainerBookedSlots(
+                    trainerId: trainer.id,
+                    day: DateFormatter.yyyyMMdd.string(from: selectedDate)
+                )
+                bookedTimes = slots.map(\.bookingDatetime)
             } catch {
                 print("Error loading booked times: \(error)")
             }
         }
     }
+
+    private var sessionEmptyText: String {
+        if service.isRecurring == true, let days = service.recurrenceDays, !days.isEmpty {
+            let names = days.map { $0.prefix(3).capitalized }.joined(separator: ", ")
+            return "This session runs on: \(names). Pick one of those days."
+        }
+        if let date = service.sessionDate {
+            return "This session runs on \(date) only."
+        }
+        return "No available slots for this date"
+    }
+
+    /// Web sessionBooking.js parity: is this date bookable for a scheduled session?
+    private func isDateAvailableForSession(_ date: Date) -> Bool {
+        if service.isRecurring == true {
+            guard service.startTime != nil else { return false }
+            let weekdayIndex = Calendar.current.component(.weekday, from: date) - 1  // 0 = Sunday
+            let dayName = TrainerSessionSheet.dayNames[weekdayIndex]
+            return (service.recurrenceDays ?? []).contains(dayName)
+        }
+        if let sessionDate = service.sessionDate {
+            return DateFormatter.yyyyMMdd.string(from: date) == sessionDate
+        }
+        return false
+    }
     
     private func generateTimeSlots() -> [Date] {
+        // Scheduled sessions offer exactly one slot at the session's start time,
+        // only on dates the session runs.
+        if service.isScheduledSession {
+            guard isDateAvailableForSession(selectedDate),
+                  let time = service.startTime else { return [] }
+            let parts = time.split(separator: ":").compactMap { Int($0) }
+            var components = Calendar.current.dateComponents([.year, .month, .day], from: selectedDate)
+            components.hour = parts.first ?? 0
+            components.minute = parts.count > 1 ? parts[1] : 0
+            guard let slotTime = Calendar.current.date(from: components),
+                  slotTime > Date().addingTimeInterval(30 * 60) else { return [] }
+            let slotEnd = slotTime.addingTimeInterval(TimeInterval(service.durationMinutes * 60))
+            let isBooked = bookedTimes.contains { bookedTime in
+                let bookedEnd = bookedTime.addingTimeInterval(TimeInterval(service.durationMinutes * 60))
+                return slotTime < bookedEnd && bookedTime < slotEnd
+            }
+            return isBooked ? [] : [slotTime]
+        }
+
         var slots: [Date] = []
         let calendar = Calendar.current
         
@@ -634,6 +675,16 @@ struct BookingView: View {
         }
     }
     
+    /// Local estimate of what checkout will charge; server breakdown is authoritative.
+    private var feeEstimate: (serviceFee: Int, total: Int) {
+        let baseCents = NSDecimalNumber(decimal: service.price * 100).intValue
+        return estimatedBookingFees(basePriceCents: baseCents)
+    }
+
+    private func formatCents(_ cents: Int) -> String {
+        String(format: "%.2f", Double(cents) / 100.0)
+    }
+
     private func formatPrice(_ price: Decimal) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal

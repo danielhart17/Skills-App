@@ -18,9 +18,11 @@ struct AthleteEvent: Codable, Identifiable {
     var opponent: String?
     var location: String?
     var notes: String?
+    var bookingId: UUID?    // set when the event mirrors a trainer booking
 
     enum EventType: String, Codable, CaseIterable {
         case game, practice, workout, rest
+        case training  // booking-derived; not user-creatable
     }
 
     enum CodingKeys: String, CodingKey {
@@ -33,6 +35,7 @@ struct AthleteEvent: Codable, Identifiable {
         case opponent
         case location
         case notes
+        case bookingId = "booking_id"
     }
 }
 

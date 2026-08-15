@@ -15,8 +15,11 @@ import QuestionPage from "./QuestionPage";
 import Challenges from "./Challenges";
 
 import ChallengeDetail from "./ChallengeDetail";
+import DrillDetail from "./DrillDetail";
 
 import ShootingSession from "./ShootingSession";
+import SessionVideoReviewPage from "./SessionVideoReviewPage";
+import RunTracker from "./RunTracker";
 
 import Trainers from "./Trainers";
 
@@ -48,32 +51,30 @@ import { useAuth } from "@/contexts/AuthContext";
 
 // Role-based redirect component
 function RoleBasedRedirect() {
-  const { isAdmin, isTrainer, isParent, loading, profile, user } = useAuth();
+  const { loading, profile, user, role } = useAuth();
 
-  // Wait for auth to load before redirecting
   if (loading) {
     return <div className="p-6 text-center">Loading...</div>;
   }
 
-  // If user is not authenticated, redirect to home
   if (!user) {
     return <Navigate to="/home" replace />;
   }
 
-  // If profile is not loaded yet, show loading
-  if (!profile) {
-    return <div className="p-6 text-center">Loading profile...</div>;
+  const effectiveRole =
+    profile?.role || user?.user_metadata?.role || role || "user";
+
+  if (effectiveRole === "admin") {
+    return <Navigate to="/admindashboard" replace />;
+  }
+  if (effectiveRole === "trainer") {
+    return <Navigate to="/trainerdashboard" replace />;
+  }
+  if (effectiveRole === "parent") {
+    return <Navigate to="/parentdashboard" replace />;
   }
 
-  if (isAdmin()) {
-    return <Navigate to="/admindashboard" replace />;
-  } else if (isTrainer()) {
-    return <Navigate to="/trainerdashboard" replace />;
-  } else if (isParent()) {
-    return <Navigate to="/parentdashboard" replace />;
-  } else {
-    return <Navigate to="/home" replace />;
-  }
+  return <Navigate to="/home" replace />;
 }
 
 // Create a wrapper component that renders the Layout with all routes
@@ -98,8 +99,14 @@ function PagesContent() {
 
         <Route path="/workouts/:challengeId" element={<ChallengeDetail />} />
         <Route path="/challenges/:challengeId" element={<ChallengeDetail />} />
+        <Route path="/drills/:drillId" element={<DrillDetail />} />
 
         <Route path="/shootingsession" element={<ShootingSession />} />
+        <Route
+          path="/shootingsession/review/:videoId"
+          element={<SessionVideoReviewPage />}
+        />
+        <Route path="/run-tracker" element={<RunTracker />} />
 
         <Route path="/trainers" element={<Trainers />} />
 

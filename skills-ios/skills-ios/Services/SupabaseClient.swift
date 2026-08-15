@@ -55,17 +55,20 @@ class SupabaseClient {
     
     // MARK: - Authentication
     
-    func signUp(email: String, password: String, fullName: String) async throws -> AuthResponse {
+    func signUp(email: String, password: String, fullName: String, metadata: [String: Any] = [:]) async throws -> AuthResponse {
         guard let url = URL(string: "\(baseURL)/auth/v1/signup") else { throw SupabaseError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
-        
+
+        // Keys in `data` become raw_user_meta_data, consumed by handle_new_user()
+        var userMetadata: [String: Any] = ["full_name": fullName]
+        userMetadata.merge(metadata) { _, new in new }
         let body: [String: Any] = [
             "email": email,
             "password": password,
-            "data": ["full_name": fullName]
+            "data": userMetadata
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
@@ -345,11 +348,14 @@ class SupabaseClient {
     // MARK: - Account deletion
 
     /// Deletes the currently authenticated user's account by invoking the
-    /// `delete-user-account` edge function, then clears the local token.
-    /// Required by App Store Review Guideline 5.1.1(v).
+    /// `delete-account` edge function (anonymizes the profile, preserves
+    /// booking history, hard-deletes the auth login), then clears the local
+    /// token. Required by App Store Review Guideline 5.1.1(v).
+    /// Throws `.functionRejected` with the server message when deletion is
+    /// blocked (e.g. upcoming confirmed bookings).
     func deleteAccount() async throws {
         struct DeleteResponse: Decodable { let success: Bool }
-        let response: DeleteResponse = try await invokeFunction("delete-user-account", body: [:])
+        let response: DeleteResponse = try await invokeFunction("delete-account", body: [:])
         guard response.success else { throw SupabaseError.deleteFailed }
         self.accessToken = nil
     }
@@ -373,6 +379,11 @@ class SupabaseClient {
             if let httpResponse = response as? HTTPURLResponse,
                let responseString = String(data: data, encoding: .utf8) {
                 print("Function \(name) failed (\(httpResponse.statusCode)): \(responseString)")
+            }
+            // Surface server-provided error messages (e.g. 409 deletion blocked)
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["error"] as? String, !message.isEmpty {
+                throw SupabaseError.functionRejected(message)
             }
             throw SupabaseError.functionFailed
         }
@@ -472,6 +483,7 @@ enum SupabaseError: LocalizedError {
     case rpcFailed
     case uploadFailed
     case functionFailed
+    case functionRejected(String)
     
     var errorDescription: String? {
         switch self {
@@ -499,6 +511,8 @@ enum SupabaseError: LocalizedError {
             return "Failed to upload file."
         case .functionFailed:
             return "Edge function call failed."
+        case .functionRejected(let message):
+            return message
         }
     }
 }

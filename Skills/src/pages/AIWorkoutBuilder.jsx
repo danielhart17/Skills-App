@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Drill } from "@/api/entities";
 import { supabase } from "@/api/supabaseClient";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Zap, Clock, ChevronUp, Play, RotateCcw } from "lucide-react";
+import { FEATURE_FLAGS } from "@/config/featureFlags";
+import { createPageUrl } from "@/utils";
 
 const CAT_ICONS = {
   shooting: "🎯", dribbling: "⚡", footwork: "👟",
@@ -124,6 +127,7 @@ function PlanDrillCard({ drill, order, why }) {
 }
 
 export default function AIWorkoutBuilder() {
+  const navigate = useNavigate();
   const [allDrills, setAllDrills] = useState([]);
   const [position, setPosition] = useState("");
   const [level, setLevel] = useState("");
@@ -135,8 +139,19 @@ export default function AIWorkoutBuilder() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!FEATURE_FLAGS.AI_WORKOUT_BUILDER) {
+      navigate(createPageUrl("Workouts"), { replace: true });
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!FEATURE_FLAGS.AI_WORKOUT_BUILDER) return;
     Drill.list().then(setAllDrills).catch(console.error);
   }, []);
+
+  if (!FEATURE_FLAGS.AI_WORKOUT_BUILDER) {
+    return null;
+  }
 
   const generateWorkout = async () => {
     if (!level || !duration) {

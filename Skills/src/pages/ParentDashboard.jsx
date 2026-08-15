@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ParentChild,
@@ -8,6 +8,9 @@ import {
   PlayerGameStats,
   ShootingSession,
 } from "@/api/entities";
+import TrainerBrowser from "@/components/trainers/TrainerBrowser";
+import AccountDeletionSection from "@/components/AccountDeletionSection";
+import { FEATURE_FLAGS } from "@/config/featureFlags";
 import {
   Card,
   CardContent,
@@ -46,7 +49,16 @@ import {
   Play,
   Pause,
   Square,
+  GraduationCap,
 } from "lucide-react";
+
+const PARENT_TABS = [
+  "progress",
+  "iq",
+  "stats",
+  ...(FEATURE_FLAGS.LIVE_SHOOTING_SESSION_TRACKER ? ["shooting"] : []),
+  "trainers",
+];
 
 /** Public asset from `public/images` (Vite root URL). */
 const courtImg = "/images/half-court.png";
@@ -225,8 +237,32 @@ function formatSessionTime(seconds) {
 export default function ParentDashboard() {
   const { isParent } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState("progress");
+  const tabFromUrl = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(() =>
+    PARENT_TABS.includes(tabFromUrl) ? tabFromUrl : "progress"
+  );
+
+  useEffect(() => {
+    const next = searchParams.get("tab");
+    if (PARENT_TABS.includes(next)) {
+      setActiveTab(next);
+    } else {
+      setActiveTab("progress");
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (value) => {
+    setActiveTab(value);
+    const next = new URLSearchParams(searchParams);
+    if (value === "progress") {
+      next.delete("tab");
+    } else {
+      next.set("tab", value);
+    }
+    setSearchParams(next, { replace: true });
+  };
 
   // —— Child progress ——
   const [linkedChildren, setLinkedChildren] = useState([]);
@@ -831,12 +867,18 @@ export default function ParentDashboard() {
           Parent Dashboard
         </h1>
         <p className="text-muted-foreground mt-1">
-          Track your athletes, learn IQ lessons, and log games & shooting.
+          Track your athletes, book trainers, learn IQ lessons, and log games.
         </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 h-auto gap-1 bg-card p-1 rounded-lg border border-border">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+        <TabsList
+          className={`grid w-full grid-cols-2 sm:grid-cols-3 h-auto gap-1 bg-card p-1 rounded-lg border border-border ${
+            FEATURE_FLAGS.LIVE_SHOOTING_SESSION_TRACKER
+              ? "lg:grid-cols-5"
+              : "lg:grid-cols-4"
+          }`}
+        >
           <TabsTrigger
             value="progress"
             className="data-[state=active]:bg-[#E85D04] data-[state=active]:text-white data-[state=active]:shadow-md"
@@ -855,11 +897,20 @@ export default function ParentDashboard() {
           >
             Game Stats
           </TabsTrigger>
+          {FEATURE_FLAGS.LIVE_SHOOTING_SESSION_TRACKER && (
+            <TabsTrigger
+              value="shooting"
+              className="data-[state=active]:bg-[#E85D04] data-[state=active]:text-white data-[state=active]:shadow-md"
+            >
+              Shooting Session
+            </TabsTrigger>
+          )}
           <TabsTrigger
-            value="shooting"
+            value="trainers"
             className="data-[state=active]:bg-[#E85D04] data-[state=active]:text-white data-[state=active]:shadow-md"
           >
-            Shooting Session
+            <GraduationCap className="w-4 h-4 mr-1.5 hidden sm:inline" />
+            Trainers
           </TabsTrigger>
         </TabsList>
 
@@ -1664,7 +1715,8 @@ export default function ParentDashboard() {
           )}
         </TabsContent>
 
-        {/* TAB 4 */}
+        {/* TAB 4 — live shooting tracker (archived via FEATURE_FLAGS) */}
+        {FEATURE_FLAGS.LIVE_SHOOTING_SESSION_TRACKER && (
         <TabsContent value="shooting" className="space-y-6">
           {!linkedChildren.length ? (
             <Card className="bg-card border border-border">
@@ -1937,7 +1989,38 @@ export default function ParentDashboard() {
             </>
           )}
         </TabsContent>
+        )}
+
+        {/* Trainers / book sessions */}
+        <TabsContent value="trainers" className="space-y-6">
+          <Card className="shadow-xl bg-card border border-border">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <GraduationCap
+                  className="w-5 h-5"
+                  style={{ color: BRAND_ORANGE }}
+                />
+                Find & Book Trainers
+              </CardTitle>
+              <CardDescription>
+                Browse verified trainers, view available sessions, and book
+                training for your athlete. You&apos;ll complete booking as the
+                parent account.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TrainerBrowser
+                showHeader={false}
+                profileReturnTo="/parentdashboard?tab=trainers"
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      <div className="mt-10">
+        <AccountDeletionSection />
+      </div>
     </div>
   );
 }

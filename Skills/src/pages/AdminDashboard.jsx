@@ -59,6 +59,9 @@ export default function AdminDashboard() {
   const [events, setEvents] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [profiles, setProfiles] = useState([]);
+  /** user_id → background_checks row (admin Users tab) */
+  const [backgroundChecksByUserId, setBackgroundChecksByUserId] = useState({});
+  const [approvingBgUserId, setApprovingBgUserId] = useState(null);
   const [userSearch, setUserSearch] = useState("");
   const [questions, setQuestions] = useState([]);
   const [selectedLesson, setSelectedLesson] = useState(null);
@@ -158,12 +161,26 @@ export default function AdminDashboard() {
         if (error) throw error;
         setBookings(data || []);
       } else if (activeTab === "users") {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("*")
-          .order("created_at", { ascending: false });
-        if (error) throw error;
-        setProfiles(data || []);
+        const [profilesResult, bgResult] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("*")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("background_checks")
+            .select(
+              "id, user_id, status, bypass_reason, completed_at, expires_at"
+            ),
+        ]);
+        if (profilesResult.error) throw profilesResult.error;
+        if (bgResult.error) throw bgResult.error;
+
+        setProfiles(profilesResult.data || []);
+        const byUser = {};
+        for (const row of bgResult.data || []) {
+          if (row?.user_id) byUser[row.user_id] = row;
+        }
+        setBackgroundChecksByUserId(byUser);
       } else if (activeTab === "exam") {
         const { data, error } = await supabase
           .from("exam_questions")
@@ -291,6 +308,76 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error("Error updating role:", error);
       toast.error("Failed to update role");
+    }
+  };
+
+  const getTrainerBgStatusLabel = (userId) => {
+    const row = backgroundChecksByUserId[userId];
+    if (!row?.status) return "not started";
+    if (row.status === "not_started") return "not started";
+    return String(row.status);
+  };
+
+  const isTrainerBgApproved = (userId) => {
+    const status = backgroundChecksByUserId[userId]?.status;
+    return status === "clear" || status === "bypassed";
+  };
+
+  const handleApproveBackgroundCheck = async (userId, userName) => {
+    const reason = window.prompt(
+      `Approve background check for ${userName || "this trainer"}?\n\nEnter a short reason (required):`,
+      "manually vetted at launch"
+    );
+    if (reason === null) return; // cancelled
+    if (!reason.trim()) {
+      toast.error("A bypass reason is required");
+      return;
+    }
+
+    setApprovingBgUserId(userId);
+    try {
+      const { data, error } = await supabase.rpc(
+        "admin_bypass_background_check",
+        {
+          target_user_id: userId,
+          reason: reason.trim(),
+        }
+      );
+      if (error) throw error;
+
+      if (data?.user_id) {
+        setBackgroundChecksByUserId((prev) => ({
+          ...prev,
+          [data.user_id]: data,
+        }));
+      } else {
+        // Fallback refresh if RPC returns unexpected shape
+        const { data: row, error: refreshError } = await supabase
+          .from("background_checks")
+          .select(
+            "id, user_id, status, bypass_reason, completed_at, expires_at"
+          )
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (refreshError) throw refreshError;
+        if (row) {
+          setBackgroundChecksByUserId((prev) => ({
+            ...prev,
+            [userId]: row,
+          }));
+        }
+      }
+
+      toast.success("Background check approved (bypassed)");
+    } catch (error) {
+      console.error("Error approving background check:", error);
+      toast.error(
+        error?.message ||
+          error?.error_description ||
+          "Failed to approve background check"
+      );
+    } finally {
+      setApprovingBgUserId(null);
     }
   };
 
@@ -1215,7 +1302,7 @@ export default function AdminDashboard() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="flex gap-2 flex-wrap items-center">
                       {user.role !== "trainer" && (
                         <>
                           <Badge>Level {user.current_level}</Badge>
@@ -1226,7 +1313,42 @@ export default function AdminDashboard() {
                         </>
                       )}
                       {user.role === "trainer" && (
-                        <Badge variant="outline">Trainer Account</Badge>
+                        <>
+                          <Badge variant="outline">Trainer Account</Badge>
+                          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ml-auto">
+                            <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                              <Shield className="w-3.5 h-3.5" />
+                              Background check:
+                            </span>
+                            <Badge
+                              variant={
+                                isTrainerBgApproved(user.id)
+                                  ? "default"
+                                  : "secondary"
+                              }
+                              className="capitalize"
+                            >
+                              {getTrainerBgStatusLabel(user.id)}
+                            </Badge>
+                            {!isTrainerBgApproved(user.id) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={approvingBgUserId === user.id}
+                                onClick={() =>
+                                  handleApproveBackgroundCheck(
+                                    user.id,
+                                    user.full_name || user.email
+                                  )
+                                }
+                              >
+                                {approvingBgUserId === user.id
+                                  ? "Approving…"
+                                  : "Approve"}
+                              </Button>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   </CardContent>

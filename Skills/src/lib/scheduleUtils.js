@@ -47,6 +47,7 @@ export const EVENT_TYPE_STYLES = {
   game: "bg-orange-500 text-white hover:bg-orange-600",
   practice: "bg-green-600 text-white hover:bg-green-700",
   workout: "bg-brand-blue text-white hover:bg-blue-600",
+  training: "bg-brand-orange text-white hover:opacity-90",
   rest: "bg-brand-gray text-white hover:bg-brand-gray/80",
 };
 
@@ -54,6 +55,7 @@ export const EVENT_TYPE_BADGE_STYLES = {
   game: "bg-orange-500/20 text-orange-400 border-orange-500/40",
   practice: "bg-green-600/20 text-green-400 border-green-600/40",
   workout: "bg-brand-blue/20 text-blue-400 border-brand-blue/40",
+  training: "bg-brand-orange/20 text-brand-orange border-brand-orange/40",
   rest: "bg-brand-gray/20 text-brand-lightGray border-brand-gray/40",
 };
 

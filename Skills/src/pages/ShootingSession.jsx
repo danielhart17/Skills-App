@@ -11,6 +11,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import SessionVideoUpload from "@/components/SessionVideoUpload";
+import BetaBadge from "@/components/BetaBadge";
+import { FEATURE_FLAGS } from "@/config/featureFlags";
 import {
   Target,
   Play,
@@ -19,7 +23,10 @@ import {
   RotateCcw,
   Award,
   CheckCircle2,
+  Upload,
 } from "lucide-react";
+
+const LIVE_TRACKER_ENABLED = FEATURE_FLAGS.LIVE_SHOOTING_SESSION_TRACKER;
 
 // Define court zones matching the reference screenshot
 // Court orientation: Hoop at TOP (Y=0), Half-court at BOTTOM (Y=100)
@@ -321,15 +328,47 @@ export default function ShootingSessionPage() {
               <Target className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-3xl lg:text-4xl font-bold text-white">
-              Live Shooting Session
+              {LIVE_TRACKER_ENABLED
+                ? "Live Shooting Session"
+                : "Shooting Session"}
             </h1>
           </div>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Track your shooting performance in real-time
+            {LIVE_TRACKER_ENABLED
+              ? "Track your shooting performance in real-time or upload a practice video for AI-assisted review"
+              : "Upload a practice video for AI-assisted review"}
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <Tabs
+          defaultValue={LIVE_TRACKER_ENABLED ? "manual" : "upload"}
+          className="space-y-8"
+        >
+          {LIVE_TRACKER_ENABLED && (
+            <div className="flex justify-center">
+              <TabsList className="grid w-full max-w-xl grid-cols-2 h-auto p-1">
+                <TabsTrigger
+                  value="manual"
+                  className="flex items-center gap-2 py-2.5"
+                >
+                  <Target className="w-4 h-4" />
+                  Live Manual Tracking
+                </TabsTrigger>
+                <TabsTrigger
+                  value="upload"
+                  className="flex items-center gap-2 py-2.5"
+                >
+                  <Upload className="w-4 h-4" />
+                  Upload Video
+                  <BetaBadge />
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          )}
+
+          {LIVE_TRACKER_ENABLED && (
+          <TabsContent value="manual">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Basketball Court */}
           <div className="lg:col-span-2">
             <Card className="border-0 shadow-xl">
@@ -611,7 +650,14 @@ export default function ShootingSessionPage() {
               </CardContent>
             </Card>
           </div>
-        </div>
+            </div>
+          </TabsContent>
+          )}
+
+          <TabsContent value="upload">
+            <SessionVideoUpload />
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Session Summary Dialog */}

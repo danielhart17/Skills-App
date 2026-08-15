@@ -9,7 +9,8 @@ import Foundation
 
 struct User: Codable, Identifiable {
     let id: UUID
-    var email: String
+    // Nullable since account-deletion anonymization nulls profiles.email
+    var email: String?
     var fullName: String?
     var role: UserRole
     var currentLevel: Int

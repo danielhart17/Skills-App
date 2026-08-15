@@ -1,11 +1,46 @@
-
 [functions.generate-workout]
 enabled = true
 verify_jwt = true
 import_map = "./functions/generate-workout/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/generate-workout/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/generate-workout/*.html" ]
+
+[functions.create-connect-account]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/create-connect-account/index.ts"
+
+[functions.create-booking-checkout]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/create-booking-checkout/index.ts"
+
+[functions.stripe-connect-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/stripe-connect-webhook/index.ts"
+
+[functions.analyze-shooting-video]
+enabled = true
+verify_jwt = true
+import_map = "./functions/analyze-shooting-video/deno.json"
+entrypoint = "./functions/analyze-shooting-video/index.ts"
+
+[functions.delete-account]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/delete-account/index.ts"
+
+[functions.create-checkout-session]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/create-checkout-session/index.ts"
+
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/stripe-webhook/index.ts"
+
+[functions.verify-payment]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/verify-payment/index.ts"

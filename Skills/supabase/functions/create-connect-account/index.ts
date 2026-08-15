@@ -101,13 +101,37 @@ serve(async (req) => {
       );
     }
 
-    // Caller must own this trainer record
-    if (trainer.user_id !== caller.id) {
-      console.error("Forbidden: caller does not own trainer", { caller: caller.id, trainer: trainerId });
+    // Caller must own this trainer record (user_id or linked profiles.trainer_id)
+    let ownsTrainer = trainer.user_id === caller.id;
+    if (!ownsTrainer) {
+      const { data: callerProfile } = await supabase
+        .from("profiles")
+        .select("trainer_id")
+        .eq("id", caller.id)
+        .maybeSingle();
+      ownsTrainer = callerProfile?.trainer_id === trainerId;
+    }
+
+    if (!ownsTrainer) {
+      console.error("Forbidden: caller does not own trainer", {
+        caller: caller.id,
+        trainer: trainerId,
+        trainerUserId: trainer.user_id,
+      });
       return new Response(
-        JSON.stringify({ error: "Forbidden" }),
+        JSON.stringify({
+          error: "You can only connect Stripe to your own trainer profile.",
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 }
       );
+    }
+
+    // Backfill user_id when missing so future checks succeed.
+    if (!trainer.user_id) {
+      await supabase
+        .from("trainers")
+        .update({ user_id: caller.id })
+        .eq("id", trainerId);
     }
 
     let accountId = trainer.stripe_account_id;

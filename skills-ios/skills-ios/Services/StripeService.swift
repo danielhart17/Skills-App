@@ -14,6 +14,25 @@ struct BookingCheckoutResponse: Decodable {
     let sessionId: String
     let bookingId: String
     let url: String?
+    let breakdown: FeeBreakdown?  // present once the fee-aware function is live
+}
+
+/// Cents, mirroring _shared/bookingFees.ts on the server.
+struct FeeBreakdown: Decodable {
+    let basePrice: Int
+    let serviceFee: Int
+    let trainerCommission: Int
+    let totalCharged: Int
+    let trainerPayout: Int
+    let platformTake: Int
+}
+
+/// Local mirror of the server fee math (12% athlete service fee, 300¢ floor)
+/// for showing the summary before checkout returns.
+func estimatedBookingFees(basePriceCents: Int) -> (serviceFee: Int, total: Int) {
+    var serviceFee = Int((Double(basePriceCents) * 0.12).rounded())
+    if serviceFee < 300 { serviceFee = 300 }
+    return (serviceFee, basePriceCents + serviceFee)
 }
 
 struct TrainerStripeStatus {

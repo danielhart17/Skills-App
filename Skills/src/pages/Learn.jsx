@@ -4,7 +4,6 @@ import { Chapter, Lesson, UserProgress } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Brain,
   CheckCircle,
@@ -12,8 +11,10 @@ import {
   Book,
   ChevronRight,
   Trophy,
-  Dumbbell,
 } from "lucide-react";
+import BetaBadge from "@/components/BetaBadge";
+
+const IQ_MODE = "iq";
 
 export default function Learn() {
   const navigate = useNavigate();
@@ -21,7 +22,6 @@ export default function Learn() {
   const [lessons, setLessons] = useState([]);
   const [completedLessons, setCompletedLessons] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [mode, setMode] = useState("iq"); // "iq" or "oncourt"
 
   useEffect(() => {
     const loadData = async () => {
@@ -30,11 +30,11 @@ export default function Learn() {
       await loadCompletedLessons();
     };
     loadData();
-  }, [mode]); // Reload when mode changes
+  }, []);
 
   const loadChapters = async () => {
     try {
-      const allChapters = await Chapter.filter({ mode });
+      const allChapters = await Chapter.filter({ mode: IQ_MODE });
       setChapters(allChapters);
     } catch (error) {
       console.error("Error loading chapters:", error);
@@ -56,7 +56,6 @@ export default function Learn() {
       setCompletedLessons(completedLessonIds);
     } catch (error) {
       console.error("Error loading completed lessons:", error);
-      // Fallback to localStorage if Supabase fails
       const stored = localStorage.getItem("completedLessons");
       if (stored) {
         setCompletedLessons(JSON.parse(stored));
@@ -66,7 +65,6 @@ export default function Learn() {
   };
 
   const getChapterStats = (chapterTitle) => {
-    // Match lessons by chapter name (the 'chapter' field in lessons table)
     const chapterLessons = lessons.filter((l) => l.chapter === chapterTitle);
     const completed = chapterLessons.filter((lesson) =>
       completedLessons.includes(lesson.id)
@@ -100,51 +98,22 @@ export default function Learn() {
   return (
     <div className="p-6 lg:p-8">
       <div className="max-w-6xl mx-auto space-y-8">
-        {/* Header */}
         <div className="text-center space-y-4">
           <div className="flex items-center justify-center gap-3 mb-4">
-            <div
-              className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
-                mode === "iq"
-                  ? "bg-gradient-to-br from-blue-500 to-indigo-600"
-                  : "bg-gradient-to-br from-orange-500 to-red-600"
-              }`}
-            >
-              {mode === "iq" ? (
-                <Brain className="w-6 h-6 text-white" />
-              ) : (
-                <Dumbbell className="w-6 h-6 text-white" />
-              )}
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-blue-500 to-indigo-600">
+              <Brain className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-3xl lg:text-4xl font-bold text-white">Learn</h1>
+            <h1 className="text-3xl lg:text-4xl font-bold text-white flex items-center gap-2">
+              Learn
+              <BetaBadge className="align-middle" />
+            </h1>
           </div>
           <p className="text-xl text-brand-lightGray max-w-2xl mx-auto">
-            {mode === "iq"
-              ? "Master the mental game with strategic knowledge, rules, and basketball theory"
-              : "Develop fundamental skills and on-court techniques through structured training"}
+            Master the mental game with strategic knowledge, rules, and
+            basketball theory
           </p>
-
-          {/* Mode Toggle */}
-          <div className="flex justify-center pt-4">
-            <Tabs value={mode} onValueChange={setMode} className="w-[400px]">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="iq" className="flex items-center gap-2">
-                  <Brain className="w-4 h-4" />
-                  IQ Mode
-                </TabsTrigger>
-                <TabsTrigger
-                  value="oncourt"
-                  className="flex items-center gap-2"
-                >
-                  <Dumbbell className="w-4 h-4" />
-                  On Court
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
         </div>
 
-        {/* Chapter Cards */}
         {chapters.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {chapters.map((chapter) => {
@@ -165,23 +134,11 @@ export default function Learn() {
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3 flex-1">
-                        <div
-                          className={`w-12 h-12 rounded-lg flex items-center justify-center shadow-md ${
-                            mode === "iq"
-                              ? "bg-gradient-to-br from-blue-500 to-indigo-600"
-                              : "bg-gradient-to-br from-orange-500 to-red-600"
-                          }`}
-                        >
+                        <div className="w-12 h-12 rounded-lg flex items-center justify-center shadow-md bg-gradient-to-br from-blue-500 to-indigo-600">
                           <Book className="w-6 h-6 text-white" />
                         </div>
                         <div className="flex-1">
-                          <CardTitle
-                            className={`text-lg font-bold text-white mb-1 transition-colors ${
-                              mode === "iq"
-                                ? "group-hover:text-blue-400"
-                                : "group-hover:text-orange-400"
-                            }`}
-                          >
+                          <CardTitle className="text-lg font-bold text-white mb-1 transition-colors group-hover:text-blue-400">
                             {chapter.title}
                           </CardTitle>
                           <p className="text-sm text-gray-400">
@@ -190,18 +147,11 @@ export default function Learn() {
                           </p>
                         </div>
                       </div>
-                      <ChevronRight
-                        className={`w-6 h-6 text-gray-600 group-hover:translate-x-1 transition-all ${
-                          mode === "iq"
-                            ? "group-hover:text-blue-400"
-                            : "group-hover:text-orange-400"
-                        }`}
-                      />
+                      <ChevronRight className="w-6 h-6 text-gray-600 group-hover:translate-x-1 transition-all group-hover:text-blue-400" />
                     </div>
                   </CardHeader>
 
                   <CardContent className="pt-0 space-y-4">
-                    {/* Progress */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-400 font-medium">
@@ -217,7 +167,6 @@ export default function Learn() {
                       <Progress value={progress} className="h-2" />
                     </div>
 
-                    {/* Stats */}
                     <div className="flex items-center justify-between pt-2 border-t border-gray-800">
                       <div className="flex items-center gap-2">
                         <Star className="w-5 h-5 text-yellow-500" />
@@ -255,24 +204,14 @@ export default function Learn() {
           </div>
         ) : (
           <div className="text-center py-12">
-            <div
-              className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 ${
-                mode === "iq" ? "bg-blue-100" : "bg-orange-100"
-              }`}
-            >
-              {mode === "iq" ? (
-                <Brain className="w-12 h-12 text-blue-500" />
-              ) : (
-                <Dumbbell className="w-12 h-12 text-orange-500" />
-              )}
+            <div className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 bg-blue-100">
+              <Brain className="w-12 h-12 text-blue-500" />
             </div>
             <h3 className="text-xl font-semibold text-white mb-2">
-              No {mode === "iq" ? "IQ Mode" : "On Court"} Chapters Yet
+              No IQ Chapters Yet
             </h3>
             <p className="text-brand-lightGray">
-              {mode === "iq"
-                ? "Basketball theory lessons are coming soon!"
-                : "On-court training lessons are coming soon!"}
+              Basketball theory lessons are coming soon!
             </p>
           </div>
         )}

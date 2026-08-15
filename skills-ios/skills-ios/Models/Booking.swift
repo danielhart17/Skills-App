@@ -16,9 +16,12 @@ struct Booking: Codable, Identifiable {
     var status: BookingStatus
     var notes: String?
     var price: Decimal
+    var serviceName: String?
+    var durationMinutes: Int?
+    var userNotes: String?
     let createdAt: Date
     let updatedAt: Date
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"
@@ -28,6 +31,9 @@ struct Booking: Codable, Identifiable {
         case status
         case notes
         case price
+        case serviceName = "service_name"
+        case durationMinutes = "duration_minutes"
+        case userNotes = "user_notes"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -35,9 +41,17 @@ struct Booking: Codable, Identifiable {
 
 enum BookingStatus: String, Codable {
     case pending
+    case pendingPayment = "pending_payment"
     case confirmed
     case completed
     case cancelled
+
+    var displayName: String {
+        switch self {
+        case .pendingPayment: return "Awaiting payment"
+        default: return rawValue.capitalized
+        }
+    }
 }
 
 struct Review: Codable, Identifiable {

@@ -1,24 +1,50 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Trainer } from "@/api/entities";
 import { TrainerService } from "@/api/entities";
 import { Booking } from "@/api/entities";
-import { User } from "@/api/entities";
+import { supabase } from "@/api/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, CheckCircle, CreditCard, AlertCircle, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle,
+  CreditCard,
+  AlertCircle,
+  Loader2,
+  MapPin,
+} from "lucide-react";
 import { add, format, setHours, setMinutes } from "date-fns";
 import { createPageUrl } from "@/utils";
-import { 
-  createBookingCheckoutSession, 
-  redirectToCheckout, 
+import {
+  createBookingCheckoutSession,
+  redirectToCheckout,
   verifyBookingPayment,
-  getTrainerStripeStatus 
+  getTrainerStripeStatus,
 } from "@/api/stripeService";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  isDateAvailableForSession,
+  parseTimeToHoursMinutes,
+  skillLevelLabel,
+  toLocalDateKey,
+} from "@/lib/sessionBooking";
+import { syncBookingToAthleteSchedule } from "@/lib/bookingSchedule";
+import {
+  calculateBookingFees,
+  dollarsToCents,
+  formatUsdFromCents,
+} from "../../supabase/functions/_shared/bookingFees.ts";
+
+function safeReturnPath(returnTo) {
+  if (!returnTo || typeof returnTo !== "string") return null;
+  if (!returnTo.startsWith("/") || returnTo.startsWith("//")) return null;
+  return returnTo;
+}
 
 const BookingStep = ({ number, title, children, isActive }) => (
   <div
@@ -40,10 +66,58 @@ const BookingStep = ({ number, title, children, isActive }) => (
   </div>
 );
 
+async function loadTrainerBookedSlots(trainerId, date) {
+  const dayKey = toLocalDateKey(date);
+  if (!trainerId || !dayKey) return [];
+
+  const { data, error } = await supabase.rpc("get_trainer_booked_slots", {
+    p_trainer_id: trainerId,
+    p_day: dayKey,
+  });
+
+  if (!error && Array.isArray(data)) {
+    return data.map((row) => ({
+      start: new Date(row.booking_datetime),
+      duration: Number(row.duration_minutes) || 60,
+    }));
+  }
+
+  // Fallback if RPC not deployed yet — may only return current user's bookings
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  try {
+    const bookings = await Booking.filter({
+      trainer_id: trainerId,
+      booking_datetime: {
+        $gte: startOfDay.toISOString(),
+        $lte: endOfDay.toISOString(),
+      },
+    });
+    return (bookings || [])
+      .filter((b) => b.status !== "cancelled")
+      .map((b) => ({
+        start: new Date(b.booking_datetime),
+        duration: Number(b.duration_minutes) || 60,
+      }));
+  } catch (fallbackError) {
+    console.warn("Could not load booked slots:", fallbackError);
+    return [];
+  }
+}
+
 export default function BookingPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { isParent, user } = useAuth();
+  const returnTo =
+    safeReturnPath(searchParams.get("returnTo")) ||
+    (isParent() ? `${createPageUrl("ParentDashboard")}?tab=trainers` : null);
+  const browseTrainersPath = returnTo || createPageUrl("Trainers");
+  const donePath = returnTo || createPageUrl("Home");
   const [step, setStep] = useState(1);
   const [trainer, setTrainer] = useState(null);
   const [services, setServices] = useState([]);
@@ -51,27 +125,38 @@ export default function BookingPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState(null);
   const [userNotes, setUserNotes] = useState("");
-  const [bookedTimes, setBookedTimes] = useState([]);
+  const [bookedSlots, setBookedSlots] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [trainerStripeStatus, setTrainerStripeStatus] = useState(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState(null);
 
-  // Handle payment success/cancel URL params
+  // Same fee math as create-booking-checkout (shared bookingFees module).
+  const priceBreakdown = useMemo(() => {
+    if (!selectedService || !(Number(selectedService.price) > 0)) return null;
+    return calculateBookingFees(dollarsToCents(selectedService.price));
+  }, [selectedService]);
+
   useEffect(() => {
     const success = searchParams.get("success");
     const canceled = searchParams.get("canceled");
     const bookingId = searchParams.get("booking_id");
 
     if (success === "true" && bookingId) {
-      // Payment was successful
       toast.success("Payment successful! Your booking is confirmed.");
       setStep(4);
-      // Verify the booking
-      verifyBookingPayment(bookingId).then((booking) => {
-        setConfirmedBooking(booking);
-      }).catch(console.error);
-      // Clear URL params
+      verifyBookingPayment(bookingId)
+        .then(async (booking) => {
+          setConfirmedBooking(booking);
+          if (booking) {
+            await syncBookingToAthleteSchedule(booking, {
+              trainerName: trainer?.name,
+              location: selectedService?.location,
+              serviceName: booking.service_name || selectedService?.name,
+            });
+          }
+        })
+        .catch(console.error);
       setSearchParams({});
     } else if (canceled === "true") {
       toast.error("Payment was cancelled. Your booking was not completed.");
@@ -84,16 +169,9 @@ export default function BookingPage() {
     const trainerId = params.get("trainerId");
     const serviceId = params.get("serviceId");
 
-    console.log("Booking page loaded with params:", {
-      trainerId,
-      serviceId,
-      search: location.search,
-    });
-
     if (trainerId) {
       loadInitialData(trainerId, serviceId);
     } else {
-      console.log("No trainerId found in URL params");
       setIsLoading(false);
     }
   }, [location]);
@@ -107,216 +185,114 @@ export default function BookingPage() {
   const loadInitialData = async (trainerId, serviceId) => {
     setIsLoading(true);
     try {
-      console.log(
-        "Loading data for trainerId:",
-        trainerId,
-        "serviceId:",
-        serviceId
-      );
-
       const [trainerData, servicesData] = await Promise.all([
         Trainer.get(trainerId),
         TrainerService.filter({ trainer_id: trainerId }),
       ]);
 
-      console.log("Trainer data:", trainerData);
-      console.log("Services data:", servicesData);
-
       setTrainer(trainerData);
-      setServices(servicesData);
+      setServices(servicesData || []);
 
-      // Load trainer's Stripe status
       try {
         const stripeStatus = await getTrainerStripeStatus(trainerData.id);
         setTrainerStripeStatus(stripeStatus);
-        console.log("Trainer Stripe status:", stripeStatus);
       } catch (stripeError) {
         console.log("Could not load Stripe status:", stripeError);
         setTrainerStripeStatus(null);
       }
 
       if (serviceId) {
-        const preselectedService = servicesData.find((s) => s.id === serviceId);
+        const preselectedService = (servicesData || []).find(
+          (s) => s.id === serviceId
+        );
         if (preselectedService) {
-          setSelectedService(preselectedService);
-          setStep(2);
+          applyServiceSelection(preselectedService);
         }
       }
     } catch (error) {
       console.error("Error loading data:", error);
-
-      // If there's an error, try to provide some fallback data for testing
-      if (trainerId === "10000000-0000-0000-0000-000000000001") {
-        console.log("Using fallback data for testing");
-        const fallbackTrainer = {
-          id: trainerId,
-          name: "Coach Mike Johnson",
-          bio: "Former NBA player with 15 years of coaching experience",
-          specializations: ["shooting", "offense"],
-          years_experience: 15,
-          location: "Los Angeles, CA",
-          verified: true,
-          hourly_rate: 100.0,
-          rating: 4.8,
-        };
-
-        const fallbackServices = [
-          {
-            id: "30000000-0000-0000-0000-000000000001",
-            trainer_id: trainerId,
-            name: "1-on-1 Shooting Session",
-            description: "Personalized shooting technique and form improvement",
-            price: 100.0,
-            duration_minutes: 60,
-          },
-          {
-            id: "30000000-0000-0000-0000-000000000002",
-            trainer_id: trainerId,
-            name: "Group Skills Training",
-            description: "Small group training for offensive skills",
-            price: 150.0,
-            duration_minutes: 90,
-          },
-        ];
-
-        setTrainer(fallbackTrainer);
-        setServices(fallbackServices);
-
-        if (serviceId) {
-          const preselectedService = fallbackServices.find(
-            (s) => s.id === serviceId
-          );
-          if (preselectedService) {
-            setSelectedService(preselectedService);
-            setStep(2);
-          }
-        }
-      } else {
-        // Set some default data to prevent infinite loading
-        setTrainer(null);
-        setServices([]);
-      }
+      setTrainer(null);
+      setServices([]);
     }
     setIsLoading(false);
   };
 
   const loadBookedTimes = async (trainerId, date) => {
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    const slots = await loadTrainerBookedSlots(trainerId, date);
+    setBookedSlots(slots);
+  };
 
-    const bookings = await Booking.filter({
-      trainer_id: trainerId,
-      booking_datetime: {
-        $gte: startOfDay.toISOString(),
-        $lte: endOfDay.toISOString(),
-      },
-    });
+  const applyServiceSelection = (service) => {
+    setSelectedService(service);
+    setSelectedTime(null);
+    setStep(2);
 
-    const times = bookings.map((b) => new Date(b.booking_datetime));
-    setBookedTimes(times);
+    if (!service.is_recurring && service.session_date) {
+      const [y, m, d] = service.session_date.split("-").map(Number);
+      if (y && m && d) {
+        setSelectedDate(new Date(y, m - 1, d));
+      }
+    }
   };
 
   const generateTimeSlots = () => {
-    if (!selectedService || !trainer) return [];
-    
-    // Get day of week for selected date
-    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-    const selectedDayName = dayNames[selectedDate.getDay()];
-    
-    // Check trainer's availability schedule
-    const availability = trainer.availability_schedule;
-    const daySchedule = availability?.[selectedDayName];
-    
-    // If trainer has no availability for this day, return empty
-    if (!daySchedule?.enabled) {
+    if (!selectedService || !trainer || !selectedDate) return [];
+    if (
+      !isDateAvailableForSession(
+        selectedDate,
+        selectedService,
+        trainer.blocked_dates
+      )
+    ) {
       return [];
     }
-    
-    // Check if this date is blocked
-    const dateString = selectedDate.toISOString().split("T")[0];
-    if (trainer.blocked_dates?.includes(dateString)) {
-      return [];
-    }
-    
-    // Parse start and end times from trainer's schedule (or use defaults)
-    const [startHour, startMinute] = (daySchedule.start || "09:00").split(":").map(Number);
-    const [endHour, endMinute] = (daySchedule.end || "17:00").split(":").map(Number);
-    
-    // Get buffer and notice settings (with defaults)
+
+    const parsed = parseTimeToHoursMinutes(selectedService.start_time);
+    if (!parsed) return [];
+
+    const slotTime = setMinutes(
+      setHours(new Date(selectedDate), parsed.hours),
+      parsed.minutes
+    );
+    const duration = Number(selectedService.duration_minutes) || 60;
     const bufferMinutes = trainer.session_buffer_minutes || 15;
-    const noticeHours = trainer.min_booking_notice_hours || 24;
-    
-    const slots = [];
-    
-    // Calculate minimum booking time based on notice requirement
-    const now = new Date();
-    const minBookingTime = add(now, { hours: noticeHours });
-    
-    // Generate slots based on trainer's schedule
-    for (let hour = startHour; hour < endHour || (hour === endHour && 0 < endMinute); hour++) {
-      for (let minute = (hour === startHour ? startMinute : 0); minute < 60; minute += 30) {
-        // Don't go past end time
-        if (hour > endHour || (hour === endHour && minute >= endMinute)) {
-          break;
-        }
-        
-        const slotTime = setMinutes(setHours(selectedDate, hour), minute);
-        const slotEndTime = add(slotTime, { minutes: selectedService.duration_minutes });
-        
-        // Check if slot end time goes past trainer's end time
-        const trainerEndTime = setMinutes(setHours(selectedDate, endHour), endMinute);
-        if (slotEndTime > trainerEndTime) {
-          continue; // Skip this slot as the session would end after trainer's available hours
-        }
+    const noticeHours = trainer.min_booking_notice_hours ?? 0;
+    const minBookingTime = add(new Date(), { hours: noticeHours });
 
-        const isBooked = bookedTimes.some((bookedTime) => {
-          // Check for overlap, considering the service duration and buffer
-          const bookedEndTimeWithBuffer = add(bookedTime, {
-            minutes: selectedService.duration_minutes + bufferMinutes,
-          });
-          const slotEndTimeWithBuffer = add(slotTime, {
-            minutes: selectedService.duration_minutes + bufferMinutes,
-          });
+    if (slotTime <= minBookingTime) return [];
 
-          // A slot is booked if it overlaps with an existing booking (including buffer)
-          return slotTime < bookedEndTimeWithBuffer && bookedTime < slotEndTimeWithBuffer;
-        });
+    const slotEnd = add(slotTime, { minutes: duration });
+    const overlaps = bookedSlots.some((booked) => {
+      const bookedEnd = add(booked.start, {
+        minutes: (booked.duration || duration) + bufferMinutes,
+      });
+      const slotEndWithBuffer = add(slotEnd, { minutes: bufferMinutes });
+      return slotTime < bookedEnd && booked.start < slotEndWithBuffer;
+    });
 
-        // Ensure the slot meets the minimum booking notice requirement
-        if (slotTime > minBookingTime && !isBooked) {
-          slots.push(slotTime);
-        }
-      }
-    }
-    
-    // Sort slots to ensure they are in chronological order
-    slots.sort((a, b) => a.getTime() - b.getTime());
-    return slots;
+    return overlaps ? [] : [slotTime];
   };
 
   const handleSelectService = (service) => {
-    setSelectedService(service);
-    setStep(2);
+    applyServiceSelection(service);
   };
 
   const handleConfirmBooking = async () => {
     if (!trainer || !selectedService || !selectedTime) return;
-    
+
+    if (!user?.id) {
+      toast.error("Please sign in to request a booking.");
+      navigate(createPageUrl("Auth"));
+      return;
+    }
+
     setIsProcessingPayment(true);
-    
+
     try {
-      const user = await User.me();
-      
-      // Check if trainer has Stripe set up for real payments
       const canProcessPayment = trainerStripeStatus?.chargesEnabled;
-      
+
       if (canProcessPayment && selectedService.price > 0) {
-        // Use Stripe checkout for real payment
-        console.log("Processing real payment via Stripe Connect");
-        
-        const { sessionId, bookingId } = await createBookingCheckoutSession({
+        const { sessionId } = await createBookingCheckoutSession({
           trainerId: trainer.id,
           userId: user.id,
           serviceId: selectedService.id,
@@ -326,16 +302,10 @@ export default function BookingPage() {
           bookingDatetime: selectedTime.toISOString(),
           userNotes: userNotes,
         });
-        
-        // Redirect to Stripe checkout
+
         await redirectToCheckout(sessionId);
-        // Note: Page will redirect, so code below won't execute
-        
       } else {
-        // Free service or trainer hasn't set up Stripe - create booking directly
-        console.log("Creating booking without payment (free or no Stripe setup)");
-        
-        await Booking.create({
+        const created = await Booking.create({
           trainer_id: trainer.id,
           user_id: user.id,
           service_id: selectedService.id,
@@ -344,27 +314,46 @@ export default function BookingPage() {
           duration_minutes: selectedService.duration_minutes,
           total_price: selectedService.price,
           user_notes: userNotes,
-          status: selectedService.price > 0 ? "pending_payment" : "confirmed",
-          payment_status: selectedService.price > 0 ? "awaiting_setup" : "free",
+          // Must match bookings_status_check (pending_payment also allowed after migration)
+          status: selectedService.price > 0 ? "pending" : "confirmed",
+          payment_status:
+            selectedService.price > 0 ? "awaiting_setup" : "free",
+          location: selectedService.location || trainer.location || null,
+          trainer_name: trainer.name,
         });
-        
+
+        // Ensure schedule sync even if Booking.create helper skipped extras
+        if (created) {
+          await syncBookingToAthleteSchedule(created, {
+            trainerName: trainer.name,
+            location: selectedService.location || trainer.location || null,
+            serviceName: selectedService.name,
+          });
+          setConfirmedBooking(created);
+        }
+
         if (selectedService.price > 0 && !canProcessPayment) {
-          toast.info("Booking created! The trainer will contact you about payment.");
+          toast.info(
+            "Booking requested! It was added to your schedule. The trainer will contact you about payment."
+          );
+        } else {
+          toast.success("Booking confirmed and added to your schedule!");
         }
 
         setIsProcessingPayment(false);
-        setStep(4); // Move to confirmation step
+        setStep(4);
       }
     } catch (error) {
       console.error("Failed to create booking:", error);
-      toast.error(error.message || "Failed to process booking. Please try again.");
+      toast.error(
+        error.message || "Failed to process booking. Please try again."
+      );
       setIsProcessingPayment(false);
     }
   };
 
   if (isLoading) return <div className="p-8 text-center">Loading...</div>;
 
-  // If no trainerId was provided, show a message to select a trainer first
   const params = new URLSearchParams(location.search);
   const trainerId = params.get("trainerId");
 
@@ -375,25 +364,27 @@ export default function BookingPage() {
         <p className="text-gray-600 mb-6">
           Please select a trainer from the trainers page to book a session.
         </p>
-        <Button onClick={() => navigate(createPageUrl("Trainers"))}>
+        <Button onClick={() => navigate(browseTrainersPath)}>
           Browse Trainers
         </Button>
       </div>
     );
   }
 
-  if (!trainer)
+  if (!trainer) {
     return (
       <div className="p-8 text-center">
         <h1 className="text-2xl font-bold mb-4">Trainer not found</h1>
         <p className="text-gray-600 mb-6">
-          The trainer you're looking for doesn't exist or the link is invalid.
+          The trainer you&apos;re looking for doesn&apos;t exist or the link is
+          invalid.
         </p>
-        <Button onClick={() => navigate(createPageUrl("Trainers"))}>
+        <Button onClick={() => navigate(browseTrainersPath)}>
           Browse Trainers
         </Button>
       </div>
     );
+  }
 
   if (step === 4) {
     return (
@@ -403,12 +394,15 @@ export default function BookingPage() {
           <h1 className="text-2xl font-bold mb-2">Booking Confirmed!</h1>
           <p className="text-gray-600 mb-6">
             {trainer ? (
-              <>Your session with {trainer.name} is scheduled. You'll receive an email with the details.</>
+              <>
+                Your session with {trainer.name} is scheduled and added to{" "}
+                <strong>My Schedule</strong>.
+              </>
             ) : (
-              <>Your booking has been confirmed! Check your email for details.</>
+              <>Your booking has been confirmed! Check your schedule for details.</>
             )}
           </p>
-          {(selectedService && selectedTime) ? (
+          {selectedService && selectedTime ? (
             <div className="text-left p-4 rounded-lg mb-6 bg-gray-50">
               <p>
                 <strong>Service:</strong> {selectedService.name}
@@ -428,31 +422,19 @@ export default function BookingPage() {
                 </p>
               )}
             </div>
-          ) : confirmedBooking ? (
-            <div className="text-left p-4 rounded-lg mb-6 bg-gray-50">
-              <p>
-                <strong>Booking ID:</strong> {confirmedBooking.id?.slice(0, 8)}...
-              </p>
-              <p>
-                <strong>Status:</strong> {confirmedBooking.status}
-              </p>
-              {confirmedBooking.payment_status === "paid" && (
-                <p className="mt-2">
-                  <Badge className="bg-green-100 text-green-700">
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                    Payment Complete
-                  </Badge>
-                </p>
-              )}
-            </div>
           ) : null}
-          <Button onClick={() => navigate(createPageUrl("Home"))}>
-            Back to Home
+          <Button onClick={() => navigate(createPageUrl("Schedule"))} className="mr-0 mb-2 w-full">
+            View My Schedule
+          </Button>
+          <Button variant="outline" onClick={() => navigate(donePath)} className="w-full">
+            {isParent() ? "Back to Parent Dashboard" : "Back to Home"}
           </Button>
         </Card>
       </div>
     );
   }
+
+  const availableSlots = step >= 2 && selectedService ? generateTimeSlots() : [];
 
   return (
     <div className="p-6 lg:p-8">
@@ -465,43 +447,72 @@ export default function BookingPage() {
           Book a session with {trainer.name}
         </h1>
         <p className="text-gray-600 mb-8">
-          Follow the steps below to schedule your training.
+          Choose one of this trainer&apos;s training sessions and an available
+          time they offer.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-8">
             <BookingStep
               number={1}
-              title="Select a Service"
+              title="Select a Training Session"
               isActive={step >= 1}
             >
               {step >= 1 && (
                 <div className="space-y-3">
-                  {services.map((service) => (
-                    <button
-                      key={service.id}
-                      type="button"
-                      onClick={() => handleSelectService(service)}
-                      className={`w-full text-left p-4 border rounded-lg transition-all ${
-                        selectedService?.id === service.id
-                          ? "border-blue-500 bg-blue-50 shadow-md"
-                          : "hover:border-gray-400"
-                      }`}
-                    >
-                      <h3 className="font-semibold">{service.name}</h3>
-                      <p className="text-sm text-gray-600">
-                        {service.description}
-                      </p>
-                      <div className="flex items-center gap-4 text-sm mt-2">
-                        <span className="font-bold text-blue-600">
-                          ${service.price}
-                        </span>
-                        <span className="text-gray-500">
-                          {service.duration_minutes} min
-                        </span>
-                      </div>
-                    </button>
-                  ))}
+                  {services.length === 0 ? (
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                      This trainer hasn&apos;t published any training sessions
+                      yet.
+                    </div>
+                  ) : (
+                    services.map((service) => (
+                      <button
+                        key={service.id}
+                        type="button"
+                        onClick={() => handleSelectService(service)}
+                        className={`w-full text-left p-4 border rounded-lg transition-all ${
+                          selectedService?.id === service.id
+                            ? "border-blue-500 bg-blue-50 shadow-md"
+                            : "hover:border-gray-400"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-semibold">{service.name}</h3>
+                          <Badge variant="outline">
+                            {skillLevelLabel(service.skill_level)}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {service.description}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-3 text-sm mt-2">
+                          <span className="font-bold text-blue-600">
+                            ${service.price}
+                          </span>
+                          <span className="text-gray-500">
+                            {service.duration_minutes} min
+                          </span>
+                          {service.is_recurring ? (
+                            <span className="text-gray-500">Weekly recurring</span>
+                          ) : service.session_date ? (
+                            <span className="text-gray-500">
+                              {service.session_date}
+                              {service.start_time
+                                ? ` · ${String(service.start_time).slice(0, 5)}`
+                                : ""}
+                            </span>
+                          ) : null}
+                          {service.location ? (
+                            <span className="text-gray-500 inline-flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />
+                              {service.location}
+                            </span>
+                          ) : null}
+                        </div>
+                      </button>
+                    ))
+                  )}
                 </div>
               )}
             </BookingStep>
@@ -513,70 +524,46 @@ export default function BookingPage() {
             >
               {step === 2 && selectedService && (
                 <div className="space-y-4">
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={setSelectedDate}
-                    disabled={(date) => {
-                      // Disable past dates
-                      if (date < new Date().setHours(0, 0, 0, 0)) return true;
-                      
-                      // Check if date is blocked
-                      const dateString = date.toISOString().split("T")[0];
-                      if (trainer?.blocked_dates?.includes(dateString)) return true;
-                      
-                      return false;
-                    }}
-                    modifiers={{
-                      unavailable: (date) => {
-                        const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-                        const dayName = dayNames[date.getDay()];
-                        const daySchedule = trainer?.availability_schedule?.[dayName];
-                        return !daySchedule?.enabled;
-                      },
-                    }}
-                    modifiersClassNames={{
-                      unavailable: "text-gray-400 line-through",
-                    }}
-                    className="rounded-md border"
-                  />
-                  {(() => {
-                    // Check if day is blocked or unavailable
-                    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-                    const selectedDayName = dayNames[selectedDate.getDay()];
-                    const daySchedule = trainer?.availability_schedule?.[selectedDayName];
-                    const dateString = selectedDate.toISOString().split("T")[0];
-                    const isBlocked = trainer?.blocked_dates?.includes(dateString);
-                    
-                    if (isBlocked) {
-                      return (
-                        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-center">
-                          <p className="text-red-700 font-medium">Date Blocked</p>
-                          <p className="text-red-600 text-sm">
-                            This trainer has marked this date as unavailable.
-                          </p>
-                        </div>
-                      );
-                    }
-                    
-                    if (!daySchedule?.enabled) {
-                      return (
-                        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
-                          <p className="text-yellow-700 font-medium">Day Unavailable</p>
-                          <p className="text-yellow-600 text-sm">
-                            This trainer doesn't offer sessions on {selectedDayName.charAt(0).toUpperCase() + selectedDayName.slice(1)}s.
-                          </p>
-                        </div>
-                      );
-                    }
-                    
-                    const slots = generateTimeSlots();
-                    if (slots.length > 0) {
-                      return (
+                  {!selectedService.start_time ||
+                  (!selectedService.is_recurring &&
+                    !selectedService.session_date) ||
+                  (selectedService.is_recurring &&
+                    !(selectedService.recurrence_days || []).length) ? (
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
+                      <p className="text-yellow-700 font-medium">
+                        Session schedule incomplete
+                      </p>
+                      <p className="text-yellow-600 text-sm">
+                        This offering doesn&apos;t have bookable times yet.
+                        Choose another session or ask the trainer to update it.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={(date) => {
+                          if (!date) return;
+                          setSelectedDate(date);
+                          setSelectedTime(null);
+                        }}
+                        disabled={(date) =>
+                          !isDateAvailableForSession(
+                            date,
+                            selectedService,
+                            trainer.blocked_dates
+                          )
+                        }
+                        className="rounded-md border"
+                      />
+
+                      {availableSlots.length > 0 ? (
                         <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-2">
-                          {slots.map((time) => (
+                          {availableSlots.map((time) => (
                             <Button
                               key={time.toString()}
+                              type="button"
                               variant={
                                 selectedTime?.getTime() === time.getTime()
                                   ? "default"
@@ -591,15 +578,14 @@ export default function BookingPage() {
                             </Button>
                           ))}
                         </div>
-                      );
-                    }
-                    
-                    return (
-                      <p className="text-gray-500">
-                        No available slots for this date. All times may be booked or too close to the current time.
-                      </p>
-                    );
-                  })()}
+                      ) : (
+                        <p className="text-gray-500 text-sm">
+                          No open times on this date. It may already be booked
+                          or too close to now.
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </BookingStep>
@@ -621,7 +607,6 @@ export default function BookingPage() {
             </BookingStep>
           </div>
 
-          {/* Booking Summary */}
           {selectedService && (
             <div className="row-start-1 md:col-start-2">
               <Card className="sticky top-8 shadow-xl">
@@ -634,9 +619,15 @@ export default function BookingPage() {
                     <span className="font-semibold">{trainer.name}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Service</span>
-                    <span className="font-semibold">
+                    <span className="text-gray-600">Session</span>
+                    <span className="font-semibold text-right">
                       {selectedService.name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Level</span>
+                    <span className="font-semibold">
+                      {skillLevelLabel(selectedService.skill_level)}
                     </span>
                   </div>
                   {selectedTime && (
@@ -656,14 +647,34 @@ export default function BookingPage() {
                     </>
                   )}
                   <div className="border-t my-2"></div>
-                  <div className="flex justify-between items-center text-lg">
-                    <span className="text-gray-600">Total</span>
-                    <span className="font-bold text-blue-600">
-                      {selectedService.price > 0 ? `$${selectedService.price}` : "Free"}
-                    </span>
-                  </div>
+                  {priceBreakdown ? (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">Session price</span>
+                        <span className="font-medium">
+                          {formatUsdFromCents(priceBreakdown.basePrice)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">Service fee</span>
+                        <span className="font-medium">
+                          {formatUsdFromCents(priceBreakdown.serviceFee)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-lg pt-1">
+                        <span className="text-gray-600">Total</span>
+                        <span className="font-bold text-blue-600">
+                          {formatUsdFromCents(priceBreakdown.totalCharged)}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center text-lg">
+                      <span className="text-gray-600">Total</span>
+                      <span className="font-bold text-blue-600">Free</span>
+                    </div>
+                  )}
 
-                  {/* Stripe status indicator */}
                   {step >= 2 && selectedService.price > 0 && (
                     <div className="pt-2">
                       {trainerStripeStatus?.chargesEnabled ? (
@@ -675,8 +686,9 @@ export default function BookingPage() {
                         <div className="flex items-start gap-2 text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
                           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                           <span>
-                            This trainer hasn't set up online payments yet. 
-                            You can still book, and they'll contact you about payment.
+                            This trainer hasn&apos;t set up online payments yet.
+                            You can still request a booking and they&apos;ll
+                            contact you about payment.
                           </span>
                         </div>
                       )}
@@ -685,6 +697,7 @@ export default function BookingPage() {
 
                   {step === 3 && (
                     <Button
+                      type="button"
                       onClick={handleConfirmBooking}
                       size="lg"
                       disabled={isProcessingPayment}
@@ -695,15 +708,18 @@ export default function BookingPage() {
                           <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                           Processing...
                         </>
-                      ) : trainerStripeStatus?.chargesEnabled && selectedService.price > 0 ? (
+                      ) : trainerStripeStatus?.chargesEnabled &&
+                        priceBreakdown ? (
                         <>
                           <CreditCard className="w-5 h-5 mr-2" />
-                          Pay ${selectedService.price}
+                          Pay {formatUsdFromCents(priceBreakdown.totalCharged)}
                         </>
                       ) : (
                         <>
                           <CheckCircle className="w-5 h-5 mr-2" />
-                          {selectedService.price > 0 ? "Request Booking" : "Confirm Booking"}
+                          {selectedService.price > 0
+                            ? "Request Booking"
+                            : "Confirm Booking"}
                         </>
                       )}
                     </Button>

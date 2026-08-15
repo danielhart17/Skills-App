@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
   Home,
@@ -18,6 +18,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import AthleteBottomNav from "@/components/AthleteBottomNav";
+import BetaBadge from "@/components/BetaBadge";
 import { useUnreadMessageCount } from "@/hooks/useUnreadMessageCount";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,22 +33,23 @@ const navigationItems = [
     description: "Dashboard & Progress",
   },
   {
+    title: "Schedule",
+    url: createPageUrl("Schedule"),
+    icon: CalendarDays,
+    description: "Weekly Calendar",
+  },
+  {
     title: "Learn",
     url: createPageUrl("Learn"),
     icon: Brain,
-    description: "IQ & On Court Training",
+    description: "IQ Training",
+    beta: true,
   },
   {
     title: "Workouts",
     url: createPageUrl("Workouts"),
     icon: Trophy,
     description: "Practice & Test Your Skills",
-  },
-  {
-    title: "Schedule",
-    url: createPageUrl("Schedule"),
-    icon: CalendarDays,
-    description: "Weekly Calendar",
   },
   {
     title: "Trainers",
@@ -71,6 +73,7 @@ const navigationItems = [
 
 export default function Layout({ children }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const { signOut, profile, role, isAdmin, isTrainer, isParent, isAthlete, user } =
     useAuth();
@@ -88,22 +91,29 @@ export default function Layout({ children }) {
           description: "Track Children",
         },
         {
-          title: "Learn",
-          url: createPageUrl("Learn"),
-          icon: Brain,
-          description: "IQ Training",
-        },
-        {
-          title: "Workouts",
-          url: createPageUrl("Workouts"),
-          icon: Trophy,
-          description: "Browse Workouts",
+          title: "Trainers",
+          url: `${createPageUrl("ParentDashboard")}?tab=trainers`,
+          icon: GraduationCap,
+          description: "Book Sessions",
         },
         {
           title: "Schedule",
           url: createPageUrl("Schedule"),
           icon: CalendarDays,
           description: "Weekly Calendar",
+        },
+        {
+          title: "Learn",
+          url: createPageUrl("Learn"),
+          icon: Brain,
+          description: "IQ Training",
+          beta: true,
+        },
+        {
+          title: "Workouts",
+          url: createPageUrl("Workouts"),
+          icon: Trophy,
+          description: "Browse Workouts",
         },
         {
           title: "Profile",
@@ -166,8 +176,10 @@ export default function Layout({ children }) {
   const currentNavItems = getRoleSpecificNavItems();
 
   const handleSignOut = async () => {
+    setMobileMenuOpen(false);
     try {
       await signOut();
+      navigate("/", { replace: true });
     } catch (error) {
       console.error("Error signing out:", error);
     }
@@ -193,25 +205,44 @@ export default function Layout({ children }) {
 
       <nav className="flex-1 p-4">
         <div className="space-y-2">
-          {currentNavItems.map((item) => (
+          {currentNavItems.map((item) => {
+            const [itemPath, itemQuery = ""] = item.url.split("?");
+            const itemParams = new URLSearchParams(itemQuery);
+            const locParams = new URLSearchParams(location.search);
+            let isActive = location.pathname === itemPath;
+            if (isActive && itemParams.size > 0) {
+              isActive = [...itemParams.entries()].every(
+                ([key, value]) => locParams.get(key) === value
+              );
+            } else if (
+              isActive &&
+              itemPath === createPageUrl("ParentDashboard") &&
+              locParams.get("tab") === "trainers"
+            ) {
+              // Trainers nav owns the trainers tab highlight
+              isActive = false;
+            }
+
+            return (
             <Link
               key={item.title}
               to={item.url}
               onClick={() => setMobileMenuOpen(false)}
               className={`group flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 ${
-                location.pathname === item.url
+                isActive
                   ? "bg-gradient-orange-blue text-white shadow-lg shadow-brand-orange/20"
                   : "text-brand-lightGray hover:bg-brand-charcoal hover:text-brand-orange"
               }`}
             >
               <item.icon
                 className={`w-5 h-5 transition-transform group-hover:scale-110 ${
-                  location.pathname === item.url ? "text-white" : ""
+                  isActive ? "text-white" : ""
                 }`}
               />
               <div className="flex-1">
                 <div className="font-semibold flex items-center gap-2">
                   {item.title}
+                  {item.beta && <BetaBadge />}
                   {item.badge > 0 && (
                     <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">
                       {item.badge > 9 ? "9+" : item.badge}
@@ -220,7 +251,7 @@ export default function Layout({ children }) {
                 </div>
                 <div
                   className={`text-xs opacity-75 ${
-                    location.pathname === item.url
+                    isActive
                       ? "text-white/80"
                       : "text-brand-gray"
                   }`}
@@ -229,7 +260,8 @@ export default function Layout({ children }) {
                 </div>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       </nav>
 

@@ -6,6 +6,7 @@ import {
   getCurrentUser,
   getCurrentUserProfile,
 } from "./supabaseClient";
+import { syncBookingToAthleteSchedule } from "@/lib/bookingSchedule";
 
 async function ensureCurrentUserProfileIfAvailable() {
   const { error } = await supabase.rpc("ensure_current_user_profile");
@@ -276,6 +277,49 @@ export const ShootingSession = {
 };
 
 // =============================================
+// RUN ENTITY (Run Tracker Beta)
+// =============================================
+export const Run = {
+  async list() {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("runs")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("started_at", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  async get(id) {
+    const { data, error } = await supabase
+      .from("runs")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async create(runData) {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase
+      .from("runs")
+      .insert({
+        ...runData,
+        user_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+};
+
+// =============================================
 // TRAINER ENTITY
 // =============================================
 export const Trainer = {
@@ -350,6 +394,39 @@ export const TrainerService = {
     const { data, error } = await queryBuilder;
     if (error) throw error;
     return data || [];
+  },
+
+  async create(serviceData) {
+    const { data, error } = await supabase
+      .from("trainer_services")
+      .insert(serviceData)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async update(id, serviceData) {
+    const { data, error } = await supabase
+      .from("trainer_services")
+      .update(serviceData)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async delete(id) {
+    const { error } = await supabase
+      .from("trainer_services")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+    return true;
   },
 };
 
@@ -473,18 +550,49 @@ export const Booking = {
   },
 
   async create(bookingData) {
-    const user = await getCurrentUser();
+    let userId = bookingData.user_id;
+    if (!userId) {
+      const user = await getCurrentUser();
+      if (!user?.id) {
+        throw new Error("Please sign in to create a booking.");
+      }
+      userId = user.id;
+    }
+
+    const {
+      location,
+      trainer_name,
+      ...bookingRow
+    } = bookingData;
+
     const { data, error } = await supabase
       .from("bookings")
       .insert({
-        ...bookingData,
-        user_id: user.id,
+        ...bookingRow,
+        user_id: userId,
+        // Keep status compatible with older check constraints
+        status:
+          bookingRow.status === "pending_payment"
+            ? "pending"
+            : bookingRow.status || "pending",
         created_at: new Date().toISOString(),
       })
       .select()
       .single();
 
     if (error) throw error;
+
+    // Show on athlete My Schedule (best-effort; schedule also merges bookings)
+    try {
+      await syncBookingToAthleteSchedule(data, {
+        location: location || null,
+        trainerName: trainer_name || null,
+        serviceName: bookingRow.service_name || null,
+      });
+    } catch (scheduleError) {
+      console.warn("Booking saved but schedule sync failed:", scheduleError);
+    }
+
     return data;
   },
 
@@ -905,6 +1013,27 @@ export const ChallengeProgress = {
     return data?.map((p) => p.challenge_id) || [];
   },
 
+  async getCompletionCount(challengeId) {
+    const { data, error } = await supabase.rpc(
+      "get_challenge_completion_count",
+      { p_challenge_id: challengeId }
+    );
+    if (error) throw error;
+    return data ?? 0;
+  },
+
+  async getCompletionCounts(challengeIds = []) {
+    if (!challengeIds.length) return {};
+    const { data, error } = await supabase.rpc(
+      "get_challenge_completion_counts",
+      { p_challenge_ids: challengeIds }
+    );
+    if (error) throw error;
+    return Object.fromEntries(
+      (data || []).map((row) => [row.item_id, row.completion_count ?? 0])
+    );
+  },
+
   async filter(query) {
     const user = await getCurrentUser();
     let queryBuilder = supabase
@@ -1242,6 +1371,26 @@ export const DrillProgress = {
 
     if (error) throw error;
     return data?.map((item) => item.drill_id) || [];
+  },
+
+  async getCompletionCount(drillId) {
+    const { data, error } = await supabase.rpc("get_drill_completion_count", {
+      p_drill_id: drillId,
+    });
+    if (error) throw error;
+    return data ?? 0;
+  },
+
+  async getCompletionCounts(drillIds = []) {
+    if (!drillIds.length) return {};
+    const { data, error } = await supabase.rpc(
+      "get_drill_completion_counts",
+      { p_drill_ids: drillIds }
+    );
+    if (error) throw error;
+    return Object.fromEntries(
+      (data || []).map((row) => [row.item_id, row.completion_count ?? 0])
+    );
   },
 
   async filter(query) {
