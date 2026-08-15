@@ -123,6 +123,7 @@ GRANT EXECUTE ON FUNCTION public.is_trainer_discoverable(UUID) TO anon, authenti
 -- Drop EVERY prior SELECT policy on trainers (both were effectively USING true).
 DROP POLICY IF EXISTS "Trainers are viewable by everyone" ON public.trainers;
 DROP POLICY IF EXISTS "Trainer users can view own trainer profile" ON public.trainers;
+DROP POLICY IF EXISTS "trainers discoverable when cleared" ON public.trainers;
 
 -- Single gated SELECT policy.
 CREATE POLICY "trainers discoverable when cleared" ON public.trainers
@@ -775,6 +776,58 @@ BEGIN
       );
   END IF;
 END $$;
+
+-- ============ prerequisite: drill_ratings/drill_progress from add_drills_system.sql ============
+-- Prod only ever got the drills table from add_drills_system.sql; the
+-- completion-count RPCs below reference drill_progress. Guarded extract.
+
+CREATE TABLE IF NOT EXISTS public.drill_ratings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  drill_id UUID REFERENCES public.drills(id) ON DELETE CASCADE NOT NULL,
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  review TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, drill_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.drill_progress (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  drill_id UUID REFERENCES public.drills(id) ON DELETE CASCADE NOT NULL,
+  is_completed BOOLEAN DEFAULT false,
+  completed_at TIMESTAMP WITH TIME ZONE,
+  time_spent_minutes INTEGER DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, drill_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_drill_ratings_user_id ON public.drill_ratings(user_id);
+CREATE INDEX IF NOT EXISTS idx_drill_ratings_drill_id ON public.drill_ratings(drill_id);
+CREATE INDEX IF NOT EXISTS idx_drill_progress_user_id ON public.drill_progress(user_id);
+CREATE INDEX IF NOT EXISTS idx_drill_progress_drill_id ON public.drill_progress(drill_id);
+
+ALTER TABLE public.drill_ratings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.drill_progress ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view all drill ratings" ON public.drill_ratings;
+CREATE POLICY "Users can view all drill ratings" ON public.drill_ratings
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can manage their own drill ratings" ON public.drill_ratings;
+CREATE POLICY "Users can manage their own drill ratings" ON public.drill_ratings
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can view their own drill progress" ON public.drill_progress;
+CREATE POLICY "Users can view their own drill progress" ON public.drill_progress
+  FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can manage their own drill progress" ON public.drill_progress;
+CREATE POLICY "Users can manage their own drill progress" ON public.drill_progress
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- ============ source: add_schedule_source_ids_and_completion_counts.sql ============
 -- Link scheduled workouts/drills to source rows + public completion counts.
