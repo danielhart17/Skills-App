@@ -13,11 +13,21 @@ struct TrainerDetailView: View {
     @State private var challenges: [Challenge] = []
     @State private var isLoading = true
     @State private var isLoadingChallenges = true
-    @State private var selectedServiceForBooking: TrainerService? = nil
-    @State private var showingBooking = false
-    @State private var showSignIn = false
+    @State private var activeSheet: ActiveSheet? = nil
     @State private var isFollowing = false
     @State private var isTogglingFollow = false
+
+    enum ActiveSheet: Identifiable {
+        case booking(TrainerService)
+        case signIn
+
+        var id: String {
+            switch self {
+            case .booking(let service): return "booking-\(service.id)"
+            case .signIn: return "sign-in"
+            }
+        }
+    }
     
     var body: some View {
         ScrollView {
@@ -153,11 +163,10 @@ struct TrainerDetailView: View {
                                 onBook: {
                                     // Guests must sign in before booking (App Store 5.1.1)
                                     guard AuthService.shared.currentUser != nil else {
-                                        showSignIn = true
+                                        activeSheet = .signIn
                                         return
                                     }
-                                    selectedServiceForBooking = service
-                                    showingBooking = true
+                                    activeSheet = .booking(service)
                                 }
                             )
                         }
@@ -193,13 +202,15 @@ struct TrainerDetailView: View {
             loadChallenges()
             loadFollowState()
         }
-        .sheet(isPresented: $showingBooking) {
-            if let service = selectedServiceForBooking {
+        // One sheet per view: stacking .sheet modifiers makes all but the
+        // last silently present empty.
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .booking(let service):
                 BookingView(trainer: trainer, service: service)
+            case .signIn:
+                AuthView()
             }
-        }
-        .sheet(isPresented: $showSignIn) {
-            AuthView()
         }
     }
     
@@ -235,7 +246,7 @@ struct TrainerDetailView: View {
 
     private func toggleFollow() {
         guard AuthService.shared.currentUser != nil else {
-            showSignIn = true
+            activeSheet = .signIn
             return
         }
         guard let trainerUserId = trainer.userId else { return }

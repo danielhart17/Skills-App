@@ -49,9 +49,10 @@ struct BookingView: View {
                     
                     Spacer()
                     
-                    // Spacer to balance the layout
+                    // Spacer to balance the layout. Needs an explicit height —
+                    // a bare Color expands to fill all available vertical space.
                     Color.clear
-                        .frame(width: 80)
+                        .frame(width: 80, height: 1)
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 16)

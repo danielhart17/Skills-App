@@ -15,11 +15,23 @@ struct TrainerDashboardView: View {
     @State private var services: [TrainerService] = []
     @State private var isLoading = true
     @State private var trainer: Trainer? = nil
-    @State private var sessionSheetService: TrainerService? = nil
-    @State private var showNewSessionSheet = false
-    @State private var stripeOnboardingURL: URL? = nil
+    @State private var activeSheet: ActiveSheet? = nil
     @State private var stripeError: String? = nil
     @State private var isOnboarding = false
+
+    enum ActiveSheet: Identifiable {
+        case newSession
+        case editSession(TrainerService)
+        case stripeOnboarding(URL)
+
+        var id: String {
+            switch self {
+            case .newSession: return "new-session"
+            case .editSession(let service): return "edit-\(service.id)"
+            case .stripeOnboarding: return "stripe"
+            }
+        }
+    }
 
     var body: some View {
         NavigationView {
@@ -52,8 +64,8 @@ struct TrainerDashboardView: View {
 
                     TrainerSessionsView(
                         services: services,
-                        onAdd: { showNewSessionSheet = true },
-                        onEdit: { sessionSheetService = $0 }
+                        onAdd: { activeSheet = .newSession },
+                        onEdit: { activeSheet = .editSession($0) }
                     )
                     .tag(2)
 
@@ -76,23 +88,21 @@ struct TrainerDashboardView: View {
             .onAppear {
                 loadData()
             }
-            .sheet(isPresented: $showNewSessionSheet) {
-                TrainerSessionSheet { saved in
-                    services.append(saved)
-                }
-            }
-            .sheet(item: $sessionSheetService) { service in
-                TrainerSessionSheet(existing: service) { saved in
-                    if let index = services.firstIndex(where: { $0.id == saved.id }) {
-                        services[index] = saved
+            // One sheet per view: stacking .sheet modifiers makes all but the
+            // last silently present empty.
+            .sheet(item: $activeSheet, onDismiss: handleSheetDismissed) { sheet in
+                switch sheet {
+                case .newSession:
+                    TrainerSessionSheet { saved in
+                        services.append(saved)
                     }
-                }
-            }
-            .sheet(isPresented: Binding(
-                get: { stripeOnboardingURL != nil },
-                set: { if !$0 { handleOnboardingDismissed() } }
-            )) {
-                if let url = stripeOnboardingURL {
+                case .editSession(let service):
+                    TrainerSessionSheet(existing: service) { saved in
+                        if let index = services.firstIndex(where: { $0.id == saved.id }) {
+                            services[index] = saved
+                        }
+                    }
+                case .stripeOnboarding(let url):
                     SafariView(url: url)
                         .ignoresSafeArea()
                 }
@@ -140,7 +150,7 @@ struct TrainerDashboardView: View {
                     isOnboarding = false
                     return
                 }
-                stripeOnboardingURL = url
+                activeSheet = .stripeOnboarding(url)
                 isOnboarding = false
             } catch {
                 stripeError = "Could not start Stripe onboarding: \(error.localizedDescription)"
@@ -149,8 +159,9 @@ struct TrainerDashboardView: View {
         }
     }
 
-    private func handleOnboardingDismissed() {
-        stripeOnboardingURL = nil
+    /// Stripe onboarding happens in a web sheet; re-fetch on dismiss to pick
+    /// up the new payment status.
+    private func handleSheetDismissed() {
         Task { await refreshTrainer() }
     }
 }

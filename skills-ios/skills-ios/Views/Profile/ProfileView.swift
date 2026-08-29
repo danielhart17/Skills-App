@@ -13,9 +13,13 @@ struct ProfileView: View {
     @State private var sessions: [ShootingSession] = []
     @State private var bookings: [Booking] = []
     @State private var isLoading = true
-    @State private var showEditSheet = false
     @State private var showDeleteAlert = false
-    @State private var showDeleteConfirmSheet = false
+    @State private var activeSheet: ActiveSheet? = nil
+
+    enum ActiveSheet: String, Identifiable {
+        case editProfile, deleteAccount
+        var id: String { rawValue }
+    }
     
     var body: some View {
         ScrollView {
@@ -105,7 +109,7 @@ struct ProfileView: View {
                     .cornerRadius(20)
                     
                     // Edit Button
-                    Button(action: { showEditSheet = true }) {
+                    Button(action: { activeSheet = .editProfile }) {
                         Image(systemName: "pencil")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.white)
@@ -412,19 +416,23 @@ struct ProfileView: View {
         .onAppear {
             loadData()
         }
-        .sheet(isPresented: $showEditSheet) {
-            EditProfileSheet(authService: authService)
-        }
         .alert("Delete Account?", isPresented: $showDeleteAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Continue", role: .destructive) {
-                showDeleteConfirmSheet = true
+                activeSheet = .deleteAccount
             }
         } message: {
-            Text("This will permanently delete your account, profile, XP, sessions, and progress. This cannot be undone.")
+            Text("This permanently removes your login and personal info. Past bookings are kept on record, anonymized. This cannot be undone.")
         }
-        .sheet(isPresented: $showDeleteConfirmSheet) {
-            DeleteAccountConfirmSheet(authService: authService)
+        // One sheet per view: stacking .sheet modifiers makes all but the
+        // last silently present empty.
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .editProfile:
+                EditProfileSheet(authService: authService)
+            case .deleteAccount:
+                DeleteAccountConfirmSheet(authService: authService)
+            }
         }
     }
     
