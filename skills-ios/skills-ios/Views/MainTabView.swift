@@ -78,6 +78,30 @@ struct MainTabView: View {
                         Label("Events", systemImage: "calendar")
                     }
             }
+            // Parents follow their athletes; no schedule/workouts of their own
+            else if authService.isParent() {
+                ParentDashboardView()
+                    .tabItem {
+                        Label("Athletes", systemImage: "figure.2.and.child.holdinghands")
+                    }
+
+                TrainersView()
+                    .tabItem {
+                        Label("Trainers", systemImage: "person.3.fill")
+                    }
+
+                EventsView()
+                    .tabItem {
+                        Label("Events", systemImage: "calendar")
+                    }
+
+                NavigationView {
+                    ProfileView()
+                }
+                .tabItem {
+                    Label("Profile", systemImage: "person.circle.fill")
+                }
+            }
             // Trainer Dashboard (trainers only)
             else if authService.isTrainer() {
                 TrainerDashboardView()

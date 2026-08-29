@@ -79,5 +79,9 @@ class AuthService: ObservableObject {
     func isUser() -> Bool {
         currentUser?.role == .user || currentUser?.role == .athlete
     }
+
+    func isParent() -> Bool {
+        currentUser?.role == .parent
+    }
 }
 

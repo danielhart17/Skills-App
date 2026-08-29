@@ -363,6 +363,12 @@ struct ProfileView: View {
                     }
                 }
                 
+                // Parent invite code (athletes only)
+                if authService.isUser() {
+                    ParentInviteCodeCard()
+                        .padding(.horizontal)
+                }
+
                 // Sign Out Button
                 Button(action: signOut) {
                     HStack {
@@ -1046,5 +1052,82 @@ private struct BulletRow: View {
 #Preview {
     NavigationView {
         ProfileView()
+    }
+}
+
+// MARK: - Parent Invite Code
+
+/// Athlete-side: mint a short-lived code for a parent to redeem.
+struct ParentInviteCodeCard: View {
+    @State private var code: String?
+    @State private var expiresAt: Date?
+    @State private var isGenerating = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Link a parent", systemImage: "figure.2.and.child.holdinghands")
+                .font(.headline)
+
+            if let code {
+                Text(code)
+                    .font(.system(size: 32, weight: .bold, design: .monospaced))
+                    .kerning(4)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                    .onTapGesture { UIPasteboard.general.string = code }
+
+                if let expiresAt {
+                    Text("Expires \(expiresAt, style: .relative) — tap the code to copy")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                Text("Generate a code and share it with your parent so they can follow your progress.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+
+            Button(action: generate) {
+                HStack {
+                    if isGenerating { ProgressView() }
+                    Text(code == nil ? "Generate Invite Code" : "Generate New Code")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(10)
+                .background(Color.brandOrange)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+            }
+            .disabled(isGenerating)
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(15)
+    }
+
+    private func generate() {
+        isGenerating = true
+        errorMessage = nil
+        Task {
+            do {
+                let invite = try await APIService.shared.createChildInviteCode()
+                code = invite.code
+                expiresAt = invite.expiresAt
+            } catch {
+                errorMessage = "Couldn't generate a code. Please try again."
+                print("Invite code generation failed: \(error)")
+            }
+            isGenerating = false
+        }
     }
 }

@@ -915,3 +915,62 @@ extension APIService {
         )
     }
 }
+
+// MARK: - Parent / Child linking
+
+extension APIService {
+    func fetchLinkedChildren() async throws -> [LinkedChild] {
+        try await supabase.rpc(function: "get_linked_children")
+    }
+
+    /// Redeems an athlete's invite code. Server rejects non-parent roles and
+    /// bad/expired codes with a message worth showing verbatim.
+    @discardableResult
+    func linkChild(code: String) async throws -> [LinkedChild] {
+        let normalized = code.uppercased().filter { $0.isLetter || $0.isNumber }
+        return try await supabase.rpc(
+            function: "link_child_invite_code",
+            params: ["p_code": normalized]
+        )
+    }
+
+    func fetchChildProgress(childId: UUID) async throws -> ChildProgressSummary? {
+        let rows: [ChildProgressSummary] = try await supabase.rpc(
+            function: "get_child_progress_summary",
+            params: ["p_child_id": childId.uuidString]
+        )
+        return rows.first
+    }
+
+    /// Athlete-side: mint a short-lived code to hand to a parent.
+    func createChildInviteCode() async throws -> ChildInviteCode {
+        guard let userId = AuthService.shared.currentUser?.id else {
+            throw APIError.notAuthenticated
+        }
+        let alphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
+        let expiresAt = Date().addingTimeInterval(15 * 60)
+
+        struct NewCode: Encodable {
+            let child_id: UUID
+            let code: String
+            let expires_at: String
+        }
+
+        // Codes are random and unique-constrained; retry on collision.
+        var lastError: Error?
+        for _ in 0..<5 {
+            let code = String((0..<6).map { _ in alphabet.randomElement()! })
+            do {
+                try await supabase.insert(into: "child_invite_codes", values: NewCode(
+                    child_id: userId,
+                    code: code,
+                    expires_at: ISO8601DateFormatter().string(from: expiresAt)
+                ))
+                return ChildInviteCode(code: code, expiresAt: expiresAt)
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError ?? APIError.invalidData
+    }
+}
