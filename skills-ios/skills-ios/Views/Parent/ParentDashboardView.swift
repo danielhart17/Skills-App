@@ -30,10 +30,15 @@ struct ParentDashboardView: View {
                             emptyState
                         } else {
                             ForEach(children) { child in
-                                ChildProgressCard(
-                                    child: child,
-                                    progress: progressByChild[child.childId]
-                                )
+                                NavigationLink {
+                                    ChildGameStatsView(child: child)
+                                } label: {
+                                    ChildProgressCard(
+                                        child: child,
+                                        progress: progressByChild[child.childId]
+                                    )
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
                         }
                         linkCard

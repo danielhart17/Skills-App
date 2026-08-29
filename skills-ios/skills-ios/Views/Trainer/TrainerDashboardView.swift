@@ -56,8 +56,13 @@ struct TrainerDashboardView: View {
                 .padding()
 
                 TabView(selection: $selectedTab) {
-                    TrainerOverviewView(bookings: bookings, rating: trainer?.rating)
-                        .tag(0)
+                    TrainerOverviewView(
+                        bookings: bookings,
+                        rating: trainer?.rating,
+                        onNewSession: { activeSheet = .newSession },
+                        onManageSessions: { selectedTab = 2 }
+                    )
+                    .tag(0)
 
                     TrainerBookingsView(bookings: bookings)
                         .tag(1)
@@ -251,6 +256,8 @@ struct StripePaymentsCard: View {
 struct TrainerOverviewView: View {
     let bookings: [Booking]
     var rating: Decimal?
+    var onNewSession: () -> Void = {}
+    var onManageSessions: () -> Void = {}
 
     private var upcomingBookings: [Booking] {
         bookings.filter { $0.bookingDatetime >= Date() }
@@ -328,22 +335,18 @@ struct TrainerOverviewView: View {
                     
                     VStack(spacing: 10) {
                         TrainerActionButton(
-                            title: "Create Workout",
+                            title: "New Session",
                             icon: "plus.circle.fill",
-                            color: .orange
-                        ) {}
-                        
+                            color: .orange,
+                            action: onNewSession
+                        )
+
                         TrainerActionButton(
-                            title: "View Profile",
-                            icon: "person.circle.fill",
-                            color: .blue
-                        ) {}
-                        
-                        TrainerActionButton(
-                            title: "Edit Services",
+                            title: "Manage Sessions",
                             icon: "pencil.circle.fill",
-                            color: .green
-                        ) {}
+                            color: .green,
+                            action: onManageSessions
+                        )
                     }
                     .padding(.horizontal)
                 }

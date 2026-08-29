@@ -974,3 +974,129 @@ extension APIService {
         throw lastError ?? APIError.invalidData
     }
 }
+
+// MARK: - Parent game stats
+
+extension APIService {
+    func fetchGameStats(childId: UUID) async throws -> [PlayerGameStat] {
+        try await supabase.select(
+            from: "player_game_stats",
+            filter: "child_id=eq.\(childId.uuidString)",
+            order: "game_date.desc"
+        )
+    }
+
+    func logGameStat(
+        childId: UUID,
+        gameDate: String,
+        opponent: String?,
+        points: Int, rebounds: Int, assists: Int,
+        steals: Int, blocks: Int, turnovers: Int,
+        minutesPlayed: Int,
+        fgMade: Int, fgAttempted: Int,
+        threeMade: Int, threeAttempted: Int,
+        ftMade: Int, ftAttempted: Int,
+        notes: String?
+    ) async throws {
+        guard let parentId = AuthService.shared.currentUser?.id else {
+            throw APIError.notAuthenticated
+        }
+        struct NewGameStat: Encodable {
+            let parent_id: UUID
+            let child_id: UUID
+            let game_date: String
+            let opponent: String?
+            let points: Int
+            let rebounds: Int
+            let assists: Int
+            let steals: Int
+            let blocks: Int
+            let turnovers: Int
+            let minutes_played: Int
+            let fg_made: Int
+            let fg_attempted: Int
+            let three_made: Int
+            let three_attempted: Int
+            let ft_made: Int
+            let ft_attempted: Int
+            let notes: String?
+        }
+        try await supabase.insert(into: "player_game_stats", values: NewGameStat(
+            parent_id: parentId,
+            child_id: childId,
+            game_date: gameDate,
+            opponent: opponent,
+            points: points, rebounds: rebounds, assists: assists,
+            steals: steals, blocks: blocks, turnovers: turnovers,
+            minutes_played: minutesPlayed,
+            fg_made: fgMade, fg_attempted: fgAttempted,
+            three_made: threeMade, three_attempted: threeAttempted,
+            ft_made: ftMade, ft_attempted: ftAttempted,
+            notes: notes
+        ))
+    }
+
+    func deleteGameStat(id: UUID) async throws {
+        try await supabase.delete(from: "player_game_stats", filter: "id=eq.\(id.uuidString)")
+    }
+}
+
+// MARK: - Admin
+
+struct BackgroundCheck: Codable, Identifiable {
+    let id: UUID
+    let userId: UUID
+    let status: String  // not_started|pending|clear|consider|bypassed|expired|rejected
+    let bypassReason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case status
+        case bypassReason = "bypass_reason"
+    }
+
+    /// Matches is_trainer_discoverable(): only these make a trainer public.
+    var grantsDiscoverability: Bool {
+        status == "clear" || status == "bypassed"
+    }
+}
+
+extension APIService {
+    func fetchAllProfiles() async throws -> [PublicProfileWithRole] {
+        try await supabase.select(
+            from: "profiles",
+            columns: "id,full_name,email,role",
+            order: "full_name.asc"
+        )
+    }
+
+    func fetchBackgroundChecks() async throws -> [BackgroundCheck] {
+        try await supabase.select(from: "background_checks", columns: "id,user_id,status,bypass_reason")
+    }
+
+    /// Admin-only RPC; the DB verifies the caller's role.
+    @discardableResult
+    func approveTrainer(userId: UUID, reason: String) async throws -> BackgroundCheck {
+        try await supabase.rpc(
+            function: "admin_bypass_background_check",
+            params: ["target_user_id": userId.uuidString, "reason": reason]
+        )
+    }
+}
+
+struct PublicProfileWithRole: Codable, Identifiable {
+    let id: UUID
+    let fullName: String?
+    let email: String?
+    let role: String
+
+    var displayName: String { fullName?.isEmpty == false ? fullName! : (email ?? "User") }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case fullName = "full_name"
+        case email
+        case role
+    }
+}

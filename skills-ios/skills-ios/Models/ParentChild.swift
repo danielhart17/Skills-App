@@ -55,3 +55,52 @@ struct ChildInviteCode {
     let code: String
     let expiresAt: Date
 }
+
+/// A game a parent logged for a linked child (player_game_stats).
+struct PlayerGameStat: Codable, Identifiable {
+    let id: UUID
+    let parentId: UUID
+    let childId: UUID
+    var gameDate: String   // "yyyy-MM-dd"
+    var opponent: String?
+    var points: Int
+    var rebounds: Int
+    var assists: Int
+    var steals: Int
+    var blocks: Int
+    var turnovers: Int
+    var minutesPlayed: Int
+    var fgMade: Int
+    var fgAttempted: Int
+    var threeMade: Int
+    var threeAttempted: Int
+    var ftMade: Int
+    var ftAttempted: Int
+    var notes: String?
+
+    private func percent(_ made: Int, _ attempted: Int) -> String {
+        guard attempted > 0 else { return "—" }
+        return String(format: "%.0f%%", Double(made) / Double(attempted) * 100)
+    }
+
+    var fgPercent: String { percent(fgMade, fgAttempted) }
+    var threePercent: String { percent(threeMade, threeAttempted) }
+    var ftPercent: String { percent(ftMade, ftAttempted) }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case parentId = "parent_id"
+        case childId = "child_id"
+        case gameDate = "game_date"
+        case opponent
+        case points, rebounds, assists, steals, blocks, turnovers
+        case minutesPlayed = "minutes_played"
+        case fgMade = "fg_made"
+        case fgAttempted = "fg_attempted"
+        case threeMade = "three_made"
+        case threeAttempted = "three_attempted"
+        case ftMade = "ft_made"
+        case ftAttempted = "ft_attempted"
+        case notes
+    }
+}

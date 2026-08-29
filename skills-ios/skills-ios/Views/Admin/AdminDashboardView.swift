@@ -155,17 +155,21 @@ struct AdminOverviewView: View {
     }
     
     private func loadStats() {
-        // In a real app, fetch stats from API
         Task {
-            // Simulate loading
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            async let users = try? SupabaseClient.shared.count(from: "profiles")
+            async let lessons = try? SupabaseClient.shared.count(from: "lessons")
+            async let challenges = try? SupabaseClient.shared.count(from: "challenges")
+            async let drills = try? SupabaseClient.shared.count(from: "drills")
+            async let events = try? SupabaseClient.shared.count(from: "training_events")
+            async let trainers = try? SupabaseClient.shared.count(from: "trainers")
+
             stats = AdminStats(
-                totalUsers: 0,
-                totalLessons: 0,
-                totalChallenges: 0,
-                totalDrills: 0,
-                totalEvents: 0,
-                totalTrainers: 0
+                totalUsers: await users ?? 0,
+                totalLessons: await lessons ?? 0,
+                totalChallenges: await challenges ?? 0,
+                totalDrills: await drills ?? 0,
+                totalEvents: await events ?? 0,
+                totalTrainers: await trainers ?? 0
             )
             isLoading = false
         }
@@ -174,12 +178,25 @@ struct AdminOverviewView: View {
 
 struct AdminContentView: View {
     @State private var selectedContentType = 0
-    
+    @State private var count = 0
+
+    private var table: String {
+        ["lessons", "challenges", "drills", "training_events"][selectedContentType]
+    }
+
+    private var label: String {
+        ["Lessons", "Workouts", "Drills", "Events"][selectedContentType]
+    }
+
+    private func loadCount() async {
+        count = (try? await SupabaseClient.shared.count(from: table)) ?? 0
+    }
+
     var body: some View {
         VStack {
             Picker("", selection: $selectedContentType) {
                 Text("Lessons").tag(0)
-                Text("Challenges").tag(1)
+                Text("Workouts").tag(1)
                 Text("Drills").tag(2)
                 Text("Events").tag(3)
             }
@@ -188,19 +205,19 @@ struct AdminContentView: View {
             
             ScrollView {
                 VStack(spacing: 15) {
-                    Text("Content management UI")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Text("Create, edit, and delete content items")
+                    Text("\(count) \(label.lowercased())")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    Text("Content is created and edited in the web admin. This tab is read-only on mobile.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
-                    
-                    Button(action: {}) {
+
+                    Link(destination: URL(string: Config.webAppURL)!) {
                         HStack {
-                            Image(systemName: "plus.circle.fill")
-                            Text("Add New Content")
+                            Image(systemName: "safari.fill")
+                            Text("Open Web Admin")
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -211,24 +228,129 @@ struct AdminContentView: View {
                 }
                 .padding()
             }
+            .task(id: selectedContentType) {
+                await loadCount()
+            }
         }
     }
 }
 
 struct AdminUsersView: View {
+    @State private var profiles: [PublicProfileWithRole] = []
+    @State private var checksByUser: [UUID: BackgroundCheck] = [:]
+    @State private var isLoading = true
+    @State private var approving: UUID?
+    @State private var errorMessage: String?
+
+    /// Trainers first — they're the ones needing approval to be discoverable.
+    private var sorted: [PublicProfileWithRole] {
+        profiles.sorted { lhs, rhs in
+            let lhsTrainer = lhs.role == "trainer"
+            let rhsTrainer = rhs.role == "trainer"
+            if lhsTrainer != rhsTrainer { return lhsTrainer }
+            return lhs.displayName < rhs.displayName
+        }
+    }
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 15) {
-                Text("User management UI")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
-                Text("View and manage user accounts, roles, and permissions")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
+            VStack(spacing: 12) {
+                if isLoading {
+                    ProgressView().padding(.top, 40)
+                } else {
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                    ForEach(sorted) { profile in
+                        userRow(profile)
+                    }
+                }
             }
             .padding()
+        }
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func userRow(_ profile: PublicProfileWithRole) -> some View {
+        let check = checksByUser[profile.id]
+        let isTrainer = profile.role == "trainer"
+        let approved = check?.grantsDiscoverability == true
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(profile.displayName)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Text(profile.role.capitalized)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                if isTrainer {
+                    Text(approved ? "Discoverable" : (check?.status ?? "not_started").replacingOccurrences(of: "_", with: " "))
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background((approved ? Color.green : Color.orange).opacity(0.2))
+                        .foregroundColor(approved ? .green : .orange)
+                        .cornerRadius(8)
+                }
+            }
+
+            if isTrainer && !approved {
+                Button {
+                    approve(profile)
+                } label: {
+                    HStack {
+                        if approving == profile.id { ProgressView() }
+                        Text("Approve for discovery")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(8)
+                    .background(Color.orange)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+                .disabled(approving != nil)
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+    }
+
+    private func load() async {
+        async let profilesTask = try? APIService.shared.fetchAllProfiles()
+        async let checksTask = try? APIService.shared.fetchBackgroundChecks()
+        profiles = await profilesTask ?? []
+        checksByUser = Dictionary(
+            (await checksTask ?? []).map { ($0.userId, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        isLoading = false
+    }
+
+    private func approve(_ profile: PublicProfileWithRole) {
+        approving = profile.id
+        errorMessage = nil
+        Task {
+            do {
+                try await APIService.shared.approveTrainer(
+                    userId: profile.id,
+                    reason: "Manually vetted by admin in iOS app"
+                )
+                await load()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            approving = nil
         }
     }
 }

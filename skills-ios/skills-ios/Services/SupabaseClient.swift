@@ -492,6 +492,32 @@ class SupabaseClient {
         }
     }
     
+    /// Row count without transferring the rows (Prefer: count=exact + an
+    /// empty range; the total comes back in Content-Range as "0-0/123").
+    func count(from table: String, filter: String? = nil) async throws -> Int {
+        var urlString = "\(baseURL)/rest/v1/\(table)?select=id"
+        if let filter { urlString += "&\(filter)" }
+        guard let url = URL(string: urlString) else { throw SupabaseError.invalidURL }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("count=exact", forHTTPHeaderField: "Prefer")
+        request.setValue("0-0", forHTTPHeaderField: "Range")
+        if let token = accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (_, response) = try await send(request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode),
+              let contentRange = httpResponse.value(forHTTPHeaderField: "Content-Range"),
+              let total = contentRange.split(separator: "/").last.flatMap({ Int($0) }) else {
+            throw SupabaseError.requestFailed
+        }
+        return total
+    }
+
     func getPublicUrl(bucket: String, path: String) -> String {
         return "\(baseURL)/storage/v1/object/public/\(bucket)/\(path)"
     }
