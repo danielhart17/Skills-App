@@ -12,6 +12,7 @@ struct ChallengeDetailView: View {
     @State private var isStarted = false
     @State private var isCompleted = false
     @State private var showCompletionSheet = false
+    @State private var completionError: String?
     @State private var timeSpent: String = ""
     @State private var notes: String = ""
     @Environment(\.presentationMode) var presentationMode
@@ -246,14 +247,43 @@ struct ChallengeDetailView: View {
         }
         .background(Color.appBackground)
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Couldn't Save", isPresented: Binding(
+            get: { completionError != nil },
+            set: { if !$0 { completionError = nil } }
+        )) {
+            Button("OK") { completionError = nil }
+        } message: {
+            Text(completionError ?? "")
+        }
+        .task {
+            // Reflect completions saved earlier or on the web.
+            if let completed = try? await APIService.shared.fetchCompletedChallengeIds() {
+                isCompleted = completed.contains(challenge.id)
+            }
+        }
         .sheet(isPresented: $showCompletionSheet) {
             CompletionSheet(
                 challenge: challenge,
                 timeSpent: $timeSpent,
                 notes: $notes,
                 onComplete: {
-                    isCompleted = true
-                    showCompletionSheet = false
+                    // Previously this only flipped local state, so completions
+                    // were never saved and no XP was awarded.
+                    Task {
+                        do {
+                            try await APIService.shared.markChallengeComplete(
+                                challengeId: challenge.id,
+                                timeSpentSeconds: (Int(timeSpent) ?? 0) * 60,
+                                notes: notes
+                            )
+                            isCompleted = true
+                            try? await AuthService.shared.refreshUser()
+                        } catch {
+                            completionError = "Couldn't save your completion. Please try again."
+                            print("Challenge completion failed: \(error)")
+                        }
+                        showCompletionSheet = false
+                    }
                 }
             )
         }

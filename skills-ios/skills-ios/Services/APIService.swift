@@ -1100,3 +1100,50 @@ struct PublicProfileWithRole: Codable, Identifiable {
         case role
     }
 }
+
+// MARK: - Workout (challenge) completion
+
+extension APIService {
+    /// Persists a workout completion. Matches the web ChallengeProgress
+    /// .markComplete shape so both clients write the same row, and upserts
+    /// on (user_id, challenge_id) so re-completing doesn't duplicate.
+    func markChallengeComplete(challengeId: UUID, timeSpentSeconds: Int, notes: String?) async throws {
+        guard let userId = AuthService.shared.currentUser?.id else {
+            throw APIError.notAuthenticated
+        }
+        struct ChallengeProgressData: Encodable {
+            let user_id: UUID
+            let challenge_id: UUID
+            let is_completed: Bool
+            let completed_at: String
+            let time_spent_seconds: Int
+            let notes: String
+        }
+        try await supabase.upsert(
+            into: "challenge_progress",
+            values: ChallengeProgressData(
+                user_id: userId,
+                challenge_id: challengeId,
+                is_completed: true,
+                completed_at: ISO8601DateFormatter().string(from: Date()),
+                time_spent_seconds: timeSpentSeconds,
+                notes: notes ?? ""
+            ),
+            onConflict: "user_id,challenge_id"
+        )
+    }
+
+    func fetchCompletedChallengeIds() async throws -> Set<UUID> {
+        guard let userId = AuthService.shared.currentUser?.id else { return [] }
+        struct Row: Decodable {
+            let challengeId: UUID
+            enum CodingKeys: String, CodingKey { case challengeId = "challenge_id" }
+        }
+        let rows: [Row] = try await supabase.select(
+            from: "challenge_progress",
+            columns: "challenge_id",
+            filter: "user_id=eq.\(userId.uuidString)&is_completed=eq.true"
+        )
+        return Set(rows.map(\.challengeId))
+    }
+}
