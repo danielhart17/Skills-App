@@ -56,6 +56,12 @@ struct ParentDashboardView: View {
             .navigationTitle("My Athletes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    NavigationLink(destination: NotificationsView()) {
+                        Image(systemName: "bell")
+                            .foregroundColor(.brandOrange)
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink(destination: ProfileView()) {
                         Image(systemName: "person.circle.fill")

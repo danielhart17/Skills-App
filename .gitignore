@@ -8,3 +8,6 @@
 # Editor state
 .vscode/
 .idea/
+
+# Xcode per-user state (window layout, breakpoints — not shared)
+**/xcuserdata/

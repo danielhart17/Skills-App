@@ -56,7 +56,7 @@ struct TrainerDashboardView: View {
                 .padding()
 
                 TabView(selection: $selectedTab) {
-                    TrainerOverviewView(bookings: bookings)
+                    TrainerOverviewView(bookings: bookings, rating: trainer?.rating)
                         .tag(0)
 
                     TrainerBookingsView(bookings: bookings)
@@ -77,6 +77,12 @@ struct TrainerDashboardView: View {
             .navigationTitle("Trainer Dashboard")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    NavigationLink(destination: NotificationsView()) {
+                        Image(systemName: "bell")
+                            .foregroundColor(.orange)
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink(destination: ProfileView()) {
                         Image(systemName: "person.circle.fill")
@@ -128,8 +134,16 @@ struct TrainerDashboardView: View {
     private func refreshTrainer() async {
         guard let trainerId = authService.currentUser?.trainerId else { return }
         do {
-            trainer = try await APIService.shared.fetchTrainer(id: trainerId)
+            let loadedTrainer = try await APIService.shared.fetchTrainer(id: trainerId)
+            trainer = loadedTrainer
             services = try await APIService.shared.fetchTrainerServices(trainerId: trainerId)
+            // These were declared but never populated, so Overview/Bookings/
+            // Workouts always rendered their empty states.
+            bookings = try await APIService.shared.fetchBookings()
+                .filter { $0.trainerId == trainerId }
+            if let ownerId = loadedTrainer.userId {
+                challenges = try await APIService.shared.fetchTrainerChallenges(trainerId: ownerId)
+            }
         } catch {
             print("Error fetching trainer: \(error)")
         }
@@ -190,7 +204,7 @@ struct StripePaymentsCard: View {
         }
         return (
             "Set Up Payments",
-            "Connect a Stripe account to accept bookings (15% platform fee).",
+            "Connect a Stripe account to accept bookings. You keep your full session price — athletes pay the service fee.",
             .blue,
             "Set Up Stripe"
         )
@@ -236,10 +250,19 @@ struct StripePaymentsCard: View {
 
 struct TrainerOverviewView: View {
     let bookings: [Booking]
-    
+    var rating: Decimal?
+
     private var upcomingBookings: [Booking] {
         bookings.filter { $0.bookingDatetime >= Date() }
             .sorted { $0.bookingDatetime < $1.bookingDatetime }
+    }
+
+    /// Trainer payout on completed/confirmed bookings (they keep the base
+    /// price; the athlete pays the service fee on top).
+    private var earnedRevenue: Decimal {
+        bookings
+            .filter { $0.status == .completed || $0.status == .confirmed }
+            .reduce(0) { $0 + $1.price }
     }
     
     var body: some View {
@@ -263,14 +286,14 @@ struct TrainerOverviewView: View {
                     
                     TrainerStatCard(
                         title: "Revenue",
-                        value: "$0",
+                        value: "$\(String(format: "%.0f", NSDecimalNumber(decimal: earnedRevenue).doubleValue))",
                         icon: "dollarsign.circle",
                         color: .green
                     )
-                    
+
                     TrainerStatCard(
                         title: "Rating",
-                        value: "4.8",
+                        value: rating.map { String(format: "%.1f", NSDecimalNumber(decimal: $0).doubleValue) } ?? "—",
                         icon: "star.fill",
                         color: .yellow
                     )
