@@ -103,6 +103,13 @@ struct ChallengesView: View {
                                     .padding(.horizontal)
                             }
                             .buttonStyle(PlainButtonStyle())
+
+                            // Run Tracker
+                            NavigationLink(destination: RunTrackerView()) {
+                                RunTrackerCard()
+                                    .padding(.horizontal)
+                            }
+                            .buttonStyle(PlainButtonStyle())
                             
                             // Filters
                             VStack(alignment: .leading, spacing: 15) {
@@ -555,3 +562,50 @@ struct ChallengeCard: View {
     ChallengesView()
 }
 
+
+struct RunTrackerCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            HStack(spacing: 15) {
+                Image(systemName: "figure.run")
+                    .font(.system(size: 40))
+                    .foregroundColor(.white)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Run Tracker")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+
+                    Text("Track distance and pace with GPS, and keep a history of every run")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.9))
+                        .lineLimit(2)
+                }
+
+                Spacer()
+            }
+
+            HStack {
+                Image(systemName: "location.fill")
+                Text("Start Run")
+                    .fontWeight(.semibold)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(Color.white.opacity(0.2))
+            .cornerRadius(10)
+        }
+        .padding(20)
+        .background(
+            LinearGradient(
+                colors: [Color.brandBlue, Color.purple],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .cornerRadius(16)
+        .shadow(color: Color.brandBlue.opacity(0.3), radius: 10, x: 0, y: 5)
+    }
+}

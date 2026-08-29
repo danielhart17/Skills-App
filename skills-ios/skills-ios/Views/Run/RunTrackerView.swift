@@ -16,10 +16,10 @@ struct RunTrackerView: View {
     @State private var saveError: String?
     @State private var savedMessage: String?
 
+    // Pushed from the Workouts tab, so no NavigationView of its own.
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 18) {
+        ScrollView {
+            VStack(spacing: 18) {
                     if tracker.authorizationDenied {
                         permissionDeniedCard
                     } else {
@@ -41,26 +41,25 @@ struct RunTrackerView: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.successGreen)
                     }
+            }
+            .padding()
+        }
+        .background(Color.appBackground)
+        .navigationTitle("Run")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                NavigationLink(destination: RunHistoryView()) {
+                    Image(systemName: "list.bullet")
+                        .foregroundColor(.brandOrange)
                 }
-                .padding()
             }
-            .background(Color.appBackground)
-            .navigationTitle("Run")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink(destination: RunHistoryView()) {
-                        Image(systemName: "list.bullet")
-                            .foregroundColor(.brandOrange)
-                    }
-                }
-            }
-            .onAppear { tracker.requestPermission() }
-            .onChange(of: scenePhase) { _, phase in
-                // No background location entitlement — pause instead of
-                // recording a straight line across the gap.
-                if phase != .active { tracker.handleEnteredBackground() }
-            }
+        }
+        .onAppear { tracker.requestPermission() }
+        .onChange(of: scenePhase) { _, phase in
+            // No background location entitlement — pause instead of
+            // recording a straight line across the gap.
+            if phase != .active { tracker.handleEnteredBackground() }
         }
     }
 
