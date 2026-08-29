@@ -160,6 +160,11 @@ struct MainTabView: View {
                         Label("Messages", systemImage: "message.fill")
                     }
                     .badge(unreadStore.total)
+
+                RunTrackerView()
+                    .tabItem {
+                        Label("Run", systemImage: "figure.run")
+                    }
             }
         }
         .accentColor(.brandOrange)

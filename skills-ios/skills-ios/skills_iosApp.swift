@@ -15,6 +15,10 @@ struct skills_iosApp: App {
     init() {
         // Apply dark theme globally
         setupAppearance()
+        #if DEBUG
+        RunTrackerSelfCheck.run()
+        GamificationSelfCheck.run()
+        #endif
     }
     
     var body: some Scene {

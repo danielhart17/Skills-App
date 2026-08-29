@@ -1147,3 +1147,57 @@ extension APIService {
         return Set(rows.map(\.challengeId))
     }
 }
+
+// MARK: - Runs
+
+extension APIService {
+    func fetchRuns() async throws -> [Run] {
+        guard let userId = AuthService.shared.currentUser?.id else {
+            throw APIError.notAuthenticated
+        }
+        return try await supabase.select(
+            from: "runs",
+            filter: "user_id=eq.\(userId.uuidString)",
+            order: "started_at.desc"
+        )
+    }
+
+    func createRun(
+        startedAt: Date,
+        endedAt: Date,
+        durationSeconds: Int,
+        distanceMiles: Double,
+        avgPaceMinPerMile: Double?,
+        maxSpeedMph: Double?,
+        path: [RunPoint],
+        notes: String?
+    ) async throws {
+        guard let userId = AuthService.shared.currentUser?.id else {
+            throw APIError.notAuthenticated
+        }
+        struct NewRun: Encodable {
+            let user_id: UUID
+            let started_at: String
+            let ended_at: String
+            let duration_seconds: Int
+            let distance_miles: Double
+            let avg_pace_min_per_mile: Double?
+            let max_speed_mph: Double?
+            let path: [RunPoint]
+            let notes: String?
+        }
+        let formatter = ISO8601DateFormatter()
+        // Column precisions: distance NUMERIC(10,4), paces NUMERIC(8,3).
+        try await supabase.insert(into: "runs", values: NewRun(
+            user_id: userId,
+            started_at: formatter.string(from: startedAt),
+            ended_at: formatter.string(from: endedAt),
+            duration_seconds: durationSeconds,
+            distance_miles: (distanceMiles * 10_000).rounded() / 10_000,
+            avg_pace_min_per_mile: avgPaceMinPerMile.map { ($0 * 1000).rounded() / 1000 },
+            max_speed_mph: maxSpeedMph.map { ($0 * 1000).rounded() / 1000 },
+            path: path,
+            notes: notes
+        ))
+    }
+}
