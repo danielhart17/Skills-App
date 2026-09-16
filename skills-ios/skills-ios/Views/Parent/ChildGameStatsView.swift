@@ -186,12 +186,44 @@ struct LogGameSheet: View {
     @State private var ftMade = 0
     @State private var ftAttempted = 0
     @State private var notes = ""
+    @State private var shotChart: [ShotChartEntry] = []
+    @State private var pendingShotMode: String? = nil
     @State private var isSaving = false
     @State private var errorMessage: String?
 
     var body: some View {
         NavigationView {
             Form {
+                Section("Shot Chart") {
+                    Text(pendingShotMode == nil
+                         ? "Choose a shot type, then tap the court."
+                         : "Tap the court to place the shot.")
+                        .font(.caption)
+                        .foregroundColor(.textSecondary)
+
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                        shotModeButton("2PT Make", mode: "2pt-make")
+                        shotModeButton("2PT Miss", mode: "2pt-miss")
+                        shotModeButton("3PT Make", mode: "3pt-make")
+                        shotModeButton("3PT Miss", mode: "3pt-miss")
+                    }
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+
+                    HalfCourtShotChart(shots: shotChart) { location, size in
+                        placeShot(at: location, in: size)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                    .listRowBackground(Color.clear)
+
+                    if !shotChart.isEmpty {
+                        Button("Undo Last Shot") {
+                            undoLastShot()
+                        }
+                        .foregroundColor(.brandOrange)
+                    }
+                }
+
                 Section("Game") {
                     DatePicker("Date", selection: $gameDate, displayedComponents: .date)
                     TextField("Opponent", text: $opponent)
@@ -264,7 +296,8 @@ struct LogGameSheet: View {
                     fgMade: fgMade, fgAttempted: fgAttempted,
                     threeMade: threeMade, threeAttempted: threeAttempted,
                     ftMade: ftMade, ftAttempted: ftAttempted,
-                    notes: notes.isEmpty ? nil : notes
+                    notes: notes.isEmpty ? nil : notes,
+                    shotChart: shotChart
                 )
                 onSaved()
                 dismiss()
@@ -274,5 +307,119 @@ struct LogGameSheet: View {
             }
             isSaving = false
         }
+    }
+
+    private func shotModeButton(_ title: String, mode: String) -> some View {
+        let selected = pendingShotMode == mode
+        return Button {
+            pendingShotMode = selected ? nil : mode
+        } label: {
+            Text(title)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(selected ? Color.brandOrange : Color.cardBackground)
+                .foregroundColor(selected ? .white : .textPrimary)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(selected ? Color.brandOrange : Color.textMuted.opacity(0.3), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func classifyShotZone(_ xPct: Double, _ yPct: Double) -> String {
+        let inPaint = yPct <= 50 && xPct >= 27.5 && xPct <= 72.5
+        if inPaint { return "paint" }
+        let wing = xPct <= 22 || xPct >= 78
+        let upper = yPct <= 55
+        let deepOrWingThree = yPct <= 42 && (wing || yPct <= 28)
+        if !inPaint && upper && (wing || deepOrWingThree) { return "three" }
+        return "mid"
+    }
+
+    private func placeShot(at location: CGPoint, in size: CGSize) {
+        guard let mode = pendingShotMode, size.width > 0, size.height > 0 else { return }
+        let x = min(100, max(0, (location.x / size.width) * 100))
+        let y = min(100, max(0, (location.y / size.height) * 100))
+        let parts = mode.split(separator: "-")
+        guard parts.count == 2 else { return }
+        let kind = String(parts[0])
+        let result = String(parts[1])
+        let entry = ShotChartEntry(
+            x: x,
+            y: y,
+            zone: classifyShotZone(x, y),
+            type: result,
+            shot_kind: kind
+        )
+        shotChart.append(entry)
+        applyBoxScore(mode: mode, reverse: false)
+        pendingShotMode = nil
+    }
+
+    private func undoLastShot() {
+        guard let last = shotChart.popLast() else { return }
+        let mode = "\(last.shot_kind)-\(last.type)"
+        applyBoxScore(mode: mode, reverse: true)
+    }
+
+    private func applyBoxScore(mode: String, reverse: Bool) {
+        let d = reverse ? -1 : 1
+        switch mode {
+        case "2pt-make":
+            points = max(0, points + 2 * d)
+            fgMade = max(0, fgMade + d)
+            fgAttempted = max(0, fgAttempted + d)
+        case "2pt-miss":
+            fgAttempted = max(0, fgAttempted + d)
+        case "3pt-make":
+            points = max(0, points + 3 * d)
+            threeMade = max(0, threeMade + d)
+            threeAttempted = max(0, threeAttempted + d)
+            fgMade = max(0, fgMade + d)
+            fgAttempted = max(0, fgAttempted + d)
+        case "3pt-miss":
+            threeAttempted = max(0, threeAttempted + d)
+            fgAttempted = max(0, fgAttempted + d)
+        default:
+            break
+        }
+    }
+}
+
+private struct HalfCourtShotChart: View {
+    let shots: [ShotChartEntry]
+    var onTap: (CGPoint, CGSize) -> Void
+
+    var body: some View {
+        Image("HalfCourt")
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .overlay {
+                GeometryReader { geo in
+                    ZStack {
+                        ForEach(shots) { shot in
+                            Circle()
+                                .fill(shot.type == "make" ? Color.green : Color.red)
+                                .frame(width: 10, height: 10)
+                                .position(
+                                    x: geo.size.width * shot.x / 100,
+                                    y: geo.size.height * shot.y / 100
+                                )
+                        }
+                    }
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onEnded { value in
+                                onTap(value.location, geo.size)
+                            }
+                    )
+                }
+            }
     }
 }
