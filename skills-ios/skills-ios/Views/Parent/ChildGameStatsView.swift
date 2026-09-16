@@ -129,6 +129,8 @@ struct GameStatRow: View {
                 statPill("AST", game.assists)
                 statPill("STL", game.steals)
                 statPill("BLK", game.blocks)
+                statPill("TO", game.turnovers)
+                statPill("MIN", game.minutesPlayed)
             }
 
             HStack(spacing: 14) {
@@ -210,8 +212,8 @@ struct LogGameSheet: View {
                     Stepper("FG attempted: \(fgAttempted)", value: $fgAttempted, in: 0...100)
                     Stepper("3PT made: \(threeMade)", value: $threeMade, in: 0...100)
                     Stepper("3PT attempted: \(threeAttempted)", value: $threeAttempted, in: 0...100)
-                    Stepper("FT made: \(ftMade)", value: $ftMade, in: 0...100)
-                    Stepper("FT attempted: \(ftAttempted)", value: $ftAttempted, in: 0...100)
+                    Stepper("Free throws made: \(ftMade)", value: $ftMade, in: 0...100)
+                    Stepper("Free throws attempted: \(ftAttempted)", value: $ftAttempted, in: 0...100)
                 }
 
                 Section("Notes") {
@@ -225,6 +227,7 @@ struct LogGameSheet: View {
                         .foregroundColor(.red)
                 }
             }
+            .tint(Color.brandOrange)
             .navigationTitle("Log Game")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -232,7 +235,10 @@ struct LogGameSheet: View {
                     Button("Cancel") { dismiss() }.disabled(isSaving)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") { save() }.disabled(isSaving || !isValid)
+                    Button("Save") { save() }
+                        .fontWeight(.semibold)
+                        .foregroundColor(.brandOrange)
+                        .disabled(isSaving || !isValid)
                 }
             }
         }
