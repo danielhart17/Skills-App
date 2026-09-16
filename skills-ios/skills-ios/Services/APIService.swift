@@ -1018,7 +1018,8 @@ extension APIService {
         fgMade: Int, fgAttempted: Int,
         threeMade: Int, threeAttempted: Int,
         ftMade: Int, ftAttempted: Int,
-        notes: String?
+        notes: String?,
+        shotChart: [ShotChartEntry] = []
     ) async throws {
         guard let parentId = AuthService.shared.currentUser?.id else {
             throw APIError.notAuthenticated
@@ -1042,6 +1043,7 @@ extension APIService {
             let ft_made: Int
             let ft_attempted: Int
             let notes: String?
+            let shot_chart: [ShotChartEntry]
         }
         try await supabase.insert(into: "player_game_stats", values: NewGameStat(
             parent_id: parentId,
@@ -1054,7 +1056,8 @@ extension APIService {
             fg_made: fgMade, fg_attempted: fgAttempted,
             three_made: threeMade, three_attempted: threeAttempted,
             ft_made: ftMade, ft_attempted: ftAttempted,
-            notes: notes
+            notes: notes,
+            shot_chart: shotChart
         ))
     }
 
