@@ -19,6 +19,8 @@ struct AthleteEvent: Codable, Identifiable {
     var location: String?
     var notes: String?
     var bookingId: UUID?    // set when the event mirrors a trainer booking
+    var isCompleted: Bool?
+    var drillId: UUID?
 
     enum EventType: String, Codable, CaseIterable {
         case game, practice, workout, rest
@@ -36,6 +38,8 @@ struct AthleteEvent: Codable, Identifiable {
         case location
         case notes
         case bookingId = "booking_id"
+        case isCompleted = "is_completed"
+        case drillId = "drill_id"
     }
 }
 

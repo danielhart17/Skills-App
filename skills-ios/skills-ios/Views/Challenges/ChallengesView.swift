@@ -441,10 +441,11 @@ struct FilterChip: View {
 // MARK: - Challenge Card
 struct ChallengeCard: View {
     let challenge: Challenge
+    @State private var showScheduleSheet = false
     
     var body: some View {
-        HStack(spacing: 15) {
-            // Icon
+        VStack(spacing: 12) {
+        HStack(spacing: 15) {            // Icon
             ZStack {
                 Circle()
                     .fill(categoryColor.opacity(0.2))
@@ -503,9 +504,29 @@ struct ChallengeCard: View {
                 .foregroundColor(.white)
                 .cornerRadius(8)
         }
+
+            Button {
+                showScheduleSheet = true
+            } label: {
+                HStack {
+                    Image(systemName: "calendar.badge.plus")
+                    Text("Add to Schedule")
+                }
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundColor(.brandOrange)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(Color.brandOrange.opacity(0.15))
+                .cornerRadius(8)
+            }
+        }
         .padding()
         .background(Color.cardBackground)
         .cornerRadius(12)
+        .sheet(isPresented: $showScheduleSheet) {
+            ScheduleWorkoutSheet(challenge: challenge)
+        }
     }
     
     private var categoryIcon: String {
@@ -607,5 +628,94 @@ struct RunTrackerCard: View {
         )
         .cornerRadius(16)
         .shadow(color: Color.brandBlue.opacity(0.3), radius: 10, x: 0, y: 5)
+    }
+}
+struct ScheduleWorkoutSheet: View {
+    let challenge: Challenge
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var selectedDate = Date()
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                DatePicker(
+                    "Date & Time",
+                    selection: $selectedDate,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .datePickerStyle(.graphical)
+                .padding()
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await save() }
+                } label: {
+                    if isSaving {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Text("Add to Schedule")
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding()
+                .background(Color.brandOrange)
+                .foregroundColor(.white)
+                .cornerRadius(12)
+                .padding(.horizontal)
+                .disabled(isSaving)
+            }
+            .background(Color.appBackground)
+            .navigationTitle(challenge.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func save() async {
+        guard let athleteId = AuthService.shared.currentUser?.id else {
+            errorMessage = "You must be signed in."
+            return
+        }
+        isSaving = true
+        errorMessage = nil
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "HH:mm:ss"
+
+        do {
+            try await APIService.shared.createAthleteEvent(
+                athleteId: athleteId,
+                title: challenge.title,
+                eventType: .workout,
+                eventDate: dateFormatter.string(from: selectedDate),
+                startTime: timeFormatter.string(from: selectedDate),
+                opponent: nil,
+                location: nil,
+                notes: challenge.description
+            )
+            dismiss()
+        } catch {
+            errorMessage = "Could not add to schedule. Please try again."
+            isSaving = false
+        }
     }
 }

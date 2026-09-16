@@ -163,6 +163,17 @@ class APIService {
         
         try await supabase.insert(into: "drill_progress", values: progress)
     }
+
+    func fetchCompletedDrillIds() async throws -> Set<UUID> {
+        guard let userId = AuthService.shared.currentUser?.id else { return [] }
+        struct DrillProgressRow: Decodable { let drill_id: UUID }
+        let rows: [DrillProgressRow] = try await supabase.select(
+            from: "drill_progress",
+            filter: "user_id=eq.\(userId.uuidString)&is_completed=eq.true",
+            order: "completed_at.desc"
+        )
+        return Set(rows.map(\.drill_id))
+    }
     
     // MARK: - Trainers
     
@@ -766,6 +777,17 @@ extension APIService {
         try await supabase.update(
             table: "athlete_events",
             values: Reschedule(event_date: eventDate, start_time: startTime),
+            filter: "id=eq.\(id.uuidString)&athlete_id=eq.\(athleteId.uuidString)"
+        )
+    }
+
+    func setAthleteEventCompleted(id: UUID, athleteId: UUID, isCompleted: Bool) async throws {
+        struct CompletionUpdate: Encodable {
+            let is_completed: Bool
+        }
+        try await supabase.update(
+            table: "athlete_events",
+            values: CompletionUpdate(is_completed: isCompleted),
             filter: "id=eq.\(id.uuidString)&athlete_id=eq.\(athleteId.uuidString)"
         )
     }

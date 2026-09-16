@@ -12,6 +12,7 @@ struct ScheduleView: View {
     @State private var weekAnchor = Date()
     @State private var selectedDate = Date()
     @State private var events: [AthleteEvent] = []
+    @State private var completedDrillIds: Set<UUID> = []
     @State private var streak: AthleteStreak?
     @State private var isLoading = true
     @State private var showAddEvent = false
@@ -61,7 +62,7 @@ struct ScheduleView: View {
                         .padding(.vertical, 30)
                     } else {
                         ForEach(selectedDayEvents) { event in
-                            AthleteEventRow(event: event, onDelete: { delete(event) })
+                            AthleteEventRow(event: event, onDelete: { delete(event) }, onToggleComplete: { toggleComplete(event) })
                         }
                     }
                 }
@@ -192,12 +193,24 @@ struct ScheduleView: View {
                     ))
                 }
             }
-            events = loaded
+                events = loaded
             streak = try? await GamificationService.shared.ensureStreakRow(athleteId: userId)
         } catch {
             print("Error loading schedule: \(error)")
         }
         isLoading = false
+    }
+
+      private func toggleComplete(_ event: AthleteEvent) {
+        guard let userId = AuthService.shared.currentUser?.id else { return }
+        Task {
+            try? await APIService.shared.setAthleteEventCompleted(
+                id: event.id,
+                athleteId: userId,
+                isCompleted: !(event.isCompleted ?? false)
+            )
+            await loadEvents()
+        }
     }
 
     private func delete(_ event: AthleteEvent) {
@@ -277,6 +290,7 @@ extension AthleteEvent.EventType {
 struct AthleteEventRow: View {
     let event: AthleteEvent
     var onDelete: () -> Void
+    var onToggleComplete: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -309,6 +323,12 @@ struct AthleteEventRow: View {
             // Booking-derived events are managed through the booking, not deletable here
             if event.bookingId == nil {
                 Menu {
+                    Button(action: onToggleComplete) {
+                        Label(
+                            event.isCompleted == true ? "Mark as not done" : "Mark as done",
+                            systemImage: event.isCompleted == true ? "arrow.uturn.backward" : "checkmark.circle"
+                        )
+                    }
                     Button(role: .destructive, action: onDelete) {
                         Label("Delete", systemImage: "trash")
                     }
@@ -320,7 +340,7 @@ struct AthleteEventRow: View {
             }
         }
         .padding()
-        .background(Color.cardBackground)
+        .background(event.isCompleted == true ? Color.green.opacity(0.2) : Color.cardBackground)
         .cornerRadius(12)
     }
 }

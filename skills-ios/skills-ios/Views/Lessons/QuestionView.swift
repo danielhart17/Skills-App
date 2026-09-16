@@ -76,9 +76,11 @@ struct QuestionView: View {
                                     cornerRadius: 10,
                                     contentMode: .fit
                                 )
+                                .id(currentQuestion.id)
                             } else if currentQuestion.mediaType == .video {
                                 EmbeddedVideoPlayerView(videoURL: mediaUrl)
                                     .frame(maxHeight: 250)
+                                    .id(currentQuestion.id)
                             }
                         }
                         

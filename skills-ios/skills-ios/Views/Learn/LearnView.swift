@@ -13,16 +13,8 @@ struct LearnView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Mode Toggle
-                Picker("Mode", selection: $selectedMode) {
-                    Text("IQ Mode").tag(LessonMode.iq)
-                    Text("On Court").tag(LessonMode.oncourt)
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .padding()
-                
-                // Show chapters list for selected mode
-                ChaptersListView(mode: selectedMode)
+                // Show IQ chapters (On Court mode removed; use Workouts tab instead)
+                ChaptersListView(mode: .iq)
             }
             .background(Color.appBackground)
             .navigationTitle("Learn")
