@@ -520,6 +520,33 @@ extension APIService {
             filter: "id=eq.\(userId.uuidString)"
         )
     }
+
+    func updateAthleteProfile(userId: UUID, dateOfBirth: String, heightFeet: Int, heightInches: Int, weightLbs: Int, skillLevel: String, favoritePosition: String) async throws {
+        struct AthleteProfileUpdate: Encodable {
+            let date_of_birth: String
+            let height_feet: Int
+            let height_inches: Int
+            let weight_lbs: Int
+            let skill_level: String
+            let favorite_position: String?
+        }
+
+        let trimmedPosition = favoritePosition.trimmingCharacters(in: .whitespacesAndNewlines)
+        let update = AthleteProfileUpdate(
+            date_of_birth: dateOfBirth,
+            height_feet: heightFeet,
+            height_inches: heightInches,
+            weight_lbs: weightLbs,
+            skill_level: skillLevel,
+            favorite_position: trimmedPosition.isEmpty ? nil : trimmedPosition
+        )
+
+        try await supabase.update(
+            table: "profiles",
+            values: update,
+            filter: "id=eq.\(userId.uuidString)"
+        )
+    }
 }
 
 // MARK: - Messaging

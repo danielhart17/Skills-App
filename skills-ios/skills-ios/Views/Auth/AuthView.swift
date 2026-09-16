@@ -25,6 +25,12 @@ struct AuthView: View {
     @State private var socialMedia = ""
     @State private var website = ""
     @State private var safetyAffirmed = false
+    @State private var dateOfBirth = Date()
+    @State private var heightFeet = 0
+    @State private var heightInches = 0
+    @State private var weightLbs = 0
+    @State private var skillLevel = "Beginner"
+    @State private var favoritePosition = ""
 
     private static let trainerSafetyStatement = """
     By checking this box I affirm that: I have never been convicted of a felony, \
@@ -90,6 +96,28 @@ struct AuthView: View {
                     
                     SecureField("Password", text: $password)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
+
+                    if isSignUp && signUpRole == "athlete" {
+                        DatePicker("Date of Birth", selection: $dateOfBirth, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+
+                        HStack {
+                            Stepper("Height (ft): \(heightFeet)", value: $heightFeet, in: 0...8)
+                            Stepper("Height (in): \(heightInches)", value: $heightInches, in: 0...11)
+                        }
+
+                        Stepper("Weight (lbs): \(weightLbs)", value: $weightLbs, in: 0...400)
+
+                        Picker("Skill Level", selection: $skillLevel) {
+                            Text("Beginner").tag("Beginner")
+                            Text("Intermediate").tag("Intermediate")
+                            Text("Advanced").tag("Advanced")
+                        }
+                        .pickerStyle(.segmented)
+
+                        TextField("Position (optional)", text: $favoritePosition)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                    }
 
                     if isSignUp && signUpAsTrainer {
                         TextField("Phone", text: $phone)
@@ -195,6 +223,22 @@ struct AuthView: View {
                         ]
                     }
                     try await authService.signUp(email: email, password: password, fullName: fullName, metadata: metadata)
+                    if signUpRole == "athlete", let userId = authService.currentUser?.id {
+                        let formatter = DateFormatter()
+                        formatter.calendar = Calendar(identifier: .gregorian)
+                        formatter.locale = Locale(identifier: "en_US_POSIX")
+                        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+                        formatter.dateFormat = "yyyy-MM-dd"
+                        try await APIService.shared.updateAthleteProfile(
+                            userId: userId,
+                            dateOfBirth: formatter.string(from: dateOfBirth),
+                            heightFeet: heightFeet,
+                            heightInches: heightInches,
+                            weightLbs: weightLbs,
+                            skillLevel: skillLevel,
+                            favoritePosition: favoritePosition
+                        )
+                    }
                 } else {
                     try await authService.signIn(email: email, password: password)
                 }
