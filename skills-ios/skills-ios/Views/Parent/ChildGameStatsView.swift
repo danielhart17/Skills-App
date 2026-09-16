@@ -146,6 +146,12 @@ struct GameStatRow: View {
                     .font(.caption)
                     .foregroundColor(.textSecondary)
             }
+
+            if !(game.shotChart ?? []).isEmpty {
+                SavedHalfCourtChart(shots: game.shotChart ?? [])
+                    .frame(maxWidth: 200)
+                    .frame(maxWidth: .infinity)
+            }
         }
         .padding()
         .background(Color.cardBackground)
@@ -419,6 +425,33 @@ private struct HalfCourtShotChart: View {
                                 onTap(value.location, geo.size)
                             }
                     )
+                }
+            }
+    }
+}
+
+private struct SavedHalfCourtChart: View {
+    let shots: [ShotChartEntry]
+
+    var body: some View {
+        Image("HalfCourt")
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .overlay {
+                GeometryReader { geo in
+                    ZStack {
+                        ForEach(shots) { shot in
+                            Circle()
+                                .fill(shot.type == "make" ? Color.green : Color.red)
+                                .frame(width: 8, height: 8)
+                                .position(
+                                    x: geo.size.width * shot.x / 100,
+                                    y: geo.size.height * shot.y / 100
+                                )
+                        }
+                    }
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .allowsHitTesting(false)
                 }
             }
     }

@@ -77,6 +77,7 @@ struct PlayerGameStat: Codable, Identifiable {
     var ftMade: Int
     var ftAttempted: Int
     var notes: String?
+    var shotChart: [ShotChartEntry]?
 
     private func percent(_ made: Int, _ attempted: Int) -> String {
         guard attempted > 0 else { return "—" }
@@ -102,5 +103,6 @@ struct PlayerGameStat: Codable, Identifiable {
         case ftMade = "ft_made"
         case ftAttempted = "ft_attempted"
         case notes
+        case shotChart = "shot_chart"
     }
 }
