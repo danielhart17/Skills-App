@@ -51,7 +51,7 @@ struct User: Codable, Identifiable {
 
     /// True if the user is under 18 OR has no date of birth on file.
     /// No DOB is treated as blocked (safety: no bypass by omitting birthdate).
-    var isBlockedFromBooking: Bool {
+    var isMinorOrUnknownAge: Bool {
         guard let dob = dateOfBirth, !dob.isEmpty else { return true }
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"

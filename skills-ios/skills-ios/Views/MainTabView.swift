@@ -155,11 +155,14 @@ struct MainTabView: View {
                         Label("Events", systemImage: "calendar")
                     }
 
-                ConversationsListView()
-                    .tabItem {
-                        Label("Messages", systemImage: "message.fill")
-                    }
-                    .badge(unreadStore.total)
+                // Minors (or unknown age) can't message trainers until parent-safe messaging is built
+                if !(authService.currentUser?.isMinorOrUnknownAge ?? true) {
+                    ConversationsListView()
+                        .tabItem {
+                            Label("Messages", systemImage: "message.fill")
+                        }
+                        .badge(unreadStore.total)
+                }
             }
         }
         .accentColor(.brandOrange)
