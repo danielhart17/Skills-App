@@ -23,6 +23,7 @@ struct User: Codable, Identifiable {
     var completedLessons: [UUID]?
     var lastActivityDate: String?
     var favoritePosition: String?
+    var dateOfBirth: String?
     var badges: [String]?
     let createdAt: Date
     let updatedAt: Date
@@ -42,9 +43,21 @@ struct User: Codable, Identifiable {
         case completedLessons = "completed_lessons"
         case lastActivityDate = "last_activity_date"
         case favoritePosition = "favorite_position"
+        case dateOfBirth = "date_of_birth"
         case badges
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+
+    /// True if the user is under 18 OR has no date of birth on file.
+    /// No DOB is treated as blocked (safety: no bypass by omitting birthdate).
+    var isBlockedFromBooking: Bool {
+        guard let dob = dateOfBirth, !dob.isEmpty else { return true }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let birthDate = formatter.date(from: dob) else { return true }
+        let age = Calendar.current.dateComponents([.year], from: birthDate, to: Date()).year ?? 0
+        return age < 18
     }
 }
 

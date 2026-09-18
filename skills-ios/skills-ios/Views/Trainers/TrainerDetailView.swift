@@ -16,6 +16,7 @@ struct TrainerDetailView: View {
     @State private var activeSheet: ActiveSheet? = nil
     @State private var isFollowing = false
     @State private var isTogglingFollow = false
+    @State private var showMinorBookingBlock = false
 
     enum ActiveSheet: Identifiable {
         case booking(TrainerService)
@@ -162,8 +163,13 @@ struct TrainerDetailView: View {
                                 service: service,
                                 onBook: {
                                     // Guests must sign in before booking (App Store 5.1.1)
-                                    guard AuthService.shared.currentUser != nil else {
+                                    guard let currentUser = AuthService.shared.currentUser else {
                                         activeSheet = .signIn
+                                        return
+                                    }
+                                    // Minors (or unknown age) can't book directly — must ask a parent
+                                    if currentUser.isBlockedFromBooking {
+                                        showMinorBookingBlock = true
                                         return
                                     }
                                     activeSheet = .booking(service)
@@ -211,6 +217,11 @@ struct TrainerDetailView: View {
             case .signIn:
                 AuthView()
             }
+        }
+        .alert("Ask a Parent to Book", isPresented: $showMinorBookingBlock) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Players under 18 can't book sessions directly. Please ask a parent or guardian to book with \(trainer.name) for you.")
         }
     }
     

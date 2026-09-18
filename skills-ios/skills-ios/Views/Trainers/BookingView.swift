@@ -372,7 +372,7 @@ struct BookingView: View {
     
     private var notesView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Add any notes for \(trainer.name.split(separator: " ").first ?? "") (e.g., specific skills you want to work on)")
+            Text("Add any notes for \(trainer.name.split(separator: " ").first ?? "") (e.g., specific skills you want to work on). If you're booking for your child, please include their name here.")
                 .font(.subheadline)
                 .foregroundColor(.textSecondary)
             
