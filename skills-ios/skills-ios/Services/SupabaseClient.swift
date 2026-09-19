@@ -349,12 +349,9 @@ class SupabaseClient {
         encoder.dateEncodingStrategy = .iso8601
         request.httpBody = try encoder.encode(values)
         
-        let (data, response) = try await send(request)
+        let (_, response) = try await send(request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 204 else {
-            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-            let body = String(data: data, encoding: .utf8) ?? "no body"
-            print("❌ UPDATE \(table) failed — status \(status), body: \(body)")
             throw SupabaseError.updateFailed
         }
     }
