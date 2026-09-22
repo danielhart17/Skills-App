@@ -168,7 +168,7 @@ struct TrainerDetailView: View {
                                         return
                                     }
                                     // Minors (or unknown age) can't book directly — must ask a parent
-                                    if currentUser.isMinorOrUnknownAge {
+                                    if currentUser.isBlockedFromBooking {
                                         showMinorBookingBlock = true
                                         return
                                     }

@@ -59,6 +59,13 @@ struct User: Codable, Identifiable {
         let age = Calendar.current.dateComponents([.year], from: birthDate, to: Date()).year ?? 0
         return age < 18
     }
+
+    /// Booking gate applies only to athlete accounts (including legacy .user).
+    /// Parents, trainers, and admins are never blocked.
+    var isBlockedFromBooking: Bool {
+        guard role == .athlete || role == .user else { return false }
+        return isMinorOrUnknownAge
+    }
 }
 
 enum UserRole: String, Codable {
