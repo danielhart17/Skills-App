@@ -85,6 +85,11 @@ struct MainTabView: View {
                         Label("Athletes", systemImage: "figure.2.and.child.holdinghands")
                     }
 
+                ParentGameStatsTabView()
+                    .tabItem {
+                        Label("Game Stats", systemImage: "chart.bar.fill")
+                    }
+
                 TrainersView()
                     .tabItem {
                         Label("Trainers", systemImage: "person.3.fill")

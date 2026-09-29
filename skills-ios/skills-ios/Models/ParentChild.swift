@@ -60,7 +60,8 @@ struct ChildInviteCode {
 struct PlayerGameStat: Codable, Identifiable {
     let id: UUID
     let parentId: UUID
-    let childId: UUID
+    let childId: UUID?
+    var athleteName: String?
     var gameDate: String   // "yyyy-MM-dd"
     var opponent: String?
     var points: Int
@@ -92,6 +93,7 @@ struct PlayerGameStat: Codable, Identifiable {
         case id
         case parentId = "parent_id"
         case childId = "child_id"
+        case athleteName = "athlete_name"
         case gameDate = "game_date"
         case opponent
         case points, rebounds, assists, steals, blocks, turnovers

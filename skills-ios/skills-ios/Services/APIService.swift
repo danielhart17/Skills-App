@@ -1035,8 +1035,35 @@ extension APIService {
         )
     }
 
+    func fetchUnassignedGameStats() async throws -> [PlayerGameStat] {
+        guard let parentId = AuthService.shared.currentUser?.id else {
+            throw APIError.notAuthenticated
+        }
+        return try await supabase.select(
+            from: "player_game_stats",
+            filter: "parent_id=eq.\(parentId.uuidString)&child_id=is.null",
+            order: "game_date.desc"
+        )
+    }
+
+    func assignGameStats(ids: [UUID], toChildId childId: UUID) async throws {
+        if ids.isEmpty { return }
+        guard let parentId = AuthService.shared.currentUser?.id else {
+            throw APIError.notAuthenticated
+        }
+        struct AssignChild: Encodable {
+            let child_id: UUID
+        }
+        let list = ids.map(\.uuidString).joined(separator: ",")
+        try await supabase.update(
+            table: "player_game_stats",
+            values: AssignChild(child_id: childId),
+            filter: "id=in.(\(list))&parent_id=eq.\(parentId.uuidString)&child_id=is.null"
+        )
+    }
+
     func logGameStat(
-        childId: UUID,
+        childId: UUID?,
         gameDate: String,
         opponent: String?,
         points: Int, rebounds: Int, assists: Int,
@@ -1046,14 +1073,20 @@ extension APIService {
         threeMade: Int, threeAttempted: Int,
         ftMade: Int, ftAttempted: Int,
         notes: String?,
-        shotChart: [ShotChartEntry] = []
+        shotChart: [ShotChartEntry] = [],
+        athleteName: String? = nil
     ) async throws {
+        let trimmedName = athleteName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard childId != nil || !trimmedName.isEmpty else {
+            throw APIError.invalidData
+        }
         guard let parentId = AuthService.shared.currentUser?.id else {
             throw APIError.notAuthenticated
         }
         struct NewGameStat: Encodable {
             let parent_id: UUID
-            let child_id: UUID
+            let child_id: UUID?
+            let athlete_name: String?
             let game_date: String
             let opponent: String?
             let points: Int
@@ -1075,6 +1108,7 @@ extension APIService {
         try await supabase.insert(into: "player_game_stats", values: NewGameStat(
             parent_id: parentId,
             child_id: childId,
+            athlete_name: trimmedName.isEmpty ? nil : trimmedName,
             game_date: gameDate,
             opponent: opponent,
             points: points, rebounds: rebounds, assists: assists,

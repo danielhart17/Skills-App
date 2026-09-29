@@ -172,7 +172,8 @@ struct GameStatRow: View {
 }
 
 struct LogGameSheet: View {
-    let child: LinkedChild
+    let child: LinkedChild?
+    var athleteName: String? = nil
     var onSaved: () -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -293,7 +294,7 @@ struct LogGameSheet: View {
         Task {
             do {
                 try await APIService.shared.logGameStat(
-                    childId: child.childId,
+                    childId: child?.childId,
                     gameDate: DateFormatter.yyyyMMdd.string(from: gameDate),
                     opponent: opponent.isEmpty ? nil : opponent,
                     points: points, rebounds: rebounds, assists: assists,
@@ -303,7 +304,8 @@ struct LogGameSheet: View {
                     threeMade: threeMade, threeAttempted: threeAttempted,
                     ftMade: ftMade, ftAttempted: ftAttempted,
                     notes: notes.isEmpty ? nil : notes,
-                    shotChart: shotChart
+                    shotChart: shotChart,
+                    athleteName: child == nil ? athleteName : nil
                 )
                 onSaved()
                 dismiss()
@@ -454,5 +456,228 @@ private struct SavedHalfCourtChart: View {
                     .allowsHitTesting(false)
                 }
             }
+    }
+}
+
+struct ParentGameStatsTabView: View {
+    @State private var children: [LinkedChild] = []
+    @State private var isLoading = true
+    @State private var hasLoaded = false
+    @State private var selectedChildId: UUID?
+    @AppStorage("unlinkedAthleteName") private var unlinkedAthleteName = ""
+    @State private var unassignedGames: [PlayerGameStat] = []
+    @State private var showLogSheet = false
+    @State private var refreshToken = 0
+    @State private var showAssignConfirm = false
+    @State private var assignError: String?
+
+    private var trimmedAthleteName: String {
+        unlinkedAthleteName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var targetChild: LinkedChild? {
+        if children.count == 1 { return children[0] }
+        return children.first(where: { $0.childId == selectedChildId })
+    }
+
+    private var unassignedTitle: String {
+        let n = unassignedGames.count
+        return n == 1 ? "1 game logged before linking" : "\(n) games logged before linking"
+    }
+
+    private var unassignedNamesSubtitle: String? {
+        let names = Array(Set(
+            unassignedGames.compactMap { game -> String? in
+                let t = game.athleteName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return t.isEmpty ? nil : t
+            }
+        )).sorted()
+        guard !names.isEmpty else { return nil }
+        return "Logged for: \(names.joined(separator: ", "))"
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if isLoading && !hasLoaded {
+                    ProgressView()
+                } else if children.isEmpty {
+                    unlinkedBody
+                } else if children.count == 1 {
+                    VStack(spacing: 0) {
+                        if !unassignedGames.isEmpty {
+                            unassignedCard
+                        }
+                        ChildGameStatsView(child: children[0])
+                            .id("\(children[0].childId)-\(refreshToken)")
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        Picker("Athlete", selection: $selectedChildId) {
+                            ForEach(children) { child in
+                                Text(child.displayName).tag(Optional(child.childId))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(Color.brandOrange)
+                        .padding()
+                        if !unassignedGames.isEmpty {
+                            unassignedCard
+                        }
+                        if let selected = children.first(where: { $0.childId == selectedChildId }) {
+                            ChildGameStatsView(child: selected)
+                                .id("\(selected.childId)-\(refreshToken)")
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.appBackground)
+            .navigationTitle("Game Stats")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if hasLoaded && children.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button { showLogSheet = true } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(.brandOrange)
+                        }
+                        .disabled(trimmedAthleteName.isEmpty)
+                    }
+                }
+            }
+            .sheet(isPresented: $showLogSheet) {
+                LogGameSheet(child: nil, athleteName: trimmedAthleteName) {
+                    Task { await load() }
+                }
+            }
+            .alert(
+                assignConfirmTitle,
+                isPresented: $showAssignConfirm
+            ) {
+                Button("Cancel", role: .cancel) {}
+                Button("Add") { assignUnassignedGames() }
+            }
+            .alert(
+                "Couldn't add games",
+                isPresented: Binding(
+                    get: { assignError != nil },
+                    set: { if !$0 { assignError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { assignError = nil }
+            } message: {
+                Text(assignError ?? "")
+            }
+        }
+        .onAppear {
+            Task { await load() }
+        }
+    }
+
+    private var assignConfirmTitle: String {
+        let n = unassignedGames.count
+        let games = n == 1 ? "1 game" : "\(n) games"
+        let name = targetChild?.displayName ?? "this athlete"
+        return "Add \(games) to \(name)'s profile?"
+    }
+
+    private var unassignedCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(unassignedTitle)
+                .font(.headline)
+                .foregroundColor(.textPrimary)
+            if let subtitle = unassignedNamesSubtitle {
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundColor(.textSecondary)
+            }
+            if let target = targetChild {
+                Button("Add to \(target.displayName)'s profile") {
+                    showAssignConfirm = true
+                }
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity)
+                .padding(10)
+                .background(Color.brandOrange)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+            }
+        }
+        .padding()
+        .background(Color.cardBackground)
+        .cornerRadius(12)
+        .padding()
+    }
+
+    private var unlinkedBody: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Athlete name")
+                        .font(.subheadline)
+                        .foregroundColor(.textSecondary)
+                    TextField("e.g. Christian", text: $unlinkedAthleteName)
+                        .textFieldStyle(.roundedBorder)
+                        .foregroundColor(.textPrimary)
+                }
+                Text("Games you log here are saved to your account. Link your athlete on the Athletes tab to add them to their profile.")
+                    .font(.subheadline)
+                    .foregroundColor(.textSecondary)
+
+                if unassignedGames.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "list.clipboard")
+                            .font(.system(size: 40))
+                            .foregroundColor(.textSecondary)
+                        Text("No games logged yet.")
+                            .font(.subheadline)
+                            .foregroundColor(.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                } else {
+                    ForEach(unassignedGames) { game in
+                        GameStatRow(game: game) { delete(game) }
+                    }
+                }
+            }
+            .padding()
+        }
+        .background(Color.appBackground)
+    }
+
+    private func load() async {
+        if !hasLoaded { isLoading = true }
+        let loaded = (try? await APIService.shared.fetchLinkedChildren()) ?? []
+        children = loaded
+        unassignedGames = (try? await APIService.shared.fetchUnassignedGameStats()) ?? []
+        if !loaded.isEmpty,
+           selectedChildId == nil || !loaded.contains(where: { $0.childId == selectedChildId }) {
+            selectedChildId = loaded.first?.childId
+        }
+        isLoading = false
+        hasLoaded = true
+    }
+
+    private func assignUnassignedGames() {
+        guard let target = targetChild else { return }
+        let ids = unassignedGames.map(\.id)
+        Task {
+            do {
+                try await APIService.shared.assignGameStats(ids: ids, toChildId: target.childId)
+                refreshToken += 1
+                await load()
+            } catch {
+                assignError = error.localizedDescription
+            }
+        }
+    }
+
+    private func delete(_ game: PlayerGameStat) {
+        Task {
+            try? await APIService.shared.deleteGameStat(id: game.id)
+            await load()
+        }
     }
 }
