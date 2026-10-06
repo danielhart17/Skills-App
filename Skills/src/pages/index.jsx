@@ -32,6 +32,8 @@ import TrainerDashboard from "./TrainerDashboard";
 
 import ParentDashboard from "./ParentDashboard";
 
+import CoachDashboard from "./CoachDashboard";
+
 import WorkoutSession from "./WorkoutSession";
 
 import Events from "./Events";
@@ -48,7 +50,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 // Role-based redirect component
 function RoleBasedRedirect() {
-  const { isAdmin, isTrainer, isParent, loading, profile, user } = useAuth();
+  const { isAdmin, isTrainer, isParent, isCoach, loading, profile, user } = useAuth();
 
   // Wait for auth to load before redirecting
   if (loading) {
@@ -71,6 +73,8 @@ function RoleBasedRedirect() {
     return <Navigate to="/trainerdashboard" replace />;
   } else if (isParent()) {
     return <Navigate to="/parentdashboard" replace />;
+  } else if (isCoach()) {
+    return <Navigate to="/coachdashboard" replace />;
   } else {
     return <Navigate to="/home" replace />;
   }
@@ -114,6 +118,23 @@ function PagesContent() {
         <Route path="/trainerdashboard" element={<TrainerDashboard />} />
 
         <Route path="/parentdashboard" element={<ParentDashboard />} />
+
+        <Route
+          path="/coachdashboard"
+          element={
+            <RoleRoute allowedRoles={["coach", "admin"]}>
+              <CoachDashboard />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/coach/profile"
+          element={
+            <RoleRoute allowedRoles={["coach", "admin"]}>
+              <div className="p-6 text-muted-foreground">Coach profile coming soon.</div>
+            </RoleRoute>
+          }
+        />
 
         <Route path="/workout-session/:assignmentId" element={<WorkoutSession />} />
 

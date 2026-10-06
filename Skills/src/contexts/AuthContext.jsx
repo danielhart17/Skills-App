@@ -219,6 +219,7 @@ export const AuthProvider = ({ children }) => {
   const isUser = () => role === "user" || role === "athlete";
   const isParent = () => role === "parent";
   const isAthlete = () => role === "user" || role === "athlete";
+  const isCoach = () => role === "coach";
 
   // Auth functions
   const signIn = async (email, password) => {
@@ -233,7 +234,7 @@ export const AuthProvider = ({ children }) => {
 
   const signUp = async (email, password, fullName, selectedRole = "athlete") => {
     // Map frontend role selection to database role.
-    const allowedSignupRoles = ["athlete", "parent", "trainer"];
+    const allowedSignupRoles = ["athlete", "parent", "trainer", "coach"];
     const dbRole = allowedSignupRoles.includes(selectedRole)
       ? selectedRole
       : "athlete";
@@ -277,6 +278,7 @@ export const AuthProvider = ({ children }) => {
     isUser,
     isParent,
     isAthlete,
+    isCoach,
     signIn,
     signUp,
     signOut,

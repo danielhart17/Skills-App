@@ -21,7 +21,7 @@ import {
 import UnreadMessagesBadge from "@/components/UnreadMessagesBadge";
 
 export default function Home() {
-  const { isAdmin, isTrainer, isParent, isAthlete } = useAuth();
+  const { isAdmin, isTrainer, isParent, isCoach, isAthlete } = useAuth();
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [recentLessons, setRecentLessons] = useState([]);
@@ -41,9 +41,13 @@ export default function Home() {
       navigate("/parentdashboard", { replace: true });
       return;
     }
+    if (isCoach()) {
+      navigate("/coachdashboard", { replace: true });
+      return;
+    }
 
     loadUserData();
-  }, [isAdmin, isTrainer, isParent, navigate]);
+  }, [isAdmin, isTrainer, isParent, isCoach, navigate]);
 
   const loadUserData = async () => {
     try {

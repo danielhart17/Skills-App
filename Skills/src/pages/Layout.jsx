@@ -11,6 +11,7 @@ import {
   LogOut,
   Shield,
   GraduationCap,
+  ClipboardList,
   Target,
   Calendar,
   CalendarDays,
@@ -72,7 +73,7 @@ const navigationItems = [
 export default function Layout({ children }) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const { signOut, profile, role, isAdmin, isTrainer, isParent, isAthlete, user } =
+  const { signOut, profile, role, isAdmin, isTrainer, isParent, isCoach, isAthlete, user } =
     useAuth();
   const { count: unreadMessages } = useUnreadMessageCount(user?.id);
 
@@ -136,6 +137,23 @@ export default function Layout({ children }) {
           icon: Users,
           description: "Your roster",
           badge: unreadMessages,
+        },
+      ];
+    }
+
+    if (isCoach()) {
+      return [
+        {
+          title: "Coach Dashboard",
+          url: createPageUrl("CoachDashboard"),
+          icon: ClipboardList,
+          description: "Your team",
+        },
+        {
+          title: "Profile",
+          url: createPageUrl("Profile"),
+          icon: User,
+          description: "Your Account",
         },
       ];
     }

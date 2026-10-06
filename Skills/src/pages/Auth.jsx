@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { GraduationCap, Loader2, User, Users } from "lucide-react";
+import { ClipboardList, GraduationCap, Loader2, User, Users } from "lucide-react";
 
 export default function Auth() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -69,7 +69,7 @@ export default function Auth() {
               <>
                 <div className="space-y-2">
                   <Label>I am a...</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <button
                       type="button"
                       onClick={() => setSelectedRole("athlete")}
@@ -94,7 +94,27 @@ export default function Auth() {
                     >
                       <GraduationCap className={`w-8 h-8 mb-2 ${selectedRole === "trainer" ? "text-orange-500" : "text-gray-400"}`} />
                       <span className="font-semibold">Trainer</span>
-                      <span className="text-xs text-gray-500 mt-1">Coach athletes</span>
+                      <span className="text-xs text-gray-500 mt-1">
+                        Train athletes
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRole("coach")}
+                      className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${
+                        selectedRole === "coach"
+                          ? "border-orange-500 bg-orange-50 text-orange-700"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <ClipboardList
+                        className={`w-8 h-8 mb-2 ${
+                          selectedRole === "coach"
+                            ? "text-orange-500"
+                            : "text-gray-400"
+                        }`}
+                      />
+                      <span className="font-semibold">Coach a team</span>
                     </button>
                     <button
                       type="button"
